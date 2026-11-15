@@ -14,10 +14,16 @@ from app.models.chat import (
     MessageResponse,
 )
 from app.models.user import AuthenticatedUser
+from app.services.chat.base_repository import BaseChatRepository
 from app.services.chat.chat_service import chat_service
-from app.services.chat.repository import chat_repository
+from app.services.chat.repository import get_chat_repository
 
 router = APIRouter(prefix="/chat", tags=["Chat & Conversations"])
+
+
+def get_user_chat_repository(current_user: AuthenticatedUser = Depends(get_current_user)) -> BaseChatRepository:
+    """Dependency injecting repository configured for authenticated user."""
+    return get_chat_repository(user_token=current_user.token)
 
 
 @router.post(
@@ -61,16 +67,17 @@ async def stream_chat_completion(
 )
 async def list_conversations(
     current_user: AuthenticatedUser = Depends(get_current_user),
+    repo: BaseChatRepository = Depends(get_user_chat_repository),
 ) -> List[ConversationResponse]:
     """Return all conversations owned by the caller."""
-    conversations = chat_repository.list_conversations(current_user.id)
+    conversations = repo.list_conversations(current_user.id)
     return [
         ConversationResponse(
             id=c.id,
             title=c.title,
             created_at=c.created_at,
             updated_at=c.updated_at,
-            message_count=len(chat_repository.get_messages(current_user.id, c.id)),
+            message_count=len(repo.get_messages(current_user.id, c.id)),
         )
         for c in conversations
     ]
@@ -86,9 +93,10 @@ async def list_conversations(
 async def create_conversation(
     payload: ConversationCreateRequest,
     current_user: AuthenticatedUser = Depends(get_current_user),
+    repo: BaseChatRepository = Depends(get_user_chat_repository),
 ) -> ConversationResponse:
     """Create a new conversation thread bound to the user."""
-    conv = chat_repository.create_conversation(current_user.id, title=payload.title or "New Conversation")
+    conv = repo.create_conversation(current_user.id, title=payload.title or "New Conversation")
     return ConversationResponse(
         id=conv.id,
         title=conv.title,
@@ -107,16 +115,17 @@ async def create_conversation(
 async def get_conversation_messages(
     conversation_id: UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
+    repo: BaseChatRepository = Depends(get_user_chat_repository),
 ) -> List[MessageResponse]:
     """Retrieve message history, enforcing caller ownership."""
-    conv = chat_repository.get_conversation(current_user.id, conversation_id)
+    conv = repo.get_conversation(current_user.id, conversation_id)
     if not conv:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conversation not found or access denied.",
         )
 
-    messages = chat_repository.get_messages(current_user.id, conversation_id)
+    messages = repo.get_messages(current_user.id, conversation_id)
     return [
         MessageResponse(
             id=m.id,

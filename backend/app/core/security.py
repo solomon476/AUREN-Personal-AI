@@ -131,6 +131,7 @@ async def get_current_user(
         id=user_uuid,
         email=payload.get("email"),
         role=payload.get("role", "authenticated"),
+        token=token,
         app_metadata=payload.get("app_metadata", {}),
         user_metadata=payload.get("user_metadata", {}),
     )

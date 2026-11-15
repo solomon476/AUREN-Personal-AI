@@ -7,6 +7,7 @@ import asyncio
 import time
 import uuid
 from typing import AsyncIterator, List, Optional
+import httpx
 import pytest
 import jwt
 from fastapi.testclient import TestClient
@@ -314,3 +315,153 @@ def test_interrupted_stream_preserves_partial_tokens(monkeypatch):
     req = chat_repository.get_chat_request(uuid.UUID(user_id), idempotency_key)
     assert req is not None
     assert req.status in ("interrupted", "failed")
+
+
+# ---------------------------------------------------------------------------
+# 8. Concurrent Simultaneous Requests & Atomic Idempotency Claiming
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_concurrent_simultaneous_requests_atomic_idempotency():
+    """Verify simultaneous requests with the same idempotency key claim atomically so only 1 executes the LLM."""
+    user_id = str(uuid.uuid4())
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"concurrent-idemp-{uuid.uuid4()}"
+
+    initial_calls = spy_provider.call_count
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        req1 = async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Concurrent question", "idempotency_key": idempotency_key},
+        )
+        req2 = async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Concurrent question", "idempotency_key": idempotency_key},
+        )
+        res1, res2 = await asyncio.gather(req1, req2)
+
+    assert res1.status_code == 200
+    assert res2.status_code == 200
+
+    # Exactly one request called the provider and streamed tokens
+    assert spy_provider.call_count == initial_calls + 1, (
+        "Simultaneous requests with identical idempotency key must invoke provider exactly once!"
+    )
+
+    texts = [res1.text, res2.text]
+    assert any("event: done" in t for t in texts)
+    assert any("idempotency_in_flight" in t or "replayed" in t for t in texts)
+
+
+# ---------------------------------------------------------------------------
+# 9. Model Delay Over 15s Emits Heartbeat Without Cancelling Stream
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_model_delay_over_15s_emits_heartbeat_without_cancelling_stream(monkeypatch):
+    """Verify when model takes >15s to produce first chunk, heartbeat fires without aborting or cancelling the stream."""
+    monkeypatch.setattr(settings, "CHAT_STREAM_TIMEOUT_SECONDS", 30)
+    monkeypatch.setattr(settings, "CHAT_STREAM_HEARTBEAT_SECONDS", 15.0)
+
+    class Over15sDelayedProvider(BaseLLMProvider):
+        def get_model_id(self) -> str:
+            return "delayed-over-15s-model"
+
+        async def generate_response(self, messages, **kwargs):
+            return LLMResponse(content="done", model="delayed-over-15s-model")
+
+        async def stream_response(self, messages, **kwargs):
+            # Model takes 16 seconds to produce its first chunk
+            await asyncio.sleep(16.0)
+            yield "Chunk received after 16 seconds."
+            yield " Stream survived heartbeat!"
+
+    delayed_provider = Over15sDelayedProvider()
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: delayed_provider)
+
+    user_id = str(uuid.uuid4())
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", timeout=35.0) as async_client:
+        response = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Test prompt for 16s delay"},
+        )
+
+    assert response.status_code == 200
+    # Crucial assertion: Heartbeat event was emitted at ~15s
+    assert "event: heartbeat" in response.text
+    # Crucial assertion: The stream was NOT cancelled; chunks after 16s were emitted and completed!
+    assert "Chunk received after 16 seconds." in response.text
+    assert "Stream survived heartbeat!" in response.text
+    assert "event: done" in response.text
+
+
+# ---------------------------------------------------------------------------
+# 10. Client Disconnect Leaves Request Interrupted (Never Completed)
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_client_disconnect_marks_request_interrupted_never_completed(monkeypatch):
+    """Verify that when client disconnects mid-stream, status is set to 'interrupted' and NEVER 'completed'."""
+    user_id = uuid.uuid4()
+    idempotency_key = f"disconnect-test-{uuid.uuid4()}"
+
+    class MockDisconnectedRequest:
+        def __init__(self):
+            self.checks = 0
+
+        async def is_disconnected(self):
+            self.checks += 1
+            # Return True on subsequent check to simulate disconnect after starting
+            return self.checks >= 2
+
+    class TwoTokenProvider(BaseLLMProvider):
+        def get_model_id(self) -> str:
+            return "two-token-model"
+
+        async def generate_response(self, messages, **kwargs):
+            return LLMResponse(content="two tokens", model="two-token-model")
+
+        async def stream_response(self, messages, **kwargs):
+            yield "Token 1"
+            await asyncio.sleep(0.05)
+            yield "Token 2"
+
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: TwoTokenProvider())
+
+    from app.models.user import AuthenticatedUser
+    from app.models.chat import ChatCompletionRequest
+
+    test_user = AuthenticatedUser(id=user_id, email="disc@auren.ai")
+    test_conv = chat_repository.create_conversation(user_id, title="Disconnect Conv")
+    test_req = ChatCompletionRequest(message="Disconnect test", idempotency_key=idempotency_key)
+
+    events = []
+    async for event in chat_service.stream_chat_completion(
+        user=test_user,
+        conversation=test_conv,
+        request=test_req,
+        raw_request=MockDisconnectedRequest(),
+    ):
+        events.append(event)
+
+    full_output = "".join(events)
+    # Crucial assertion: Done event is NOT emitted because stream was interrupted!
+    assert "event: done" not in full_output
+
+    # Crucial assertion: Database request lifecycle status is 'interrupted', NEVER 'completed'!
+    req_status = chat_repository.get_chat_request(user_id, idempotency_key)
+    assert req_status is not None
+    assert req_status.status == "interrupted"
+    assert req_status.status != "completed"
+
+    # Crucial assertion: Message is saved with interrupted metadata
+    messages = chat_repository.get_messages(user_id, test_conv.id)
+    assistant_msgs = [m for m in messages if m.role == "assistant"]
+    assert len(assistant_msgs) == 1
+    assert assistant_msgs[0].metadata.get("interrupted") is True
+

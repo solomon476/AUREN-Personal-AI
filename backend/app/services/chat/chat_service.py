@@ -1,6 +1,6 @@
 """Chat service managing context assembly, persistent database storage,
 
-resilient SSE streaming, heartbeats, and strict idempotency lifecycle tracking.
+resilient SSE streaming, decoupled heartbeats, and atomic idempotency lifecycle tracking.
 """
 
 import asyncio
@@ -8,7 +8,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, Request, status
@@ -20,7 +20,8 @@ from app.models.chat import (
     MessageModel,
 )
 from app.models.user import AuthenticatedUser
-from app.services.chat.repository import ChatRepository, chat_repository
+from app.services.chat.base_repository import BaseChatRepository
+from app.services.chat.repository import chat_repository, get_chat_repository
 from app.services.llm.base import (
     BaseLLMProvider,
     ChatMessage,
@@ -42,8 +43,15 @@ Communicate clearly, avoid unnecessary filler, and maintain a calm, highly capab
 class ChatService:
     """Orchestrates persistent chat flows, context management, and resilient SSE streaming."""
 
-    def __init__(self, repository: ChatRepository = chat_repository):
-        self.repository = repository
+    def __init__(self, repository: Optional[BaseChatRepository] = None):
+        self._custom_repository = repository
+
+    def get_repository(self, user: Optional[AuthenticatedUser] = None) -> BaseChatRepository:
+        """Resolve the appropriate repository (Supabase PostgreSQL or SQLite for local dev)."""
+        if self._custom_repository:
+            return self._custom_repository
+        token = user.token if user else None
+        return get_chat_repository(user_token=token)
 
     def _get_provider(self) -> BaseLLMProvider:
         return get_llm_provider(settings)
@@ -64,16 +72,18 @@ class ChatService:
                 detail=f"Message length exceeds maximum permitted limit ({settings.CHAT_MAX_MESSAGE_LENGTH} characters).",
             )
 
+        repo = self.get_repository(user)
+
         # Check if an existing request was already submitted with this idempotency key
         if request.idempotency_key:
-            existing_req = self.repository.get_chat_request(user.id, request.idempotency_key)
+            existing_req = repo.get_chat_request(user.id, request.idempotency_key)
             if existing_req:
-                existing_conv = self.repository.get_conversation(user.id, existing_req.conversation_id)
+                existing_conv = repo.get_conversation(user.id, existing_req.conversation_id)
                 if existing_conv:
                     return existing_conv
 
         if request.conversation_id:
-            conv = self.repository.get_conversation(user.id, request.conversation_id)
+            conv = repo.get_conversation(user.id, request.conversation_id)
             if conv is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -83,7 +93,7 @@ class ChatService:
 
         # Generate concise title from the user's first prompt
         title = request.message.strip().split("\n")[0][:40] or "New Conversation"
-        return self.repository.create_conversation(user.id, title=title)
+        return repo.create_conversation(user.id, title=title)
 
     async def stream_chat_completion(
         self,
@@ -95,26 +105,27 @@ class ChatService:
         """Stream SSE events for a pre-validated chat request with strict idempotency and timeouts.
 
         Guarantees:
-        1. If request was already completed, replays cached response with ZERO new AI generation calls.
-        2. Persists user message before calling the LLM.
-        3. Enforces CHAT_STREAM_TIMEOUT_SECONDS across overall stream execution.
-        4. Heartbeats (every 15s) keep connection active during model latency.
-        5. Handles client disconnection by persisting partial assistant response.
+        1. Atomic idempotency claiming prevents duplicate AI generation on simultaneous requests.
+        2. If request was already completed, replays cached response with ZERO new AI generation calls.
+        3. Persists user message before initiating provider streaming.
+        4. Decoupled heartbeat ping (every 15s) keeps connection active without cancelling or aborting model stream.
+        5. Handles client disconnection by persisting partial assistant response marked interrupted (never completed).
         6. Logs technical errors server-side and emits safe, sanitized errors to client.
         """
+        repo = self.get_repository(user)
+
         # -------------------------------------------------------------------
-        # 1. Idempotency Check: Already Completed Request?
+        # 1. Idempotency Check: Already Completed or In-Flight?
         # -------------------------------------------------------------------
         if request.idempotency_key:
-            existing_req = self.repository.get_chat_request(user.id, request.idempotency_key)
+            existing_req = repo.get_chat_request(user.id, request.idempotency_key)
             if existing_req and existing_req.status == "completed" and existing_req.assistant_message_id:
                 logger.info(
                     "Idempotency hit: Replaying completed response for key=%s (user=%s)",
                     request.idempotency_key, user.id,
                 )
-                cached_msg = self.repository.get_message_by_id(user.id, existing_req.assistant_message_id)
+                cached_msg = repo.get_message_by_id(user.id, existing_req.assistant_message_id)
                 if cached_msg:
-                    # Replay cached response without invoking provider!
                     meta_event = {
                         "conversation_id": str(conversation.id),
                         "user_message_id": str(existing_req.user_message_id),
@@ -134,29 +145,62 @@ class ChatService:
             if existing_req and existing_req.status == "processing":
                 logger.warning("Duplicate request while key=%s is still processing", request.idempotency_key)
                 error_event = {
-                    "detail": "A request with this idempotency key is already in progress. Please wait for it to complete."
+                    "detail": "A request with this idempotency key is already in progress. Please wait for it to complete.",
+                    "code": "idempotency_in_flight",
                 }
                 yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
                 return
 
         # -------------------------------------------------------------------
-        # 2. Persist User Message and Record Request Lifecycle
+        # 2. Persist User Message (reusing existing on duplicate)
         # -------------------------------------------------------------------
-        user_message = self.repository.persist_user_message(
+        user_message = repo.persist_user_message(
             user_id=user.id,
             conversation_id=conversation.id,
             content=request.message,
             idempotency_key=request.idempotency_key,
         )
 
+        # -------------------------------------------------------------------
+        # 3. Atomic Idempotency Claiming
+        # -------------------------------------------------------------------
         if request.idempotency_key:
-            self.repository.record_chat_request(
+            claimed, chat_req = repo.claim_chat_request(
                 user_id=user.id,
                 idempotency_key=request.idempotency_key,
                 conversation_id=conversation.id,
                 user_message_id=user_message.id,
-                status="processing",
             )
+            if not claimed:
+                logger.warning(
+                    "Idempotency claim rejected: key=%s already claimed with status=%s",
+                    request.idempotency_key, chat_req.status,
+                )
+                if chat_req.status == "completed" and chat_req.assistant_message_id:
+                    cached_msg = repo.get_message_by_id(user.id, chat_req.assistant_message_id)
+                    if cached_msg:
+                        meta_event = {
+                            "conversation_id": str(conversation.id),
+                            "user_message_id": str(chat_req.user_message_id),
+                            "title": conversation.title,
+                            "replayed": True,
+                        }
+                        yield f"event: metadata\ndata: {json.dumps(meta_event)}\n\n"
+                        yield f"event: token\ndata: {json.dumps({'text': cached_msg.content})}\n\n"
+                        done_event = {
+                            "message_id": str(cached_msg.id),
+                            "finish_reason": "replayed_from_cache",
+                            "model": cached_msg.metadata.get("model", "cached"),
+                        }
+                        yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
+                        return
+
+                error_event = {
+                    "detail": "A request with this idempotency key is already in progress. Please wait for it to complete.",
+                    "code": "idempotency_in_flight",
+                }
+                yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+                return
 
         # Emit initial metadata event
         init_event = {
@@ -167,9 +211,9 @@ class ChatService:
         yield f"event: metadata\ndata: {json.dumps(init_event)}\n\n"
 
         # -------------------------------------------------------------------
-        # 3. Assemble Sliding Window Context
+        # 4. Assemble Sliding Window Context
         # -------------------------------------------------------------------
-        history = self.repository.get_messages(
+        history = repo.get_messages(
             user_id=user.id,
             conversation_id=conversation.id,
             limit=settings.CHAT_HISTORY_LIMIT,
@@ -182,117 +226,155 @@ class ChatService:
             llm_messages.append(ChatMessage(role=msg.role, content=msg.content))
 
         # -------------------------------------------------------------------
-        # 4. Stream Response with Heartbeats & Timeout Enforcement
+        # 5. Stream Response with Decoupled Heartbeat & Timeout Enforcement
         # -------------------------------------------------------------------
         provider = self._get_provider()
-        accumulated_chunks = []
+        accumulated_chunks: List[str] = []
         is_completed = False
+        was_interrupted = False
         deadline = time.time() + float(settings.CHAT_STREAM_TIMEOUT_SECONDS)
-        heartbeat_interval = 15.0
+        heartbeat_interval = float(settings.CHAT_STREAM_HEARTBEAT_SECONDS)
+
+        # Producer queue decouples consuming from provider stream and sending heartbeats.
+        # This guarantees waiting for a heartbeat NEVER cancels or aborts the underlying model stream!
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def produce_chunks():
+            try:
+                async for chunk in provider.stream_response(llm_messages):
+                    await queue.put(("token", chunk))
+                await queue.put(("done", None))
+            except Exception as exc:
+                await queue.put(("error", exc))
+
+        producer_task = asyncio.create_task(produce_chunks())
 
         try:
-            stream_iter = provider.stream_response(llm_messages)
-            stream_gen = stream_iter.__aiter__()
-
             while True:
+                # Detect client disconnect
+                if raw_request and await raw_request.is_disconnected():
+                    logger.info("Client disconnected during stream (user=%s)", user.id)
+                    was_interrupted = True
+                    break
+
                 remaining_time = deadline - time.time()
                 if remaining_time <= 0:
-                    raise LLMTimeoutError(f"Stream overall execution exceeded {settings.CHAT_STREAM_TIMEOUT_SECONDS}s deadline")
+                    raise LLMTimeoutError(
+                        f"Stream overall execution exceeded {settings.CHAT_STREAM_TIMEOUT_SECONDS}s deadline"
+                    )
 
                 wait_timeout = min(remaining_time, heartbeat_interval)
 
                 try:
-                    # Check for client disconnect
-                    if raw_request and await raw_request.is_disconnected():
-                        logger.info("Client disconnected during stream (user=%s)", user.id)
+                    event_type, payload = await asyncio.wait_for(queue.get(), timeout=wait_timeout)
+                    if event_type == "token":
+                        accumulated_chunks.append(payload)
+                        yield f"event: token\ndata: {json.dumps({'text': payload})}\n\n"
+                    elif event_type == "error":
+                        raise payload
+                    elif event_type == "done":
                         break
-
-                    chunk = await asyncio.wait_for(stream_gen.__anext__(), timeout=wait_timeout)
-                    if chunk:
-                        accumulated_chunks.append(chunk)
-                        yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
                 except asyncio.TimeoutError:
                     if time.time() >= deadline:
-                        raise LLMTimeoutError(f"Stream execution exceeded {settings.CHAT_STREAM_TIMEOUT_SECONDS}s deadline")
-                    # Heartbeat ping when waiting between chunks
+                        raise LLMTimeoutError(
+                            f"Stream execution exceeded {settings.CHAT_STREAM_TIMEOUT_SECONDS}s deadline"
+                        )
+                    # Heartbeat emitted while model is still thinking; stream remains completely active!
                     now_ts = datetime.now(timezone.utc).isoformat()
                     yield f"event: heartbeat\ndata: {json.dumps({'timestamp': now_ts})}\n\n"
-                except StopAsyncIteration:
-                    break
 
             # ---------------------------------------------------------------
-            # 5. Persist Completed Assistant Response
+            # 6. Complete and Persist Assistant Response
             # ---------------------------------------------------------------
-            full_response = "".join(accumulated_chunks)
-            assistant_msg = self.repository.persist_assistant_message(
-                user_id=user.id,
-                conversation_id=conversation.id,
-                content=full_response,
-                metadata={"model": provider.get_model_id()},
-            )
-            is_completed = True
-
-            if request.idempotency_key:
-                self.repository.update_chat_request_status(
+            if was_interrupted:
+                logger.info("Stream interrupted due to client disconnect. Skipping completion persistence.")
+            else:
+                full_response = "".join(accumulated_chunks)
+                assistant_msg = repo.persist_assistant_message(
                     user_id=user.id,
-                    idempotency_key=request.idempotency_key,
-                    status="completed",
-                    assistant_message_id=assistant_msg.id,
+                    conversation_id=conversation.id,
+                    content=full_response,
+                    metadata={"model": provider.get_model_id()},
                 )
+                is_completed = True
 
-            done_event = {
-                "message_id": str(assistant_msg.id),
-                "finish_reason": "stop",
-                "model": provider.get_model_id(),
-            }
-            yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
+                if request.idempotency_key:
+                    repo.update_chat_request_status(
+                        user_id=user.id,
+                        idempotency_key=request.idempotency_key,
+                        status="completed",
+                        assistant_message_id=assistant_msg.id,
+                    )
+
+                done_event = {
+                    "message_id": str(assistant_msg.id),
+                    "finish_reason": "stop",
+                    "model": provider.get_model_id(),
+                }
+                yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
 
         except LLMAuthenticationError as err:
             logger.error("LLM Auth Error (sanitized for client): %s", err)
             if request.idempotency_key:
-                self.repository.update_chat_request_status(user.id, request.idempotency_key, status="failed")
+                repo.update_chat_request_status(user.id, request.idempotency_key, status="failed")
             safe_error = {"detail": "The AI service is unavailable due to authentication configuration."}
             yield f"event: error\ndata: {json.dumps(safe_error)}\n\n"
 
         except LLMQuotaExceededError as err:
             logger.warning("LLM Quota Exceeded (sanitized): %s", err)
             if request.idempotency_key:
-                self.repository.update_chat_request_status(user.id, request.idempotency_key, status="failed")
+                repo.update_chat_request_status(user.id, request.idempotency_key, status="failed")
             safe_error = {"detail": "AI capacity or rate limit reached. Please wait a moment before trying again."}
             yield f"event: error\ndata: {json.dumps(safe_error)}\n\n"
 
         except LLMTimeoutError as err:
             logger.warning("LLM Timeout (sanitized): %s", err)
             if request.idempotency_key:
-                self.repository.update_chat_request_status(user.id, request.idempotency_key, status="failed")
+                repo.update_chat_request_status(user.id, request.idempotency_key, status="failed")
             safe_error = {"detail": f"Request timed out after {settings.CHAT_STREAM_TIMEOUT_SECONDS} seconds."}
             yield f"event: error\ndata: {json.dumps(safe_error)}\n\n"
 
         except Exception as exc:
             logger.exception("Internal error during chat stream: %s", exc)
             if request.idempotency_key:
-                self.repository.update_chat_request_status(user.id, request.idempotency_key, status="failed")
+                repo.update_chat_request_status(user.id, request.idempotency_key, status="failed")
             safe_error = {"detail": "An unexpected error occurred while processing your request. Please try again."}
             yield f"event: error\ndata: {json.dumps(safe_error)}\n\n"
 
         finally:
-            # Handle stream interruption without losing partial tokens
-            if not is_completed and accumulated_chunks:
-                partial_text = "".join(accumulated_chunks)
-                interrupted_msg = self.repository.persist_assistant_message(
-                    user_id=user.id,
-                    conversation_id=conversation.id,
-                    content=partial_text,
-                    metadata={"interrupted": True, "model": provider.get_model_id()},
-                )
-                if request.idempotency_key:
-                    self.repository.update_chat_request_status(
+            if not producer_task.done():
+                producer_task.cancel()
+                try:
+                    await producer_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+            # Ensure interrupted streams remain interrupted and never falsely marked completed
+            if not is_completed:
+                if accumulated_chunks:
+                    partial_text = "".join(accumulated_chunks)
+                    interrupted_msg = repo.persist_assistant_message(
                         user_id=user.id,
-                        idempotency_key=request.idempotency_key,
-                        status="interrupted",
-                        assistant_message_id=interrupted_msg.id,
+                        conversation_id=conversation.id,
+                        content=partial_text,
+                        metadata={"interrupted": True, "model": provider.get_model_id()},
                     )
-                logger.info("Persisted partial assistant text from interrupted stream (user=%s)", user.id)
+                    if request.idempotency_key:
+                        repo.update_chat_request_status(
+                            user_id=user.id,
+                            idempotency_key=request.idempotency_key,
+                            status="interrupted",
+                            assistant_message_id=interrupted_msg.id,
+                        )
+                    logger.info("Persisted partial assistant text from interrupted stream (user=%s)", user.id)
+                else:
+                    if request.idempotency_key:
+                        repo.update_chat_request_status(
+                            user_id=user.id,
+                            idempotency_key=request.idempotency_key,
+                            status="interrupted",
+                        )
+                    logger.info("Marked stream as interrupted with zero chunks accumulated (user=%s)", user.id)
 
 
 chat_service = ChatService()

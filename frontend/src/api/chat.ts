@@ -23,6 +23,7 @@ export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
   created_at: string;
+  idempotency_key?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -50,9 +51,10 @@ export async function streamChat(
   conversationId?: string,
   callbacks?: ChatStreamCallbacks,
   signal?: AbortSignal,
+  idempotencyKey?: string,
 ): Promise<void> {
   const url = `${API_BASE_URL.replace(/\/$/, '')}/chat/completions`;
-  const idempotencyKey = `req-${crypto.randomUUID()}`;
+  const resolvedIdempotencyKey = idempotencyKey || `req-${crypto.randomUUID()}`;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -77,7 +79,7 @@ export async function streamChat(
     body: JSON.stringify({
       message,
       conversation_id: conversationId || null,
-      idempotency_key: idempotencyKey,
+      idempotency_key: resolvedIdempotencyKey,
     }),
     signal,
   });
