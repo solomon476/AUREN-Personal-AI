@@ -223,4 +223,24 @@ def compute_request_fingerprint(
     4. **Zero AI Cost**: Does not call `provider.stream_response` again.
     5. **No Deadlocks**: Prevents requests from becoming permanently stuck in `processing`.
 
+---
+
+## 10. Phase 3A.5 Database-Level Integrity & Least-Privilege RLS
+
+### 1. Database-Level Trigger Protection
+Application-level checks are reinforced with PostgreSQL and SQLite triggers executing on `BEFORE UPDATE`:
+- **Fingerprint Immutability**: If `OLD.request_fingerprint IS NOT NULL`, any mutation or replacement raises an exception (`request_fingerprint is immutable and cannot be modified once set`).
+- **Legacy Backfill Policy**: If `OLD.request_fingerprint IS NULL`, an initial assignment is permitted once to allow seamless migration of legacy records.
+- **Ownership Protection**: `user_id` is immutable (`user_id is immutable and cannot be transferred`).
+- **Status Machine Protection**: Requests with `status = 'completed'` cannot be transitioned out of completed status.
+- **Structural Immutability**: `idempotency_key`, `conversation_id`, `user_message_id`, and `created_at` cannot be mutated.
+
+### 2. Least-Privilege RLS Policies
+The broad `FOR ALL` policy on `chat_requests` is replaced with operation-specific policies:
+- `SELECT`: `auth.uid() = user_id`
+- `INSERT`: `auth.uid() = user_id AND status = 'processing'`
+- `UPDATE`: `auth.uid() = user_id AND status IN ('processing', 'completed', 'failed', 'interrupted')`
+- `DELETE`: Direct `DELETE` privilege is revoked from `authenticated` and `anon`. Deletions can only occur via `ON DELETE CASCADE` from parent conversation threads.
+
+
 

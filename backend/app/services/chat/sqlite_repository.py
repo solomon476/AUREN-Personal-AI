@@ -105,6 +105,49 @@ class SQLiteChatRepository(BaseChatRepository):
             if "request_fingerprint" not in columns:
                 conn.execute("ALTER TABLE chat_requests ADD COLUMN request_fingerprint TEXT")
 
+            # Database-level integrity triggers enforcing immutability & valid transitions
+            conn.executescript("""
+                CREATE TRIGGER IF NOT EXISTS trg_chat_requests_immutable_fingerprint
+                BEFORE UPDATE ON chat_requests
+                FOR EACH ROW
+                WHEN OLD.request_fingerprint IS NOT NULL AND NEW.request_fingerprint IS NOT OLD.request_fingerprint
+                BEGIN
+                    SELECT RAISE(ABORT, 'request_fingerprint is immutable and cannot be modified once set');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS trg_chat_requests_immutable_owner
+                BEFORE UPDATE ON chat_requests
+                FOR EACH ROW
+                WHEN NEW.user_id IS NOT OLD.user_id
+                BEGIN
+                    SELECT RAISE(ABORT, 'user_id is immutable and cannot be transferred');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS trg_chat_requests_immutable_completed
+                BEFORE UPDATE ON chat_requests
+                FOR EACH ROW
+                WHEN OLD.status = 'completed' AND NEW.status != 'completed'
+                BEGIN
+                    SELECT RAISE(ABORT, 'Completed chat requests cannot be transitioned out of completed status');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS trg_chat_requests_immutable_key
+                BEFORE UPDATE ON chat_requests
+                FOR EACH ROW
+                WHEN NEW.idempotency_key IS NOT OLD.idempotency_key
+                BEGIN
+                    SELECT RAISE(ABORT, 'idempotency_key is immutable and cannot be modified');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS trg_chat_requests_prevent_direct_delete
+                BEFORE DELETE ON chat_requests
+                FOR EACH ROW
+                WHEN (SELECT 1 FROM conversations WHERE id = OLD.conversation_id) IS NOT NULL
+                BEGIN
+                    SELECT RAISE(ABORT, 'Direct DELETE on chat_requests is forbidden; deletion must cascade from conversation');
+                END;
+            """)
+
     # -----------------------------------------------------------------------
     # Synchronous Core Operations (run via asyncio.to_thread)
     # -----------------------------------------------------------------------
