@@ -104,24 +104,25 @@ def test_unauthenticated_conversations_rejected():
 # ---------------------------------------------------------------------------
 # 2. Disk Persistence Across Process Restart / Repository Reinitialization
 # ---------------------------------------------------------------------------
-def test_conversations_survive_repository_reinitialization(tmp_path):
+@pytest.mark.asyncio
+async def test_conversations_survive_repository_reinitialization(tmp_path):
     """Verify conversations and messages survive backend repository reinitialization using SQLite on disk."""
     test_db = tmp_path / "persistence_test.db"
     repo1 = ChatRepository(db_path=test_db)
 
     user_id = uuid.uuid4()
-    conv = repo1.create_conversation(user_id, title="Survives Restart")
-    msg1 = repo1.persist_user_message(user_id, conv.id, "Message before restart")
-    repo1.persist_assistant_message(user_id, conv.id, "Response before restart")
+    conv = await repo1.create_conversation(user_id, title="Survives Restart")
+    msg1 = await repo1.persist_user_message(user_id, conv.id, "Message before restart")
+    await repo1.persist_assistant_message(user_id, conv.id, "Response before restart")
 
     # Simulate process restart by instantiating a completely new ChatRepository on the same DB file
     repo2 = ChatRepository(db_path=test_db)
 
-    conv_recovered = repo2.get_conversation(user_id, conv.id)
+    conv_recovered = await repo2.get_conversation(user_id, conv.id)
     assert conv_recovered is not None
     assert conv_recovered.title == "Survives Restart"
 
-    messages_recovered = repo2.get_messages(user_id, conv.id)
+    messages_recovered = await repo2.get_messages(user_id, conv.id)
     assert len(messages_recovered) == 2
     assert messages_recovered[0].content == "Message before restart"
     assert messages_recovered[1].content == "Response before restart"
@@ -165,7 +166,8 @@ def test_duplicate_idempotency_key_does_not_invoke_ai_twice():
 # ---------------------------------------------------------------------------
 # 4. Cross-User Conversation Isolation
 # ---------------------------------------------------------------------------
-def test_user_cannot_access_or_post_to_other_users_conversation():
+@pytest.mark.asyncio
+async def test_user_cannot_access_or_post_to_other_users_conversation():
     """Verify User B cannot read or post to User A's conversation thread."""
     user_a_id = str(uuid.uuid4())
     user_b_id = str(uuid.uuid4())
@@ -181,7 +183,7 @@ def test_user_cannot_access_or_post_to_other_users_conversation():
     )
     assert res_a.status_code == 200
 
-    convs_a = chat_repository.list_conversations(uuid.UUID(user_a_id))
+    convs_a = await chat_repository.list_conversations(uuid.UUID(user_a_id))
     conv_a_id = str(convs_a[0].id)
 
     # 1. User B attempts to read User A's conversation messages -> 404
@@ -273,7 +275,8 @@ def test_stream_timeout_enforcement(monkeypatch):
 # ---------------------------------------------------------------------------
 # 7. Interrupted Stream Reconciliation
 # ---------------------------------------------------------------------------
-def test_interrupted_stream_preserves_partial_tokens(monkeypatch):
+@pytest.mark.asyncio
+async def test_interrupted_stream_preserves_partial_tokens(monkeypatch):
     """Verify that when a stream is interrupted mid-generation, partial tokens are preserved."""
     class InterruptedProvider(BaseLLMProvider):
         def get_model_id(self) -> str:
@@ -304,17 +307,16 @@ def test_interrupted_stream_preserves_partial_tokens(monkeypatch):
     assert "event: error" in response.text
 
     # Verify partial tokens were saved in database
-    convs = chat_repository.list_conversations(uuid.UUID(user_id))
-    messages = chat_repository.get_messages(uuid.UUID(user_id), convs[0].id)
+    convs = await chat_repository.list_conversations(uuid.UUID(user_id))
+    messages = await chat_repository.get_messages(uuid.UUID(user_id), convs[0].id)
     assistant_msgs = [m for m in messages if m.role == "assistant"]
     assert len(assistant_msgs) >= 1
     assert "Partial thoughts" in assistant_msgs[0].content
-    assert assistant_msgs[0].metadata.get("interrupted") is True
 
-    # Verify chat request status is marked interrupted
-    req = chat_repository.get_chat_request(uuid.UUID(user_id), idempotency_key)
+    # Verify chat request status is marked failed (since provider crashed)
+    req = await chat_repository.get_chat_request(uuid.UUID(user_id), idempotency_key)
     assert req is not None
-    assert req.status in ("interrupted", "failed")
+    assert req.status == "failed"
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +439,7 @@ async def test_client_disconnect_marks_request_interrupted_never_completed(monke
     from app.models.chat import ChatCompletionRequest
 
     test_user = AuthenticatedUser(id=user_id, email="disc@auren.ai")
-    test_conv = chat_repository.create_conversation(user_id, title="Disconnect Conv")
+    test_conv = await chat_repository.create_conversation(user_id, title="Disconnect Conv")
     test_req = ChatCompletionRequest(message="Disconnect test", idempotency_key=idempotency_key)
 
     events = []
@@ -454,14 +456,158 @@ async def test_client_disconnect_marks_request_interrupted_never_completed(monke
     assert "event: done" not in full_output
 
     # Crucial assertion: Database request lifecycle status is 'interrupted', NEVER 'completed'!
-    req_status = chat_repository.get_chat_request(user_id, idempotency_key)
+    req_status = await chat_repository.get_chat_request(user_id, idempotency_key)
     assert req_status is not None
     assert req_status.status == "interrupted"
     assert req_status.status != "completed"
 
     # Crucial assertion: Message is saved with interrupted metadata
-    messages = chat_repository.get_messages(user_id, test_conv.id)
+    messages = await chat_repository.get_messages(user_id, test_conv.id)
     assistant_msgs = [m for m in messages if m.role == "assistant"]
     assert len(assistant_msgs) == 1
     assert assistant_msgs[0].metadata.get("interrupted") is True
 
+
+
+
+# ---------------------------------------------------------------------------
+# 11. Simultaneous Duplicate Submissions Without Conversation ID
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_simultaneous_duplicate_submissions_without_conversation_id():
+    """Verify concurrent requests with NO conversation_id resolve to the exact same conversation,
+
+    store exactly 1 user message, 1 assistant message, 1 chat_request, and execute the provider once.
+    """
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"new-conv-race-{uuid.uuid4()}"
+
+    initial_calls = spy_provider.call_count
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        req1 = async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "First prompt in new thread without conv_id", "idempotency_key": idempotency_key},
+        )
+        req2 = async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "First prompt in new thread without conv_id", "idempotency_key": idempotency_key},
+        )
+        res1, res2 = await asyncio.gather(req1, req2)
+
+    assert res1.status_code == 200
+    assert res2.status_code == 200
+    # Crucial assertion: provider invoked exactly once
+    assert spy_provider.call_count == initial_calls + 1
+
+    # Database Consistency Assertions:
+    all_convs = await chat_repository.list_conversations(user_uuid)
+    # Exactly ONE conversation created (no orphan conversation!)
+    assert len(all_convs) == 1, f"Expected exactly 1 conversation created, got {len(all_convs)}"
+    target_conv_id = all_convs[0].id
+
+    # Exactly ONE user message and ONE assistant message exist
+    messages = await chat_repository.get_messages(user_uuid, target_conv_id)
+    assert len(messages) == 2, f"Expected 2 messages (1 user, 1 assistant), got {len(messages)}"
+    assert messages[0].role == "user"
+    assert messages[0].content == "First prompt in new thread without conv_id"
+    assert messages[1].role == "assistant"
+
+    # Chat request belongs to the exact same conversation
+    chat_req = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert chat_req is not None
+    assert chat_req.conversation_id == target_conv_id
+    assert chat_req.user_message_id == messages[0].id
+    assert chat_req.assistant_message_id == messages[1].id
+    assert chat_req.status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# 12. Provider Failure After Partial Tokens Remains 'failed'
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_provider_failure_after_partial_tokens_remains_failed(monkeypatch):
+    """Verify that when a provider fails after emitting partial tokens, status remains 'failed' (never overwritten to 'interrupted')."""
+    class PartialFailingProvider(BaseLLMProvider):
+        def get_model_id(self) -> str:
+            return "partial-failing-model"
+
+        async def generate_response(self, messages, **kwargs):
+            return LLMResponse(content="fail", model="partial-failing-model")
+
+        async def stream_response(self, messages, **kwargs):
+            yield "Token before"
+            yield " crash"
+            await asyncio.sleep(0.02)
+            raise RuntimeError("Mid-generation upstream API crash!")
+
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: PartialFailingProvider())
+
+    user_id = str(uuid.uuid4())
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"fail-after-partial-{uuid.uuid4()}"
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        response = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Trigger failure after partial", "idempotency_key": idempotency_key},
+        )
+
+    assert response.status_code == 200
+    assert "event: token" in response.text
+    assert "event: error" in response.text
+
+    # Database lifecycle record MUST be 'failed', NEVER 'interrupted'!
+    req = await chat_repository.get_chat_request(uuid.UUID(user_id), idempotency_key)
+    assert req is not None
+    assert req.status == "failed", f"Expected status 'failed', but got '{req.status}'!"
+
+
+# ---------------------------------------------------------------------------
+# 13. Stream Timeout After Partial Tokens Remains 'failed'
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_stream_timeout_after_partial_tokens_remains_failed(monkeypatch):
+    """Verify that when stream times out after emitting partial tokens, status remains 'failed' (never overwritten to 'interrupted')."""
+    monkeypatch.setattr(settings, "CHAT_STREAM_TIMEOUT_SECONDS", 1)
+
+    class PartialTimeoutProvider(BaseLLMProvider):
+        def get_model_id(self) -> str:
+            return "partial-timeout-model"
+
+        async def generate_response(self, messages, **kwargs):
+            return LLMResponse(content="timeout", model="partial-timeout-model")
+
+        async def stream_response(self, messages, **kwargs):
+            yield "Initial words"
+            await asyncio.sleep(1.5)
+            yield "Too late"
+
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: PartialTimeoutProvider())
+
+    user_id = str(uuid.uuid4())
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"timeout-after-partial-{uuid.uuid4()}"
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        response = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Timeout prompt", "idempotency_key": idempotency_key},
+        )
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+
+    # Database lifecycle record MUST be 'failed', NEVER 'interrupted'!
+    req = await chat_repository.get_chat_request(uuid.UUID(user_id), idempotency_key)
+    assert req is not None
+    assert req.status == "failed", f"Expected status 'failed', but got '{req.status}'!"

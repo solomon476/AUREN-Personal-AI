@@ -189,3 +189,145 @@ async def test_live_rls_isolation_journal_entries(postgrest_url, headers_user_a,
         finally:
             await client.delete(f"{postgrest_url}/journal_entries?id=eq.{journal_id}", headers=headers_user_b)
 
+
+
+@requires_live_supabase
+@pytest.mark.asyncio
+async def test_live_rls_isolation_conversations(postgrest_url, headers_user_a, headers_user_b, headers_anon):
+    """Verify live PostgreSQL RLS isolation on conversations table."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # 1. User A creates a conversation
+        res_a = await client.post(
+            f"{postgrest_url}/conversations",
+            headers=headers_user_a,
+            json={"title": f"User A Private Thread - {uuid.uuid4()}"},
+        )
+        assert res_a.status_code == 201
+        conv_a_id = res_a.json()[0]["id"]
+
+        try:
+            # 2. User A can read their conversation
+            read_a = await client.get(f"{postgrest_url}/conversations?id=eq.{conv_a_id}", headers=headers_user_a)
+            assert read_a.status_code == 200
+            assert len(read_a.json()) == 1
+
+            # 3. User B CANNOT read User A's conversation
+            read_b = await client.get(f"{postgrest_url}/conversations?id=eq.{conv_a_id}", headers=headers_user_b)
+            assert read_b.status_code == 200
+            assert len(read_b.json()) == 0, "Security Violation: User B read User A's conversation!"
+
+            # 4. User B CANNOT update User A's conversation
+            update_b = await client.patch(
+                f"{postgrest_url}/conversations?id=eq.{conv_a_id}",
+                headers=headers_user_b,
+                json={"title": "Hacked Title"},
+            )
+            assert update_b.status_code in (200, 204)
+            verify_a = await client.get(f"{postgrest_url}/conversations?id=eq.{conv_a_id}", headers=headers_user_a)
+            assert verify_a.json()[0]["title"] != "Hacked Title"
+
+            # 5. User B CANNOT delete User A's conversation
+            del_b = await client.delete(f"{postgrest_url}/conversations?id=eq.{conv_a_id}", headers=headers_user_b)
+            assert del_b.status_code in (200, 204)
+            verify_exists = await client.get(f"{postgrest_url}/conversations?id=eq.{conv_a_id}", headers=headers_user_a)
+            assert len(verify_exists.json()) == 1
+
+            # 6. Anon CANNOT read conversation
+            anon_read = await client.get(f"{postgrest_url}/conversations?id=eq.{conv_a_id}", headers=headers_anon)
+            assert anon_read.status_code in (401, 200)
+            if anon_read.status_code == 200:
+                assert len(anon_read.json()) == 0
+        finally:
+            await client.delete(f"{postgrest_url}/conversations?id=eq.{conv_a_id}", headers=headers_user_a)
+
+
+@requires_live_supabase
+@pytest.mark.asyncio
+async def test_live_rls_isolation_messages(postgrest_url, headers_user_a, headers_user_b, headers_anon):
+    """Verify live PostgreSQL RLS isolation on messages table."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # Setup conversation for User A
+        res_conv = await client.post(
+            f"{postgrest_url}/conversations",
+            headers=headers_user_a,
+            json={"title": "Thread for messages"},
+        )
+        assert res_conv.status_code == 201
+        conv_id = res_conv.json()[0]["id"]
+
+        try:
+            # 1. User A creates a message
+            res_msg = await client.post(
+                f"{postgrest_url}/messages",
+                headers=headers_user_a,
+                json={"conversation_id": conv_id, "role": "user", "content": "Secret note"},
+            )
+            assert res_msg.status_code == 201
+            msg_id = res_msg.json()[0]["id"]
+
+            # 2. User B CANNOT read User A's message
+            read_b = await client.get(f"{postgrest_url}/messages?id=eq.{msg_id}", headers=headers_user_b)
+            assert read_b.status_code == 200
+            assert len(read_b.json()) == 0, "Security Violation: User B read User A's message!"
+
+            # 3. User B CANNOT inject message into User A's conversation
+            inject_b = await client.post(
+                f"{postgrest_url}/messages",
+                headers=headers_user_b,
+                json={"conversation_id": conv_id, "role": "user", "content": "Injected by B"},
+            )
+            assert inject_b.status_code in (400, 403, 404, 409), "Security Violation: User B inserted message into User A's conversation!"
+
+            # 4. Anon CANNOT read message
+            anon_read = await client.get(f"{postgrest_url}/messages?id=eq.{msg_id}", headers=headers_anon)
+            assert anon_read.status_code in (401, 200)
+            if anon_read.status_code == 200:
+                assert len(anon_read.json()) == 0
+        finally:
+            await client.delete(f"{postgrest_url}/conversations?id=eq.{conv_id}", headers=headers_user_a)
+
+
+@requires_live_supabase
+@pytest.mark.asyncio
+async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, headers_user_b, headers_anon):
+    """Verify live PostgreSQL RLS isolation on chat_requests lifecycle table."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # Setup conversation and message for User A
+        res_conv = await client.post(f"{postgrest_url}/conversations", headers=headers_user_a, json={"title": "Req thread"})
+        conv_id = res_conv.json()[0]["id"]
+        res_msg = await client.post(f"{postgrest_url}/messages", headers=headers_user_a, json={"conversation_id": conv_id, "role": "user", "content": "Prompt"})
+        msg_id = res_msg.json()[0]["id"]
+
+        idemp_key = f"live-idemp-{uuid.uuid4()}"
+
+        try:
+            # 1. User A claims chat request
+            res_req = await client.post(
+                f"{postgrest_url}/chat_requests",
+                headers=headers_user_a,
+                json={"idempotency_key": idemp_key, "conversation_id": conv_id, "user_message_id": msg_id, "status": "processing"},
+            )
+            assert res_req.status_code == 201
+
+            # 2. User B CANNOT read User A's chat request
+            read_b = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_b)
+            assert read_b.status_code == 200
+            assert len(read_b.json()) == 0, "Security Violation: User B read User A's chat_request!"
+
+            # 3. User B CANNOT mutate User A's chat request
+            patch_b = await client.patch(
+                f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}",
+                headers=headers_user_b,
+                json={"status": "completed"},
+            )
+            assert patch_b.status_code in (200, 204)
+            verify_a = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_a)
+            assert verify_a.json()[0]["status"] == "processing", "Security Violation: User B mutated User A's chat request!"
+
+            # 4. Anon CANNOT read chat requests
+            anon_read = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_anon)
+            assert anon_read.status_code in (401, 200)
+            if anon_read.status_code == 200:
+                assert len(anon_read.json()) == 0
+        finally:
+            await client.delete(f"{postgrest_url}/conversations?id=eq.{conv_id}", headers=headers_user_a)

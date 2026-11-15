@@ -5,6 +5,7 @@ Explicitly identified local-development option providing:
 - Strict ownership verification on all operations.
 - Atomic idempotency claiming via SQLite UNIQUE constraints.
 - Foreign keys and WAL mode enabled.
+- Asynchronous contract conformance without unnecessary rewrite.
 """
 
 import json
@@ -89,7 +90,7 @@ class SQLiteChatRepository(BaseChatRepository):
                 ON chat_requests(user_id, status);
             """)
 
-    def get_conversation(self, user_id: UUID, conversation_id: UUID) -> Optional[ConversationModel]:
+    async def get_conversation(self, user_id: UUID, conversation_id: UUID) -> Optional[ConversationModel]:
         """Fetch conversation, strictly verifying that it belongs to user_id."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -108,9 +109,14 @@ class SQLiteChatRepository(BaseChatRepository):
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
 
-    def create_conversation(self, user_id: UUID, title: str = "New Conversation") -> ConversationModel:
+    async def create_conversation(
+        self,
+        user_id: UUID,
+        title: str = "New Conversation",
+        conversation_id: Optional[UUID] = None,
+    ) -> ConversationModel:
         """Create a new conversation thread bound to the authenticated user."""
-        conv_id = uuid4()
+        conv_id = conversation_id or uuid4()
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
 
@@ -128,7 +134,42 @@ class SQLiteChatRepository(BaseChatRepository):
             updated_at=now,
         )
 
-    def list_conversations(self, user_id: UUID, limit: int = 50) -> List[ConversationModel]:
+    async def get_or_create_conversation(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        title: str = "New Conversation",
+    ) -> ConversationModel:
+        """Atomically get or create a conversation thread with a specific deterministic ID."""
+        existing = await self.get_conversation(user_id, conversation_id)
+        if existing:
+            return existing
+
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO conversations (id, user_id, title, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO NOTHING
+                """,
+                (str(conversation_id), str(user_id), title, now_iso, now_iso),
+            )
+
+        conv = await self.get_conversation(user_id, conversation_id)
+        if conv:
+            return conv
+        return ConversationModel(
+            id=conversation_id,
+            user_id=user_id,
+            title=title,
+            created_at=now,
+            updated_at=now,
+        )
+
+    async def list_conversations(self, user_id: UUID, limit: int = 50) -> List[ConversationModel]:
         """List all conversation threads owned by user_id, ordered by updated_at descending."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -149,7 +190,7 @@ class SQLiteChatRepository(BaseChatRepository):
             for r in rows
         ]
 
-    def get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
+    async def get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
         """Fetch request lifecycle record by user_id and idempotency_key."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -171,7 +212,7 @@ class SQLiteChatRepository(BaseChatRepository):
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
 
-    def persist_user_message(
+    async def persist_user_message(
         self,
         user_id: UUID,
         conversation_id: UUID,
@@ -247,7 +288,7 @@ class SQLiteChatRepository(BaseChatRepository):
             created_at=now,
         )
 
-    def claim_chat_request(
+    async def claim_chat_request(
         self,
         user_id: UUID,
         idempotency_key: str,
@@ -283,13 +324,12 @@ class SQLiteChatRepository(BaseChatRepository):
             )
         except sqlite3.IntegrityError:
             # Key was already claimed! Retrieve and return existing request record
-            existing = self.get_chat_request(user_id, idempotency_key)
+            existing = await self.get_chat_request(user_id, idempotency_key)
             if existing:
                 return False, existing
-            # If for any reason fetch failed, re-raise
             raise
 
-    def update_chat_request_status(
+    async def update_chat_request_status(
         self,
         user_id: UUID,
         idempotency_key: str,
@@ -308,7 +348,7 @@ class SQLiteChatRepository(BaseChatRepository):
                 (status, str(assistant_message_id) if assistant_message_id else None, now_iso, str(user_id), idempotency_key),
             )
 
-    def persist_assistant_message(
+    async def persist_assistant_message(
         self,
         user_id: UUID,
         conversation_id: UUID,
@@ -344,7 +384,7 @@ class SQLiteChatRepository(BaseChatRepository):
             created_at=now,
         )
 
-    def get_message_by_id(self, user_id: UUID, message_id: UUID) -> Optional[MessageModel]:
+    async def get_message_by_id(self, user_id: UUID, message_id: UUID) -> Optional[MessageModel]:
         """Fetch a single message by ID, verifying caller ownership."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -366,14 +406,14 @@ class SQLiteChatRepository(BaseChatRepository):
                 created_at=datetime.fromisoformat(row["created_at"]),
             )
 
-    def get_messages(
+    async def get_messages(
         self,
         user_id: UUID,
         conversation_id: UUID,
         limit: int = 50,
     ) -> List[MessageModel]:
         """Retrieve message history for an owned conversation from the database."""
-        conv = self.get_conversation(user_id, conversation_id)
+        conv = await self.get_conversation(user_id, conversation_id)
         if not conv:
             return []
 

@@ -1,16 +1,17 @@
 # AUREN — Persistent Chat, Idempotency, and Streaming Reliability Architecture
 
-This document details the architecture, persistence layers, idempotency guarantees, and resilient streaming mechanisms implemented in Phase 3A.1.
+This document details the architecture, persistence layers, idempotency guarantees, error distinction, and resilient streaming mechanisms implemented in Phase 3A.1 and Phase 3A.2.
 
 ---
 
-## 1. Dual Repository Architecture (`BaseChatRepository`)
+## 1. Asynchronous Repository Architecture (`BaseChatRepository`)
 
-AUREN separates repository interface contracts from backend persistence implementations. All chat, conversation, and lifecycle operations adhere to `BaseChatRepository`.
+AUREN separates repository interface contracts from backend persistence implementations. All chat, conversation, and lifecycle operations adhere to the asynchronous `BaseChatRepository` contract, preventing event-loop blocking.
 
 ```
                       ┌──────────────────────┐
                       │  BaseChatRepository  │
+                      │   (Asynchronous)     │
                       └──────────┬───────────┘
                                  │
                  ┌───────────────┴───────────────┐
@@ -20,11 +21,12 @@ AUREN separates repository interface contracts from backend persistence implemen
 │  SupabasePostgresChatRepository │   │      SQLiteChatRepository       │
 │  (Cloud Supabase PostgreSQL)    │   │  (Explicit Local-Dev / Offline) │
 ├─────────────────────────────────┤   ├─────────────────────────────────┤
-│ • Supabase PostgREST API        │   │ • Disk-backed SQLite (WAL mode) │
+│ • httpx.AsyncClient non-block   │   │ • Disk-backed SQLite (WAL mode) │
 │ • Caller JWT Token (auth.uid)   │   │ • Enforces foreign keys         │
 │ • Public anon key only          │   │ • Atomic SQLite transactions    │
 │ • Enforces PostgreSQL RLS       │   │ • Survives process restarts     │
-│ • NO service-role key used      │   │ • Zero cloud dependencies       │
+│ • NO service-role key used      │   │ • Async contract conformance    │
+│ • Strict error categorization   │   │ • Zero cloud dependencies       │
 └─────────────────────────────────┘   └─────────────────────────────────┘
 ```
 
@@ -37,7 +39,7 @@ AUREN separates repository interface contracts from backend persistence implemen
 
 ## 2. Row Level Security & Cloud PostgREST Enforcement
 
-`SupabasePostgresChatRepository` communicates directly with Supabase PostgREST (`/rest/v1`):
+`SupabasePostgresChatRepository` communicates directly with Supabase PostgREST (`/rest/v1`) using asynchronous non-blocking HTTP requests:
 
 - **Caller Identity**: PostgREST requests include `Authorization: Bearer <user_jwt_token>` and `apikey: <anon_key>`.
 - **Row Level Security**: PostgreSQL evaluates policies (`auth.uid() = user_id`) on all reads and writes across `conversations`, `messages`, and `chat_requests`.
@@ -46,9 +48,35 @@ AUREN separates repository interface contracts from backend persistence implemen
 
 ---
 
-## 3. Atomic Idempotency Lifecycle
+## 3. Strict Database Error Categorization
 
-To prevent duplicate user messages, concurrent race conditions, and accidental duplicate AI invocations during network reconnects, AUREN uses database-level atomic claiming.
+Supabase PostgREST responses are strictly categorized to avoid converting errors into false missing records:
+
+| Scenario / Code | PostgREST Response | Repository Behavior | Client Safe Detail |
+|---|---|---|---|
+| Query with no matches | `200 OK` with `[]` | Returns `None` or `[]` | Normal 404 if item required |
+| Invalid/expired JWT | `401 / 403` | Raises `DatabaseAuthError` | HTTP 503 "Database authentication error" |
+| Network drop / timeout | `httpx.RequestError` | Raises `DatabaseConnectionError` | HTTP 503 "Database service temporarily unreachable" |
+| Database 5xx error | `500 / 502 / 503` | Raises `DatabaseOperationError` | HTTP 500 "Database operation error" |
+
+Full technical details (status code, endpoint, response payload) are recorded in server-side logs and never masked internally.
+
+---
+
+## 4. Atomic Idempotency Lifecycle & New-Conversation Race Resolution
+
+### New-Conversation Race Resolution
+
+When two identical requests arrive simultaneously without a supplied `conversation_id`:
+1. `validate_and_resolve_conversation()` deterministically derives a conversation UUID bound to the user and idempotency key:
+   $$\text{conversation\_id} = \text{uuid5}(\text{NAMESPACE\_OID}, \text{"auren:conv:"} + \text{user\_id} + \text{":"} + \text{idempotency\_key})$$
+2. Calls `repo.get_or_create_conversation(user_id, deterministic_conv_id, title)`.
+3. Both requests resolve to the **exact same** conversation ID.
+4. Exactly **one** conversation is created; no orphan conversations are created.
+5. `persist_user_message` uses the unique index `(user_id, idempotency_key)`, storing exactly **one** user message.
+6. `claim_chat_request` is atomic, allowing only **one** request to claim `processing`.
+7. The second request halts with `idempotency_in_flight` (or replays completed response).
+8. The chat request, user message, and assistant response all belong to the same conversation.
 
 ### Lifecycle Table: `chat_requests`
 
@@ -66,22 +94,9 @@ CREATE TABLE IF NOT EXISTS public.chat_requests (
 );
 ```
 
-### Atomic Claim Protocol (`claim_chat_request`)
-
-1. When a request arrives with an `idempotency_key`:
-   - Checks if a `completed` record exists. If found, replays the cached assistant response without invoking the LLM provider.
-   - If a `processing` record already exists, rejects the duplicate with `idempotency_in_flight`.
-2. Persists the user message (reusing existing on duplicate).
-3. Executes an atomic insert into `chat_requests` with `status='processing'`.
-   - **SQLite**: Enforced by `PRIMARY KEY (user_id, idempotency_key)`. Concurrent inserts raise `sqlite3.IntegrityError`, caught and returned as `(claimed=False, existing_req)`.
-   - **PostgreSQL / PostgREST**: Enforced by primary key constraint. Concurrent inserts return `409 Conflict`, caught and returned as `(claimed=False, existing_req)`.
-4. If `claimed == False`: The runner halts and does NOT invoke the AI provider.
-
 ---
 
-## 4. Resilient Streaming & Heartbeat Decoupling
-
-In prior implementations, running `asyncio.wait_for(stream_gen.__anext__(), timeout=15.0)` cancelled the generator coroutine when the 15-second heartbeat timer expired, corrupting or aborting the model stream.
+## 5. Resilient Streaming & Non-Overwriting Lifecycle States
 
 ### Decoupled Producer-Consumer Architecture
 
@@ -114,19 +129,12 @@ In prior implementations, running `asyncio.wait_for(stream_gen.__anext__(), time
 1. **Undisturbed Model Generation**: Waiting for a heartbeat waits on `queue.get()`. A timeout cancels only the queue waiter, leaving `producer_task` running without interruption.
 2. **Verified >15s Latency**: An automated test simulating a model taking 16 seconds to produce its first chunk verifies that the 15-second heartbeat is emitted and the stream proceeds to completion without interruption.
 
----
+### Non-Overwriting Terminal Lifecycle States
 
-## 5. Client Disconnection & Interruption Handling
-
-If a client disconnects mid-stream (e.g. mobile connectivity drop or browser tab close):
-
-1. `raw_request.is_disconnected()` detects client disconnection.
-2. The loop exits immediately, setting `was_interrupted = True`.
-3. The completion block is skipped.
-4. If chunks were received:
-   - Persists partial tokens with `metadata={"interrupted": True}`.
-   - Updates `chat_requests` status to `"interrupted"`.
-5. Under no circumstances is an interrupted response marked `"completed"`.
+The streaming runner explicitly tracks `terminal_state`:
+- **Provider failure or timeout**: Sets `terminal_state = "failed"`. In `finally:`, even if partial tokens were generated, the request lifecycle record **remains `failed`** (never overwritten as `interrupted`).
+- **Client disconnect**: Sets `terminal_state = "interrupted"`. Persists partial tokens with `metadata={"interrupted": True}` and sets status to `"interrupted"`.
+- **Successful generation**: Sets `terminal_state = "completed"`. Persists full tokens and updates status to `"completed"`.
 
 ---
 
@@ -137,5 +145,5 @@ If a client disconnects mid-stream (e.g. mobile connectivity drop or browser tab
 3. **Reconciliation & Retries**:
    - If an error occurs or the stream is interrupted, the UI displays a "Retry" button.
    - Retrying sends the **exact same** `idempotencyKey`.
-   - If the backend already finished generation before the disconnect, it instantly replays the completed response from cache with zero additional AI tokens consumed.
+   - If the backend already finished generation in the background before the disconnect, it instantly replays the completed response from cache with zero additional AI tokens consumed.
    - If the request was interrupted or failed, the backend cleanly retries.

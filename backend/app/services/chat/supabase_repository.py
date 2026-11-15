@@ -1,11 +1,13 @@
 """Supabase PostgreSQL chat repository adapter enforcing Row Level Security (RLS).
 
 Guarantees:
+- Fully asynchronous non-blocking PostgREST communication via httpx.AsyncClient.
 - Enforces user isolation via Supabase PostgREST and PostgreSQL Row Level Security.
 - Uses the caller's authenticated JWT token (auth.uid()) and public anon key.
 - Never uses or exposes the Supabase service-role key for ordinary user operations.
+- Explicit database error handling distinguishing auth, network, server, and missing records.
 - Atomic idempotency lifecycle claiming using database constraints.
-- Full parity with BaseChatRepository interface.
+- Full parity with BaseChatRepository asynchronous interface.
 """
 
 import json
@@ -16,6 +18,12 @@ from uuid import UUID, uuid4
 
 import httpx
 
+from app.core.exceptions import (
+    DatabaseAuthError,
+    DatabaseConnectionError,
+    DatabaseError,
+    DatabaseOperationError,
+)
 from app.models.chat import ChatRequestModel, ConversationModel, MessageModel
 from app.services.chat.base_repository import BaseChatRepository
 
@@ -23,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class SupabasePostgresChatRepository(BaseChatRepository):
-    """Supabase PostgreSQL chat repository adapter interacting through PostgREST."""
+    """Asynchronous Supabase PostgreSQL chat repository adapter interacting through PostgREST."""
 
     def __init__(
         self,
@@ -31,7 +39,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         supabase_anon_key: str,
         user_token: Optional[str] = None,
         timeout: float = 10.0,
-        http_client: Optional[httpx.Client] = None,
+        http_client: Optional[httpx.AsyncClient] = None,
     ):
         self.supabase_url = supabase_url.rstrip("/")
         self.rest_url = f"{self.supabase_url}/rest/v1"
@@ -53,40 +61,75 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             headers["Prefer"] = prefer
         return headers
 
-    def _request(
+    async def _request(
         self,
         method: str,
         path: str,
         json_data: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, str]] = None,
         prefer: Optional[str] = None,
+        allowed_error_codes: Optional[Tuple[int, ...]] = None,
     ) -> httpx.Response:
-        """Execute synchronous HTTP request to Supabase PostgREST."""
+        """Execute non-blocking asynchronous HTTP request to Supabase PostgREST with strict error categorization."""
         url = f"{self.rest_url}{path}"
         headers = self._get_headers(prefer=prefer)
 
-        if self._client:
-            return self._client.request(
-                method=method,
-                url=url,
-                json=json_data,
-                params=params,
-                headers=headers,
-                timeout=self.timeout,
+        try:
+            if self._client:
+                res = await self._client.request(
+                    method=method,
+                    url=url,
+                    json=json_data,
+                    params=params,
+                    headers=headers,
+                    timeout=self.timeout,
+                )
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.request(
+                        method=method,
+                        url=url,
+                        json=json_data,
+                        params=params,
+                        headers=headers,
+                    )
+        except httpx.RequestError as exc:
+            logger.error("Supabase network connection failure (%s %s): %s", method, url, exc)
+            raise DatabaseConnectionError(
+                "Unable to connect to database service. Please check your network connection.",
+                technical_details=str(exc),
+            ) from exc
+
+        # Handle specific error status codes
+        if allowed_error_codes and res.status_code in allowed_error_codes:
+            return res
+
+        if res.status_code in (401, 403):
+            logger.error("Supabase PostgREST auth/RLS error (%s %s) [%d]: %s", method, url, res.status_code, res.text)
+            raise DatabaseAuthError(
+                "Database authentication or authorization failure.",
+                technical_details=f"Status {res.status_code}: {res.text}",
             )
 
-        with httpx.Client(timeout=self.timeout) as client:
-            return client.request(
-                method=method,
-                url=url,
-                json=json_data,
-                params=params,
-                headers=headers,
+        if res.status_code >= 500:
+            logger.error("Supabase server failure (%s %s) [%d]: %s", method, url, res.status_code, res.text)
+            raise DatabaseOperationError(
+                "A database service error occurred. Please try again later.",
+                technical_details=f"Status {res.status_code}: {res.text}",
             )
 
-    def get_conversation(self, user_id: UUID, conversation_id: UUID) -> Optional[ConversationModel]:
+        if res.status_code not in (200, 201, 204):
+            logger.error("Supabase unexpected response (%s %s) [%d]: %s", method, url, res.status_code, res.text)
+            raise DatabaseOperationError(
+                "Unexpected database response code.",
+                technical_details=f"Status {res.status_code}: {res.text}",
+            )
+
+        return res
+
+    async def get_conversation(self, user_id: UUID, conversation_id: UUID) -> Optional[ConversationModel]:
         """Fetch conversation, strictly protected by Supabase RLS."""
-        res = self._request(
+        res = await self._request(
             method="GET",
             path="/conversations",
             params={
@@ -95,10 +138,6 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                 "select": "*",
             },
         )
-        if res.status_code != 200:
-            logger.warning("Supabase get_conversation error: %s - %s", res.status_code, res.text)
-            return None
-
         rows = res.json()
         if not rows:
             return None
@@ -112,23 +151,25 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             updated_at=datetime.fromisoformat(r["updated_at"]),
         )
 
-    def create_conversation(self, user_id: UUID, title: str = "New Conversation") -> ConversationModel:
+    async def create_conversation(
+        self,
+        user_id: UUID,
+        title: str = "New Conversation",
+        conversation_id: Optional[UUID] = None,
+    ) -> ConversationModel:
         """Create a new conversation thread bound to the user in PostgreSQL."""
+        conv_id = conversation_id or uuid4()
         payload = {
-            "id": str(uuid4()),
+            "id": str(conv_id),
             "user_id": str(user_id),
             "title": title,
         }
-        res = self._request(
+        res = await self._request(
             method="POST",
             path="/conversations",
             json_data=payload,
             prefer="return=representation",
         )
-        if res.status_code not in (200, 201):
-            logger.error("Failed to create conversation in Supabase: %s - %s", res.status_code, res.text)
-            raise RuntimeError(f"Database error creating conversation: {res.text}")
-
         rows = res.json()
         r = rows[0]
         return ConversationModel(
@@ -139,9 +180,48 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             updated_at=datetime.fromisoformat(r["updated_at"]),
         )
 
-    def list_conversations(self, user_id: UUID, limit: int = 50) -> List[ConversationModel]:
+    async def get_or_create_conversation(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        title: str = "New Conversation",
+    ) -> ConversationModel:
+        """Atomically get or create a conversation thread with a specific deterministic ID."""
+        existing = await self.get_conversation(user_id, conversation_id)
+        if existing:
+            return existing
+
+        payload = {
+            "id": str(conversation_id),
+            "user_id": str(user_id),
+            "title": title,
+        }
+        res = await self._request(
+            method="POST",
+            path="/conversations",
+            json_data=payload,
+            prefer="return=representation",
+            allowed_error_codes=(409, 400),
+        )
+        if res.status_code in (200, 201) and res.json():
+            r = res.json()[0]
+            return ConversationModel(
+                id=UUID(r["id"]),
+                user_id=UUID(r["user_id"]),
+                title=r["title"],
+                created_at=datetime.fromisoformat(r["created_at"]),
+                updated_at=datetime.fromisoformat(r["updated_at"]),
+            )
+
+        # In case of duplicate/conflict, fetch existing
+        conv = await self.get_conversation(user_id, conversation_id)
+        if conv:
+            return conv
+        raise DatabaseOperationError("Failed to resolve or create conversation.")
+
+    async def list_conversations(self, user_id: UUID, limit: int = 50) -> List[ConversationModel]:
         """List conversation threads owned by user_id, ordered by updated_at descending."""
-        res = self._request(
+        res = await self._request(
             method="GET",
             path="/conversations",
             params={
@@ -151,10 +231,6 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                 "select": "*",
             },
         )
-        if res.status_code != 200:
-            logger.warning("Supabase list_conversations error: %s - %s", res.status_code, res.text)
-            return []
-
         rows = res.json()
         return [
             ConversationModel(
@@ -167,19 +243,18 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             for r in rows
         ]
 
-    def get_messages(
+    async def get_messages(
         self,
         user_id: UUID,
         conversation_id: UUID,
         limit: int = 50,
     ) -> List[MessageModel]:
         """Retrieve chronological message history for an owned conversation."""
-        # Ensure conversation exists and belongs to user
-        conv = self.get_conversation(user_id, conversation_id)
+        conv = await self.get_conversation(user_id, conversation_id)
         if not conv:
             return []
 
-        res = self._request(
+        res = await self._request(
             method="GET",
             path="/messages",
             params={
@@ -190,10 +265,6 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                 "select": "*",
             },
         )
-        if res.status_code != 200:
-            logger.warning("Supabase get_messages error: %s - %s", res.status_code, res.text)
-            return []
-
         rows = res.json()
         return [
             MessageModel(
@@ -209,9 +280,9 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             for r in rows
         ]
 
-    def get_message_by_id(self, user_id: UUID, message_id: UUID) -> Optional[MessageModel]:
+    async def get_message_by_id(self, user_id: UUID, message_id: UUID) -> Optional[MessageModel]:
         """Fetch a single message by ID, verifying user ownership via RLS."""
-        res = self._request(
+        res = await self._request(
             method="GET",
             path="/messages",
             params={
@@ -220,9 +291,6 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                 "select": "*",
             },
         )
-        if res.status_code != 200:
-            return None
-
         rows = res.json()
         if not rows:
             return None
@@ -239,7 +307,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             created_at=datetime.fromisoformat(r["created_at"]),
         )
 
-    def persist_user_message(
+    async def persist_user_message(
         self,
         user_id: UUID,
         conversation_id: UUID,
@@ -248,7 +316,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
     ) -> MessageModel:
         """Persist user message in PostgreSQL, reusing existing message on idempotency match."""
         if idempotency_key:
-            res_existing = self._request(
+            res_existing = await self._request(
                 method="GET",
                 path="/messages",
                 params={
@@ -257,20 +325,19 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                     "select": "*",
                 },
             )
-            if res_existing.status_code == 200:
-                rows = res_existing.json()
-                if rows:
-                    r = rows[0]
-                    return MessageModel(
-                        id=UUID(r["id"]),
-                        conversation_id=UUID(r["conversation_id"]),
-                        user_id=UUID(r["user_id"]),
-                        role=r["role"],
-                        content=r["content"],
-                        idempotency_key=r.get("idempotency_key"),
-                        metadata=r.get("metadata", {}) if isinstance(r.get("metadata"), dict) else json.loads(r.get("metadata") or "{}"),
-                        created_at=datetime.fromisoformat(r["created_at"]),
-                    )
+            rows = res_existing.json()
+            if rows:
+                r = rows[0]
+                return MessageModel(
+                    id=UUID(r["id"]),
+                    conversation_id=UUID(r["conversation_id"]),
+                    user_id=UUID(r["user_id"]),
+                    role=r["role"],
+                    content=r["content"],
+                    idempotency_key=r.get("idempotency_key"),
+                    metadata=r.get("metadata", {}) if isinstance(r.get("metadata"), dict) else json.loads(r.get("metadata") or "{}"),
+                    created_at=datetime.fromisoformat(r["created_at"]),
+                )
 
         now_iso = datetime.now(timezone.utc).isoformat()
         payload = {
@@ -282,37 +349,36 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             "idempotency_key": idempotency_key,
             "metadata": {},
         }
-        res = self._request(
+        res = await self._request(
             method="POST",
             path="/messages",
             json_data=payload,
             prefer="return=representation",
+            allowed_error_codes=(409, 400),
         )
-        if res.status_code not in (200, 201):
-            # If 409 Conflict due to race condition on idempotency_key
-            if idempotency_key and res.status_code in (409, 400):
-                existing = self._request(
-                    method="GET",
-                    path="/messages",
-                    params={"user_id": f"eq.{user_id}", "idempotency_key": f"eq.{idempotency_key}", "select": "*"},
+
+        if res.status_code in (409, 400) and idempotency_key:
+            # Race condition: duplicate key already inserted
+            existing = await self._request(
+                method="GET",
+                path="/messages",
+                params={"user_id": f"eq.{user_id}", "idempotency_key": f"eq.{idempotency_key}", "select": "*"},
+            )
+            if existing.json():
+                r = existing.json()[0]
+                return MessageModel(
+                    id=UUID(r["id"]),
+                    conversation_id=UUID(r["conversation_id"]),
+                    user_id=UUID(r["user_id"]),
+                    role=r["role"],
+                    content=r["content"],
+                    idempotency_key=r.get("idempotency_key"),
+                    metadata=r.get("metadata", {}) if isinstance(r.get("metadata"), dict) else {},
+                    created_at=datetime.fromisoformat(r["created_at"]),
                 )
-                if existing.status_code == 200 and existing.json():
-                    r = existing.json()[0]
-                    return MessageModel(
-                        id=UUID(r["id"]),
-                        conversation_id=UUID(r["conversation_id"]),
-                        user_id=UUID(r["user_id"]),
-                        role=r["role"],
-                        content=r["content"],
-                        idempotency_key=r.get("idempotency_key"),
-                        metadata=r.get("metadata", {}) if isinstance(r.get("metadata"), dict) else {},
-                        created_at=datetime.fromisoformat(r["created_at"]),
-                    )
-            logger.error("Failed to insert message into Supabase: %s - %s", res.status_code, res.text)
-            raise RuntimeError(f"Database error inserting message: {res.text}")
 
         # Update conversation updated_at
-        self._request(
+        await self._request(
             method="PATCH",
             path="/conversations",
             params={"id": f"eq.{conversation_id}", "user_id": f"eq.{user_id}"},
@@ -332,7 +398,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             created_at=datetime.fromisoformat(r["created_at"]),
         )
 
-    def persist_assistant_message(
+    async def persist_assistant_message(
         self,
         user_id: UUID,
         conversation_id: UUID,
@@ -349,18 +415,14 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             "content": content,
             "metadata": metadata or {},
         }
-        res = self._request(
+        res = await self._request(
             method="POST",
             path="/messages",
             json_data=payload,
             prefer="return=representation",
         )
-        if res.status_code not in (200, 201):
-            logger.error("Failed to insert assistant message: %s - %s", res.status_code, res.text)
-            raise RuntimeError(f"Database error inserting assistant message: {res.text}")
-
         # Update conversation timestamp
-        self._request(
+        await self._request(
             method="PATCH",
             path="/conversations",
             params={"id": f"eq.{conversation_id}", "user_id": f"eq.{user_id}"},
@@ -379,9 +441,9 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             created_at=datetime.fromisoformat(r["created_at"]),
         )
 
-    def get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
+    async def get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
         """Fetch request lifecycle record by user_id and idempotency_key from Supabase."""
-        res = self._request(
+        res = await self._request(
             method="GET",
             path="/chat_requests",
             params={
@@ -390,9 +452,6 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                 "select": "*",
             },
         )
-        if res.status_code != 200:
-            return None
-
         rows = res.json()
         if not rows:
             return None
@@ -409,7 +468,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             updated_at=datetime.fromisoformat(r["updated_at"]),
         )
 
-    def claim_chat_request(
+    async def claim_chat_request(
         self,
         user_id: UUID,
         idempotency_key: str,
@@ -422,7 +481,6 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         Returns (True, ChatRequestModel) if successfully claimed with status='processing'.
         Returns (False, ChatRequestModel) if already claimed / duplicate key conflict.
         """
-        now = datetime.now(timezone.utc)
         payload = {
             "user_id": str(user_id),
             "idempotency_key": idempotency_key,
@@ -431,11 +489,12 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             "user_message_id": str(user_message_id),
         }
 
-        res = self._request(
+        res = await self._request(
             method="POST",
             path="/chat_requests",
             json_data=payload,
             prefer="return=representation",
+            allowed_error_codes=(409, 400),
         )
 
         if res.status_code in (200, 201):
@@ -454,14 +513,13 @@ class SupabasePostgresChatRepository(BaseChatRepository):
 
         # Conflict (409) or constraint error (400) indicates already claimed
         if res.status_code in (409, 400):
-            existing = self.get_chat_request(user_id, idempotency_key)
+            existing = await self.get_chat_request(user_id, idempotency_key)
             if existing:
                 return False, existing
 
-        logger.error("Unexpected error claiming chat request in Supabase: %s - %s", res.status_code, res.text)
-        raise RuntimeError(f"Database error claiming chat request: {res.text}")
+        raise DatabaseOperationError(f"Unexpected response claiming chat request: {res.status_code}")
 
-    def update_chat_request_status(
+    async def update_chat_request_status(
         self,
         user_id: UUID,
         idempotency_key: str,
@@ -477,7 +535,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         if assistant_message_id:
             payload["assistant_message_id"] = str(assistant_message_id)
 
-        res = self._request(
+        await self._request(
             method="PATCH",
             path="/chat_requests",
             params={
@@ -486,5 +544,3 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             },
             json_data=payload,
         )
-        if res.status_code not in (200, 204):
-            logger.warning("Failed to update chat request status in Supabase: %s - %s", res.status_code, res.text)

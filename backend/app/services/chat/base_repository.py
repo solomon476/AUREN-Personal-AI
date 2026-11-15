@@ -1,6 +1,6 @@
 """Abstract Base Class for Chat and Message Repositories.
 
-Defines the contract for conversation, message, and idempotency persistence
+Defines the asynchronous contract for conversation, message, and idempotency persistence
 across PostgreSQL (Supabase) and local SQLite backends.
 """
 
@@ -19,25 +19,41 @@ class BaseChatRepository(ABC):
     - Idempotency lifecycle tracking to prevent duplicate message storage and duplicate AI invocations.
     - Message history retrieval ordered chronologically.
     - Data persistence across process restarts.
+    - Asynchronous non-blocking contract.
     """
 
     @abstractmethod
-    def get_conversation(self, user_id: UUID, conversation_id: UUID) -> Optional[ConversationModel]:
+    async def get_conversation(self, user_id: UUID, conversation_id: UUID) -> Optional[ConversationModel]:
         """Fetch conversation, strictly verifying that it belongs to user_id."""
         pass
 
     @abstractmethod
-    def create_conversation(self, user_id: UUID, title: str = "New Conversation") -> ConversationModel:
+    async def create_conversation(
+        self,
+        user_id: UUID,
+        title: str = "New Conversation",
+        conversation_id: Optional[UUID] = None,
+    ) -> ConversationModel:
         """Create a new conversation thread bound to the authenticated user."""
         pass
 
     @abstractmethod
-    def list_conversations(self, user_id: UUID, limit: int = 50) -> List[ConversationModel]:
+    async def get_or_create_conversation(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        title: str = "New Conversation",
+    ) -> ConversationModel:
+        """Atomically get or create a conversation thread with a specific ID."""
+        pass
+
+    @abstractmethod
+    async def list_conversations(self, user_id: UUID, limit: int = 50) -> List[ConversationModel]:
         """List conversation threads owned by user_id, ordered by updated_at descending."""
         pass
 
     @abstractmethod
-    def get_messages(
+    async def get_messages(
         self,
         user_id: UUID,
         conversation_id: UUID,
@@ -47,12 +63,12 @@ class BaseChatRepository(ABC):
         pass
 
     @abstractmethod
-    def get_message_by_id(self, user_id: UUID, message_id: UUID) -> Optional[MessageModel]:
+    async def get_message_by_id(self, user_id: UUID, message_id: UUID) -> Optional[MessageModel]:
         """Fetch a single message by ID, verifying caller ownership."""
         pass
 
     @abstractmethod
-    def persist_user_message(
+    async def persist_user_message(
         self,
         user_id: UUID,
         conversation_id: UUID,
@@ -63,7 +79,7 @@ class BaseChatRepository(ABC):
         pass
 
     @abstractmethod
-    def persist_assistant_message(
+    async def persist_assistant_message(
         self,
         user_id: UUID,
         conversation_id: UUID,
@@ -74,12 +90,12 @@ class BaseChatRepository(ABC):
         pass
 
     @abstractmethod
-    def get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
+    async def get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
         """Fetch request lifecycle record by user_id and idempotency_key."""
         pass
 
     @abstractmethod
-    def claim_chat_request(
+    async def claim_chat_request(
         self,
         user_id: UUID,
         idempotency_key: str,
@@ -95,7 +111,7 @@ class BaseChatRepository(ABC):
         pass
 
     @abstractmethod
-    def update_chat_request_status(
+    async def update_chat_request_status(
         self,
         user_id: UUID,
         idempotency_key: str,
