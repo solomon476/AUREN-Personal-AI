@@ -333,17 +333,36 @@ async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, h
             assert read_b.status_code == 200
             assert len(read_b.json()) == 0, "Security Violation: User B read User A's chat_request!"
 
-            # 3. User B CANNOT mutate User A's chat request
+            # 3. Direct UPDATE is forbidden on chat_requests (privilege revoked)
+            patch_a = await client.patch(
+                f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}",
+                headers=headers_user_a,
+                json={"status": "completed"},
+            )
+            # Direct update must be rejected (401/403/405) or affect 0 rows (200/204 with no change)
+            assert patch_a.status_code in (200, 204, 401, 403, 405)
+            verify_direct = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_a)
+            assert verify_direct.json()[0]["status"] == "processing", "Security Violation: Direct PATCH was able to mutate status!"
+
+            # 4. User B CANNOT mutate User A's chat request directly
             patch_b = await client.patch(
                 f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}",
                 headers=headers_user_b,
                 json={"status": "completed"},
             )
-            assert patch_b.status_code in (200, 204)
+            assert patch_b.status_code in (200, 204, 401, 403, 405)
             verify_a = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_a)
             assert verify_a.json()[0]["status"] == "processing", "Security Violation: User B mutated User A's chat request!"
 
-            # 4. User B CANNOT delete User A's chat request
+            # 5. User B CANNOT invoke RPC complete_chat_request on User A's request
+            rpc_b = await client.post(
+                f"{postgrest_url}/rpc/complete_chat_request",
+                headers=headers_user_b,
+                json={"p_idempotency_key": idemp_key, "p_assistant_message_id": str(uuid.uuid4())},
+            )
+            assert rpc_b.status_code in (400, 401, 403, 404), "Security Violation: User B completed User A's chat request!"
+
+            # 6. User B CANNOT delete User A's chat request
             del_b = await client.delete(
                 f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}",
                 headers=headers_user_b,
@@ -352,7 +371,7 @@ async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, h
             verify_exists = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_a)
             assert len(verify_exists.json()) == 1, "Security Violation: User B deleted User A's chat request!"
 
-            # 5. Direct DELETE on chat_requests is forbidden for authenticated users
+            # 7. Direct DELETE on chat_requests is forbidden for authenticated users
             del_a = await client.delete(
                 f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}",
                 headers=headers_user_a,
@@ -361,7 +380,7 @@ async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, h
             verify_still_exists = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_a)
             assert len(verify_still_exists.json()) == 1, "Security Violation: Direct delete on chat_requests was permitted!"
 
-            # 6. Anon CANNOT read chat requests
+            # 8. Anon CANNOT read chat requests
             anon_read = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_anon)
             assert anon_read.status_code in (401, 200)
             if anon_read.status_code == 200:

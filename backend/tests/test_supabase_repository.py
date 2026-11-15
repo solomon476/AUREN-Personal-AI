@@ -232,3 +232,121 @@ async def test_async_database_operations_do_not_block_event_loop():
 
         # The background ticker must have executed concurrently while the DB call was awaiting
         assert ticks >= 3, f"Event loop was blocked! Expected ticks >= 3, got {ticks}"
+
+
+@pytest.mark.asyncio
+async def test_supabase_repo_claim_chat_request_via_rpc():
+    """Verify claim_chat_request calls /rpc/claim_chat_request and parses JSON response."""
+    rpc_req_data = {
+        "user_id": str(USER_ID),
+        "idempotency_key": "rpc-idemp-1",
+        "conversation_id": str(CONV_ID),
+        "status": "processing",
+        "user_message_id": str(uuid4()),
+        "assistant_message_id": None,
+        "request_fingerprint": "a" * 64,
+        "created_at": "2026-11-16T00:00:00+00:00",
+        "updated_at": "2026-11-16T00:00:00+00:00",
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and "/rpc/claim_chat_request" in str(request.url):
+            body = json.loads(request.content)
+            assert body["p_idempotency_key"] == "rpc-idemp-1"
+            assert body["p_request_fingerprint"] == "a" * 64
+            return httpx.Response(200, json={"claimed": True, "request": rpc_req_data})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token=TEST_USER_TOKEN,
+            http_client=mock_client,
+        )
+
+        claimed, req = await repo.claim_chat_request(
+            user_id=USER_ID,
+            idempotency_key="rpc-idemp-1",
+            conversation_id=CONV_ID,
+            user_message_id=UUID(rpc_req_data["user_message_id"]),
+            request_fingerprint="a" * 64,
+        )
+        assert claimed is True
+        assert req.status == "processing"
+        assert req.idempotency_key == "rpc-idemp-1"
+        assert req.request_fingerprint == "a" * 64
+
+
+@pytest.mark.asyncio
+async def test_supabase_repo_lifecycle_rpcs_complete_fail_interrupt_retry():
+    """Verify complete, fail, interrupt, and retry lifecycle methods invoke corresponding RPC endpoints."""
+    calls = []
+    asst_id = uuid4()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        url_str = str(request.url)
+        body = json.loads(request.content) if request.content else {}
+
+        if "/rpc/complete_chat_request" in url_str:
+            calls.append(("complete", body))
+            assert body["p_assistant_message_id"] == str(asst_id)
+            return httpx.Response(200, json={"status": "completed"})
+
+        if "/rpc/fail_chat_request" in url_str:
+            calls.append(("fail", body))
+            return httpx.Response(200, json={"status": "failed"})
+
+        if "/rpc/interrupt_chat_request" in url_str:
+            calls.append(("interrupt", body))
+            assert body["p_assistant_message_id"] == str(asst_id)
+            return httpx.Response(200, json={"status": "interrupted"})
+
+        if "/rpc/retry_chat_request" in url_str:
+            calls.append(("retry", body))
+            return httpx.Response(200, json={"transitioned": True, "request": {"status": "processing"}})
+
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token=TEST_USER_TOKEN,
+            http_client=mock_client,
+        )
+
+        # 1. Complete
+        await repo.update_chat_request_status(USER_ID, "key-1", status="completed", assistant_message_id=asst_id)
+        assert len(calls) == 1 and calls[0][0] == "complete"
+
+        # 2. Fail
+        await repo.update_chat_request_status(USER_ID, "key-2", status="failed")
+        assert len(calls) == 2 and calls[1][0] == "fail"
+
+        # 3. Interrupt
+        await repo.update_chat_request_status(USER_ID, "key-3", status="interrupted", assistant_message_id=asst_id)
+        assert len(calls) == 3 and calls[2][0] == "interrupt"
+
+        # 4. Retry
+        transitioned = await repo.transition_chat_request_status(USER_ID, "key-4", ["failed"], "processing")
+        assert transitioned is True
+        assert len(calls) == 4 and calls[3][0] == "retry"
+
+
+@pytest.mark.asyncio
+async def test_supabase_repo_unauthorized_rpc_call_raises_auth_error():
+    """Verify that an unauthorized or expired user token calling an RPC raises DatabaseAuthError."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"message": "JWT expired or unauthorized"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token="expired-token",
+            http_client=mock_client,
+        )
+
+        with pytest.raises(DatabaseAuthError):
+            await repo.update_chat_request_status(USER_ID, "key-unauth", status="completed", assistant_message_id=uuid4())

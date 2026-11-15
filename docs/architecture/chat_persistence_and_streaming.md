@@ -242,5 +242,65 @@ The broad `FOR ALL` policy on `chat_requests` is replaced with operation-specifi
 - `UPDATE`: `auth.uid() = user_id AND status IN ('processing', 'completed', 'failed', 'interrupted')`
 - `DELETE`: Direct `DELETE` privilege is revoked from `authenticated` and `anon`. Deletions can only occur via `ON DELETE CASCADE` from parent conversation threads.
 
+---
+
+## 11. Phase 3A.6 Security Definer RPCs & Direct Mutation Revocation
+
+To address the security vulnerability where authenticated clients could invoke PostgREST directly (`PATCH /chat_requests`) to manipulate their own lifecycle status or inject arbitrary `assistant_message_id`s, Phase 3A.6 eliminates all direct UPDATE privileges on `chat_requests` and introduces strictly validated PostgreSQL Security Definer RPC functions.
+
+### 1. Privilege Revocation
+```sql
+REVOKE UPDATE, DELETE ON public.chat_requests FROM authenticated, anon;
+DROP POLICY IF EXISTS chat_requests_update_own ON public.chat_requests;
+DROP POLICY IF EXISTS chat_requests_delete_own ON public.chat_requests;
+```
+Direct `PATCH` or `DELETE` requests to `/rest/v1/chat_requests` by authenticated or anonymous users are rejected at the database level (`42501 permission denied`).
+
+### 2. Strict Validated INSERT Policy
+Direct `INSERT` into `chat_requests` is tightly restricted:
+```sql
+CREATE POLICY chat_requests_insert_own ON public.chat_requests
+    FOR INSERT TO authenticated
+    WITH CHECK (
+        auth.uid() = user_id
+        AND status = 'processing'
+        AND request_fingerprint IS NOT NULL
+        AND length(request_fingerprint) = 64
+        AND EXISTS (SELECT 1 FROM public.conversations WHERE id = conversation_id AND user_id = auth.uid())
+        AND EXISTS (SELECT 1 FROM public.messages WHERE id = user_message_id AND user_id = auth.uid() AND conversation_id = chat_requests.conversation_id)
+    );
+```
+
+### 3. Narrowly Scoped Security Definer RPC Functions
+All lifecycle mutations must pass through dedicated RPC functions executed with `SECURITY DEFINER` and `SET search_path = public, pg_temp`:
+
+1. `claim_chat_request(p_idempotency_key, p_conversation_id, p_user_message_id, p_request_fingerprint)`:
+   - Validates caller via `auth.uid()`.
+   - Rejects non-NULL fingerprints if length != 64.
+   - Verifies user ownership of conversation and user message.
+   - Atomically inserts or returns existing request record with conflict handling.
+2. `complete_chat_request(p_idempotency_key, p_assistant_message_id)`:
+   - Validates caller via `auth.uid()`.
+   - Verifies `status = 'processing'`. Completed requests cannot be re-completed or mutated.
+   - Validates that `p_assistant_message_id` exists in `public.messages`, belongs to `auth.uid()`, matches the request's `conversation_id`, and has `role = 'assistant'`.
+   - Transitions status to `'completed'` and binds `assistant_message_id`.
+3. `fail_chat_request(p_idempotency_key)`:
+   - Validates caller via `auth.uid()`.
+   - Cannot mutate already `'completed'` requests.
+   - Sets `status = 'failed'`.
+4. `interrupt_chat_request(p_idempotency_key, p_assistant_message_id)`:
+   - Validates caller via `auth.uid()`.
+   - Cannot mutate already `'completed'` requests.
+   - Verifies assistant message if provided.
+   - Sets `status = 'interrupted'`.
+5. `retry_chat_request(p_idempotency_key)`:
+   - Validates caller via `auth.uid()`.
+   - Atomically updates status from `('failed', 'interrupted')` to `'processing'`.
+   - Fails if the request is already in `processing` or `completed`.
+
+### 4. Zero Service-Role Key Usage
+RPC functions are granted directly to the `authenticated` role (`GRANT EXECUTE ON FUNCTION ... TO authenticated`). All operations run under the end-user's authenticated JWT bearer token and anon key, ensuring complete tenant isolation with zero exposure of administrative database keys.
+
+
 
 

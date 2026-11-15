@@ -290,3 +290,141 @@ async def test_reusing_idempotency_key_with_different_content_rejected_via_api()
     # 4. Assert original user message in DB is NOT modified
     persisted_user_msg = await chat_repository.get_message_by_id(user_uuid, initial_req.user_message_id)
     assert persisted_user_msg.content == "Legitimate Initial Prompt"
+
+
+@pytest.mark.asyncio
+async def test_direct_authenticated_update_attempts_rejected_by_database():
+    """Verify that direct SQL updates attempting to manipulate status or tamper with keys fail at the database level."""
+    user_id = uuid.uuid4()
+    conv = await chat_repository.create_conversation(user_id, title="Direct Update Conv")
+    msg = await chat_repository.persist_user_message(user_id, conv.id, "Direct update test prompt")
+    idemp_key = f"direct-upd-{uuid.uuid4()}"
+
+    await chat_repository.claim_chat_request(
+        user_id=user_id,
+        idempotency_key=idemp_key,
+        conversation_id=conv.id,
+        user_message_id=msg.id,
+    )
+    await chat_repository.update_chat_request_status(user_id, idemp_key, status="completed")
+
+    # Attempt to tamper with idempotency_key
+    with pytest.raises(sqlite3.IntegrityError, match="idempotency_key is immutable"):
+        with chat_repository._get_connection() as conn:
+            conn.execute(
+                "UPDATE chat_requests SET idempotency_key = 'hacked-key' WHERE user_id = ?",
+                (str(user_id),),
+            )
+
+    # Attempt to tamper with user_id
+    with pytest.raises(sqlite3.IntegrityError, match="user_id is immutable"):
+        with chat_repository._get_connection() as conn:
+            conn.execute(
+                "UPDATE chat_requests SET user_id = ? WHERE idempotency_key = ?",
+                (str(uuid.uuid4()), idemp_key),
+            )
+
+
+@pytest.mark.asyncio
+async def test_invalid_lifecycle_transitions_rejected():
+    """Verify that completed requests are strictly terminal and cannot be transitioned out of completed status."""
+    user_id = uuid.uuid4()
+    conv = await chat_repository.create_conversation(user_id, title="Invalid Transition Conv")
+    msg = await chat_repository.persist_user_message(user_id, conv.id, "Invalid transition prompt")
+    idemp_key = f"invalid-trans-{uuid.uuid4()}"
+
+    await chat_repository.claim_chat_request(
+        user_id=user_id,
+        idempotency_key=idemp_key,
+        conversation_id=conv.id,
+        user_message_id=msg.id,
+    )
+    await chat_repository.update_chat_request_status(user_id, idemp_key, status="completed")
+
+    # Attempt transition completed -> processing
+    with pytest.raises(sqlite3.IntegrityError, match="Completed chat requests cannot be transitioned"):
+        with chat_repository._get_connection() as conn:
+            conn.execute(
+                "UPDATE chat_requests SET status = 'processing' WHERE user_id = ? AND idempotency_key = ?",
+                (str(user_id), idemp_key),
+            )
+
+    # Attempt transition completed -> failed
+    with pytest.raises(sqlite3.IntegrityError, match="Completed chat requests cannot be transitioned"):
+        with chat_repository._get_connection() as conn:
+            conn.execute(
+                "UPDATE chat_requests SET status = 'failed' WHERE user_id = ? AND idempotency_key = ?",
+                (str(user_id), idemp_key),
+            )
+
+
+@pytest.mark.asyncio
+async def test_duplicate_and_concurrent_retries_atomic():
+    """Verify that concurrent retries on a failed request atomically allow exactly one transition."""
+    import asyncio
+    user_id = uuid.uuid4()
+    conv = await chat_repository.create_conversation(user_id, title="Concurrent Retry Conv")
+    msg = await chat_repository.persist_user_message(user_id, conv.id, "Concurrent prompt")
+    idemp_key = f"atomic-concurrent-{uuid.uuid4()}"
+
+    await chat_repository.claim_chat_request(
+        user_id=user_id,
+        idempotency_key=idemp_key,
+        conversation_id=conv.id,
+        user_message_id=msg.id,
+    )
+    await chat_repository.update_chat_request_status(user_id, idemp_key, status="failed")
+
+    # Launch two simultaneous retry transitions
+    task1 = chat_repository.transition_chat_request_status(user_id, idemp_key, ["failed"], "processing")
+    task2 = chat_repository.transition_chat_request_status(user_id, idemp_key, ["failed"], "processing")
+
+    res1, res2 = await asyncio.gather(task1, task2)
+
+    # Exactly one must succeed, and one must fail
+    assert (res1 is True and res2 is False) or (res1 is False and res2 is True)
+
+    # Database state is strictly 'processing'
+    req = await chat_repository.get_chat_request(user_id, idemp_key)
+    assert req.status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_valid_backend_lifecycle_operations_succeed():
+    """Verify that valid backend lifecycle sequence (claim -> complete with assistant_message) succeeds completely."""
+    user_id = uuid.uuid4()
+    conv = await chat_repository.create_conversation(user_id, title="Legitimate Lifecycle Conv")
+    msg = await chat_repository.persist_user_message(user_id, conv.id, "Legitimate Prompt")
+    idemp_key = f"legit-lifecycle-{uuid.uuid4()}"
+    fp = compute_request_fingerprint(user_id, "Legitimate Prompt", conv.id)
+
+    # 1. Claim
+    claimed, req = await chat_repository.claim_chat_request(
+        user_id=user_id,
+        idempotency_key=idemp_key,
+        conversation_id=conv.id,
+        user_message_id=msg.id,
+        request_fingerprint=fp,
+    )
+    assert claimed is True
+    assert req.status == "processing"
+
+    # 2. Persist assistant message
+    asst_msg = await chat_repository.persist_assistant_message(
+        user_id=user_id,
+        conversation_id=conv.id,
+        content="Legitimate assistant answer",
+    )
+
+    # 3. Complete
+    await chat_repository.update_chat_request_status(
+        user_id=user_id,
+        idempotency_key=idemp_key,
+        status="completed",
+        assistant_message_id=asst_msg.id,
+    )
+
+    final_req = await chat_repository.get_chat_request(user_id, idemp_key)
+    assert final_req.status == "completed"
+    assert final_req.assistant_message_id == asst_msg.id
+    assert final_req.request_fingerprint == fp
