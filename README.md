@@ -145,7 +145,13 @@ The frontend will be available at:
   - Pluggable abstract interfaces for LLM and Embedding providers
   - Typed frontend API client foundation
   - `.gitignore` and `.env.example` configurations
-- [ ] **Phase 2: Database Schema & Supabase Auth Integration**
+- [x] **Phase 2: Database Schema & Supabase Auth Integration** *(Completed)*
+  - Core database migrations (10 tables: profiles, projects, tasks, conversations, messages, memories, journal_entries, goals, milestones, briefings)
+  - Row Level Security (RLS) policies enforcing strict `auth.uid() = user_id` isolation
+  - Automated `updated_at` and `auth.users` profile creation triggers
+  - FastAPI JWT verification with JWKS/secret signing key and `/api/v1/auth/me` endpoint
+  - Comprehensive 17-test automated auth and isolation test suite
+  - React `AuthContext`, `useAuth`, `AuthModal`, and session restoration
 - [ ] **Phase 3: Core AI & Semantic Memory Engine (pgvector)**
 - [ ] **Phase 4: Personal Productivity Modules (Tasks, Journal, Goals)**
 - [ ] **Phase 5: Daily Briefings & Intelligence Synthesis**
