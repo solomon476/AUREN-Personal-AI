@@ -373,6 +373,64 @@ Persistence recovery is isolated in `reconcile_chat_request(p_idempotency_key, p
 ### 5. Repository RPC-Only Enforcement
 `SupabasePostgresChatRepository` removed all legacy direct POST/PATCH fallbacks. Any missing RPC immediately raises `DatabaseOperationError` and never falls back to insecure direct operations.
 
+---
+
+## 13. Phase 3A.8 Legacy Fingerprint Compatibility and Verification Hardening
+
+Phase 3A.8 corrects the legacy fingerprint backfill algorithm, formalizes the compatibility policy for unreconstructable records, resolves `pgcrypto` schema dependencies, and hardens hosted database verification.
+
+### 1. Exact Application Normalization Parity
+To guarantee deterministic idempotency fingerprints matching Python's application logic (`app.models.chat.compute_request_fingerprint`), PostgreSQL migration `20261115000010_correct_legacy_fingerprints_and_pgcrypto.sql` defines:
+
+- `public.normalize_chat_content(p_content TEXT)`:
+  1. Trims leading and trailing whitespace from the full text.
+  2. Splits into lines across `\r\n`, `\n`, or `\r`.
+  3. Strips trailing whitespace from each line (`rtrim`).
+  4. Joins lines with `\n`.
+- `public.compute_request_fingerprint_sql(p_user_id UUID, p_conversation_id UUID, p_content TEXT)`:
+  Constructs payload `user:<user_id>|conv:<conv_id_or_none>|content:<normalized_content>` and outputs a 64-character lowercase SHA-256 hexadecimal string.
+
+### 2. Safe Legacy Fingerprint Reconstruction
+Historical records with NULL or legacy synthetic fingerprints are updated from their source user messages:
+```sql
+UPDATE public.chat_requests cr
+SET request_fingerprint = public.compute_request_fingerprint_sql(cr.user_id, cr.conversation_id, m.content)
+FROM public.messages m
+WHERE cr.user_message_id = m.id
+  AND (
+      cr.request_fingerprint IS NULL
+      OR cr.request_fingerprint !~ '^[0-9a-fA-F]{64}$'
+  );
+```
+
+### 3. Compatibility Policy for Unreconstructable Records
+If a historical `chat_requests` record references a `user_message_id` that no longer exists in `messages` (e.g., deleted message or incomplete legacy test artifact):
+- The original content cannot be cryptographically proven or recovered.
+- Assigning a synthetic or fake fingerprint would permanently poison the idempotency key and cause false conflict rejections.
+- In accordance with the `ON DELETE CASCADE` contract, orphaned legacy records without an existing source message are purged:
+  ```sql
+  DELETE FROM public.chat_requests cr
+  WHERE NOT EXISTS (
+      SELECT 1 FROM public.messages m WHERE m.id = cr.user_message_id
+  );
+  ```
+- This restores clean idempotency claiming for new legitimate requests.
+
+### 4. `pgcrypto` Dependency & Multi-Schema Resolution
+- Supabase hosts cryptographic routines in the `extensions` schema, whereas vanilla PostgreSQL installs them in `public`.
+- `compute_request_fingerprint_sql` dynamically resolves `extensions.digest` or `public.digest`.
+- All SECURITY DEFINER RPCs (`claim_chat_request`, `complete_chat_request`, `fail_chat_request`, `interrupt_chat_request`, `retry_chat_request`, `reconcile_chat_request`) explicitly configure:
+  ```sql
+  SET search_path = public, extensions, pg_temp;
+  ```
+  preventing search path hijacking and resolving `digest()` reliably.
+
+### 5. Strict Permission-Denied Assertion
+Direct mutations on `chat_requests` by authenticated or anonymous clients are strictly revoked. Hosted RLS integration tests assert:
+- `401 Unauthorized` or `403 Forbidden` with PostgreSQL error code `42501` (`permission denied for table chat_requests`).
+- No direct INSERT, UPDATE, or DELETE succeeds. All lifecycle mutations occur solely through authorized SECURITY DEFINER RPCs.
+
+
 
 
 

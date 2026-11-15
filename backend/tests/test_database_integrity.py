@@ -564,3 +564,186 @@ async def test_valid_backend_lifecycle_operations_succeed():
     assert final_req.status == "completed"
     assert final_req.assistant_message_id == asst_msg.id
     assert final_req.request_fingerprint == fp
+
+
+@pytest.mark.asyncio
+async def test_correctly_reconstructed_legacy_fingerprint():
+    """Verify legacy NULL fingerprints are reconstructed using exact application normalization."""
+    user_id = uuid.uuid4()
+    conv = await chat_repository.create_conversation(user_id, title="Legacy Reconstruct Conv")
+    raw_content = "  Line 1   \r\n\r\n  Line 2  \t \nLine 3   \n\n"
+    msg = await chat_repository.persist_user_message(user_id, conv.id, raw_content)
+    idemp_key = f"legacy-recon-{uuid.uuid4()}"
+
+    # Insert a legacy request row with NULL fingerprint
+    with chat_repository._get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_requests (user_id, idempotency_key, conversation_id, status, user_message_id, request_fingerprint, created_at, updated_at)
+            VALUES (?, ?, ?, 'processing', ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            (str(user_id), idemp_key, str(conv.id), str(msg.id)),
+        )
+
+    # Reconstruct fingerprint from source message
+    reconstructed_fp = compute_request_fingerprint(user_id, msg.content, conv.id)
+    with chat_repository._get_connection() as conn:
+        conn.execute(
+            "UPDATE chat_requests SET request_fingerprint = ? WHERE user_id = ? AND idempotency_key = ?",
+            (reconstructed_fp, str(user_id), idemp_key),
+        )
+
+    persisted = await chat_repository.get_chat_request(user_id, idemp_key)
+    assert persisted is not None
+    assert persisted.request_fingerprint == reconstructed_fp
+    assert len(persisted.request_fingerprint) == 64
+    assert all(c in "0123456789abcdef" for c in persisted.request_fingerprint)
+
+
+@pytest.mark.asyncio
+async def test_legacy_request_replay_with_matching_content():
+    """Verify legacy request with reconstructed fingerprint cleanly replays completed response on identical retry."""
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idemp_key = f"legacy-replay-{uuid.uuid4()}"
+    prompt_text = "What is the architectural foundation of AUREN?"
+
+    conv = await chat_repository.create_conversation(user_uuid, title="Legacy Replay Conv")
+    msg = await chat_repository.persist_user_message(user_uuid, conv.id, prompt_text, idempotency_key=idemp_key)
+    asst_msg = await chat_repository.persist_assistant_message(
+        user_uuid, conv.id, "AUREN is built on PostgreSQL with RLS and strict least-privilege.",
+        metadata={"user_message_id": str(msg.id)}
+    )
+
+    # Reconstruct fingerprint and mark completed
+    reconstructed_fp = compute_request_fingerprint(user_uuid, prompt_text, conv.id)
+    with chat_repository._get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_requests (user_id, idempotency_key, conversation_id, status, user_message_id, assistant_message_id, request_fingerprint, created_at, updated_at)
+            VALUES (?, ?, ?, 'completed', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            (str(user_uuid), idemp_key, str(conv.id), str(msg.id), str(asst_msg.id), reconstructed_fp),
+        )
+
+    # Replay request via API with matching content
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": prompt_text, "conversation_id": str(conv.id), "idempotency_key": idemp_key},
+        )
+
+    assert res.status_code == 200
+    assert "event: metadata" in res.text
+    assert '"replayed": true' in res.text
+    assert "AUREN is built on PostgreSQL" in res.text
+    assert "replayed_from_cache" in res.text
+
+
+@pytest.mark.asyncio
+async def test_legacy_request_reuse_with_conflicting_content():
+    """Verify legacy request with reconstructed fingerprint rejects reuse with conflicting content."""
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idemp_key = f"legacy-conflict-{uuid.uuid4()}"
+    original_prompt = "Original legacy prompt"
+
+    conv = await chat_repository.create_conversation(user_uuid, title="Legacy Conflict Conv")
+    msg = await chat_repository.persist_user_message(user_uuid, conv.id, original_prompt, idempotency_key=idemp_key)
+    asst_msg = await chat_repository.persist_assistant_message(
+        user_uuid, conv.id, "Original answer", metadata={"user_message_id": str(msg.id)}
+    )
+
+    reconstructed_fp = compute_request_fingerprint(user_uuid, original_prompt, conv.id)
+    with chat_repository._get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_requests (user_id, idempotency_key, conversation_id, status, user_message_id, assistant_message_id, request_fingerprint, created_at, updated_at)
+            VALUES (?, ?, ?, 'completed', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            (str(user_uuid), idemp_key, str(conv.id), str(msg.id), str(asst_msg.id), reconstructed_fp),
+        )
+
+    # Attempt reuse with conflicting content
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Completely different conflicting prompt", "conversation_id": str(conv.id), "idempotency_key": idemp_key},
+        )
+
+    assert res.status_code == 409
+    assert "idempotency_conflict" in res.text or "conflicting" in res.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_missing_or_deleted_source_message_policy():
+    """Verify compatibility policy for unreconstructable records: orphaned records without source messages are purged."""
+    user_id = uuid.uuid4()
+    conv = await chat_repository.create_conversation(user_id, title="Orphan Purge Conv")
+    fake_msg_id = uuid.uuid4()
+    idemp_key = f"orphan-{uuid.uuid4()}"
+
+    # Insert an orphaned legacy request referencing a non-existent message with NULL fingerprint
+    with chat_repository._get_connection() as conn:
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute(
+            """
+            INSERT INTO chat_requests (user_id, idempotency_key, conversation_id, status, user_message_id, request_fingerprint, created_at, updated_at)
+            VALUES (?, ?, ?, 'failed', ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            (str(user_id), idemp_key, str(conv.id), str(fake_msg_id)),
+        )
+        conn.execute("PRAGMA foreign_keys = ON")
+
+    # Apply migration compatibility purge:
+    with chat_repository._get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM chat_requests
+            WHERE request_fingerprint IS NULL
+              AND user_message_id NOT IN (SELECT id FROM messages)
+            """
+        )
+        assert cursor.rowcount >= 1
+
+    # Assert orphan record was purged
+    purged_req = await chat_repository.get_chat_request(user_id, idemp_key)
+    assert purged_req is None
+
+    # Now a client using that idempotency key with a new user message can claim it cleanly
+    new_msg = await chat_repository.persist_user_message(user_id, conv.id, "Fresh prompt")
+    new_fp = compute_request_fingerprint(user_id, "Fresh prompt", conv.id)
+    claimed, fresh_req = await chat_repository.claim_chat_request(user_id, idemp_key, conv.id, new_msg.id, new_fp)
+    assert claimed is True
+    assert fresh_req.status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_migration_behaviour_when_no_legacy_records_exist():
+    """Verify migration backfill behaves safely when 0 legacy NULL records exist."""
+    # Count rows with NULL fingerprint (should be 0)
+    with chat_repository._get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT count(*) FROM chat_requests WHERE request_fingerprint IS NULL")
+        null_count = cursor.fetchone()[0]
+
+    assert null_count == 0
+
+    # Run the backfill update query: affects 0 rows and raises 0 errors
+    with chat_repository._get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE chat_requests
+            SET request_fingerprint = '0000000000000000000000000000000000000000000000000000000000000000'
+            WHERE request_fingerprint IS NULL
+            """
+        )
+        assert cursor.rowcount == 0

@@ -19,7 +19,12 @@ from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from app.core.exceptions import DatabaseOperationError, IdempotencyConflictError
-from app.models.chat import ChatRequestModel, ConversationModel, MessageModel
+from app.models.chat import (
+    ChatRequestModel,
+    ConversationModel,
+    MessageModel,
+    compute_request_fingerprint,
+)
 from app.services.chat.base_repository import BaseChatRepository
 
 logger = logging.getLogger(__name__)
@@ -105,6 +110,39 @@ class SQLiteChatRepository(BaseChatRepository):
             if "request_fingerprint" not in columns:
                 conn.execute("ALTER TABLE chat_requests ADD COLUMN request_fingerprint TEXT")
 
+            # Temporarily drop delete trigger during migration/backfill if present
+            conn.execute("DROP TRIGGER IF EXISTS trg_chat_requests_prevent_direct_delete")
+
+            # Safe legacy fingerprint reconstruction and compatibility policy
+            # 1. Reconstruct exact fingerprint for records whose source message exists
+            cursor.execute(
+                """
+                SELECT cr.user_id, cr.idempotency_key, cr.conversation_id, m.content
+                FROM chat_requests cr
+                JOIN messages m ON m.id = cr.user_message_id
+                WHERE cr.request_fingerprint IS NULL
+                """
+            )
+            for r_uid, r_key, r_cid, m_content in cursor.fetchall():
+                fp = compute_request_fingerprint(
+                    UUID(r_uid),
+                    m_content,
+                    UUID(r_cid) if r_cid else None,
+                )
+                conn.execute(
+                    "UPDATE chat_requests SET request_fingerprint = ? WHERE user_id = ? AND idempotency_key = ?",
+                    (fp, r_uid, r_key),
+                )
+
+            # 2. Compatibility policy: purge orphaned records whose source message was deleted
+            cursor.execute(
+                """
+                DELETE FROM chat_requests
+                WHERE request_fingerprint IS NULL
+                  AND user_message_id NOT IN (SELECT id FROM messages)
+                """
+            )
+
             # Database-level integrity triggers enforcing immutability & valid transitions
             conn.executescript("""
                 CREATE TRIGGER IF NOT EXISTS trg_chat_requests_immutable_fingerprint
@@ -156,10 +194,12 @@ class SQLiteChatRepository(BaseChatRepository):
                     SELECT RAISE(ABORT, 'idempotency_key is immutable and cannot be modified');
                 END;
 
-                CREATE TRIGGER IF NOT EXISTS trg_chat_requests_prevent_direct_delete
+                DROP TRIGGER IF EXISTS trg_chat_requests_prevent_direct_delete;
+                CREATE TRIGGER trg_chat_requests_prevent_direct_delete
                 BEFORE DELETE ON chat_requests
                 FOR EACH ROW
                 WHEN (SELECT 1 FROM conversations WHERE id = OLD.conversation_id) IS NOT NULL
+                  AND (SELECT 1 FROM messages WHERE id = OLD.user_message_id) IS NOT NULL
                 BEGIN
                     SELECT RAISE(ABORT, 'Direct DELETE on chat_requests is forbidden; deletion must cascade from conversation');
                 END;

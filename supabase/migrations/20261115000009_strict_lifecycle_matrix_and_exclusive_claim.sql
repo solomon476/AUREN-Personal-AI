@@ -121,7 +121,7 @@ CREATE OR REPLACE FUNCTION public.claim_chat_request(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
     v_user_id UUID;
@@ -229,7 +229,7 @@ CREATE OR REPLACE FUNCTION public.complete_chat_request(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
     v_user_id UUID;
@@ -303,7 +303,7 @@ CREATE OR REPLACE FUNCTION public.fail_chat_request(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
     v_user_id UUID;
@@ -351,7 +351,7 @@ CREATE OR REPLACE FUNCTION public.interrupt_chat_request(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
     v_user_id UUID;
@@ -413,7 +413,7 @@ CREATE OR REPLACE FUNCTION public.retry_chat_request(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
     v_user_id UUID;
@@ -472,7 +472,7 @@ CREATE OR REPLACE FUNCTION public.reconcile_chat_request(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
     v_user_id UUID;
@@ -560,3 +560,4 @@ GRANT EXECUTE ON FUNCTION public.fail_chat_request(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.interrupt_chat_request(TEXT, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.retry_chat_request(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.reconcile_chat_request(TEXT, UUID) TO authenticated;
+

@@ -328,7 +328,8 @@ async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, h
                 headers=headers_user_a,
                 json={"idempotency_key": idemp_key, "conversation_id": conv_id, "user_message_id": msg_id, "status": "processing", "request_fingerprint": fp_a},
             )
-            assert res_direct_insert.status_code in (401, 403, 405, 400), "Security Violation: Direct INSERT to chat_requests was permitted!"
+            assert res_direct_insert.status_code in (401, 403), f"Expected permission-denied (401/403), got {res_direct_insert.status_code}: {res_direct_insert.text}"
+            assert "permission denied" in res_direct_insert.text.lower() or "42501" in res_direct_insert.text
 
             # 2. Legitimate claim proceeds exclusively via RPC claim_chat_request
             res_rpc_claim = await client.post(
@@ -372,33 +373,49 @@ async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, h
                 },
             )
             assert res_conflict.status_code in (409, 400), "Security Violation: Conflicting fingerprint was not rejected!"
+            assert "conflicting" in res_conflict.text.lower() or "23505" in res_conflict.text
 
-            # 5. User B CANNOT read User A's chat request
+            # 5. Invalid fingerprint format rejected by claim_chat_request
+            res_invalid_fp = await client.post(
+                f"{postgrest_url}/rpc/claim_chat_request",
+                headers=headers_user_a,
+                json={
+                    "p_idempotency_key": f"bad-fp-{uuid.uuid4()}",
+                    "p_conversation_id": conv_id,
+                    "p_user_message_id": msg_id,
+                    "p_request_fingerprint": "not-a-valid-hex-64-character-fingerprint",
+                },
+            )
+            assert res_invalid_fp.status_code in (400, 403), "Security Violation: Invalid fingerprint format was accepted!"
+            assert "64-character hexadecimal" in res_invalid_fp.text
+
+            # 6. User B CANNOT read User A's chat request
             read_b = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_b)
             assert read_b.status_code == 200
             assert len(read_b.json()) == 0, "Security Violation: User B read User A's chat_request!"
 
-            # 6. Direct UPDATE is forbidden on chat_requests (privilege revoked)
+            # 7. Direct UPDATE is forbidden on chat_requests (privilege revoked)
             patch_a = await client.patch(
                 f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}",
                 headers=headers_user_a,
                 json={"status": "completed"},
             )
-            assert patch_a.status_code in (200, 204, 401, 403, 405)
+            assert patch_a.status_code in (401, 403), f"Expected permission-denied (401/403), got {patch_a.status_code}: {patch_a.text}"
+            assert "permission denied" in patch_a.text.lower() or "42501" in patch_a.text
+            # Verify record remains unchanged
             verify_direct = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_a)
-            assert verify_direct.json()[0]["status"] == "processing", "Security Violation: Direct PATCH mutated status!"
+            assert verify_direct.json()[0]["status"] == "processing", "Security Violation: Record status was altered!"
 
-            # 7. Direct status and assistant_message_id manipulation by User B rejected
+            # 8. Direct status and assistant_message_id manipulation by User B rejected with permission denied
             patch_b = await client.patch(
                 f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}",
                 headers=headers_user_b,
                 json={"status": "completed", "assistant_message_id": str(uuid.uuid4())},
             )
-            assert patch_b.status_code in (200, 204, 401, 403, 405)
-            verify_a = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_a)
-            assert verify_a.json()[0]["status"] == "processing", "Security Violation: User B mutated User A's chat request!"
+            assert patch_b.status_code in (401, 403), f"Expected permission-denied (401/403), got {patch_b.status_code}: {patch_b.text}"
+            assert "permission denied" in patch_b.text.lower() or "42501" in patch_b.text
 
-            # 8. User B CANNOT invoke RPC complete_chat_request on User A's request
+            # 9. User B CANNOT invoke RPC complete_chat_request on User A's request
             rpc_b = await client.post(
                 f"{postgrest_url}/rpc/complete_chat_request",
                 headers=headers_user_b,
@@ -406,7 +423,7 @@ async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, h
             )
             assert rpc_b.status_code in (400, 401, 403, 404), "Security Violation: User B completed User A's chat request!"
 
-            # 9. User B CANNOT invoke RPC fail, interrupt, retry, or reconcile on User A's request
+            # 10. User B CANNOT invoke RPC fail, interrupt, retry, or reconcile on User A's request
             for rpc_name in ("fail_chat_request", "interrupt_chat_request", "retry_chat_request", "reconcile_chat_request"):
                 payload = {"p_idempotency_key": idemp_key}
                 if "reconcile" in rpc_name:
@@ -414,13 +431,15 @@ async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, h
                 res_b_rpc = await client.post(f"{postgrest_url}/rpc/{rpc_name}", headers=headers_user_b, json=payload)
                 assert res_b_rpc.status_code in (400, 401, 403, 404), f"Security Violation: User B executed {rpc_name} on User A's request!"
 
-            # 10. Direct DELETE on chat_requests is forbidden
+            # 11. Direct DELETE on chat_requests is forbidden
             del_a = await client.delete(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_a)
-            assert del_a.status_code in (200, 204, 401, 403, 405)
+            assert del_a.status_code in (401, 403), f"Expected permission-denied (401/403), got {del_a.status_code}: {del_a.text}"
+            assert "permission denied" in del_a.text.lower() or "42501" in del_a.text
+            # Verify record still exists
             verify_still_exists = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_user_a)
-            assert len(verify_still_exists.json()) == 1, "Security Violation: Direct delete on chat_requests was permitted!"
+            assert len(verify_still_exists.json()) == 1, "Security Violation: Record was deleted via direct DELETE!"
 
-            # 11. Anon CANNOT invoke RPCs or read chat requests
+            # 12. Anon CANNOT invoke RPCs or read chat requests
             anon_rpc = await client.post(f"{postgrest_url}/rpc/claim_chat_request", headers=headers_anon, json={})
             assert anon_rpc.status_code in (401, 403)
             anon_read = await client.get(f"{postgrest_url}/chat_requests?idempotency_key=eq.{idemp_key}", headers=headers_anon)
@@ -428,7 +447,52 @@ async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, h
             if anon_read.status_code == 200:
                 assert len(anon_read.json()) == 0
 
-            # 12. Valid completion through RPC requires valid assistant message in same conversation
+            # 13. Ordinary completion cannot complete failed or interrupted requests
+            # Setup a separate failed request
+            idemp_failed = f"failed-test-{uuid.uuid4()}"
+            msg_f = await client.post(f"{postgrest_url}/messages", headers=headers_user_a, json={"conversation_id": conv_id, "role": "user", "content": "Fail prompt"})
+            msg_f_id = msg_f.json()[0]["id"]
+            await client.post(
+                f"{postgrest_url}/rpc/claim_chat_request",
+                headers=headers_user_a,
+                json={"p_idempotency_key": idemp_failed, "p_conversation_id": conv_id, "p_user_message_id": msg_f_id, "p_request_fingerprint": "c" * 64},
+            )
+            await client.post(f"{postgrest_url}/rpc/fail_chat_request", headers=headers_user_a, json={"p_idempotency_key": idemp_failed})
+
+            asst_f = await client.post(
+                f"{postgrest_url}/messages",
+                headers=headers_user_a,
+                json={"conversation_id": conv_id, "role": "assistant", "content": "Ans", "metadata": {"user_message_id": msg_f_id}},
+            )
+            asst_f_id = asst_f.json()[0]["id"]
+
+            # Ordinary complete on failed request must be rejected
+            res_complete_failed = await client.post(
+                f"{postgrest_url}/rpc/complete_chat_request",
+                headers=headers_user_a,
+                json={"p_idempotency_key": idemp_failed, "p_assistant_message_id": asst_f_id},
+            )
+            assert res_complete_failed.status_code in (400, 403), "Security Violation: Ordinary completion succeeded on failed request!"
+            assert "cannot complete request with status failed" in res_complete_failed.text
+
+            # 14. Reconciliation cannot use assistant message associated with a different user message
+            res_bad_recon = await client.post(
+                f"{postgrest_url}/rpc/reconcile_chat_request",
+                headers=headers_user_a,
+                json={"p_idempotency_key": idemp_failed, "p_assistant_message_id": asst_id}, # asst_id belongs to msg_id, not msg_f_id!
+            )
+            assert res_bad_recon.status_code in (400, 403), "Security Violation: Reconcile accepted mismatched assistant message!"
+            assert "not generated for this user message" in res_bad_recon.text
+
+            # Valid reconciliation on failed request succeeds with matching assistant message
+            res_good_recon = await client.post(
+                f"{postgrest_url}/rpc/reconcile_chat_request",
+                headers=headers_user_a,
+                json={"p_idempotency_key": idemp_failed, "p_assistant_message_id": asst_f_id},
+            )
+            assert res_good_recon.status_code in (200, 201)
+
+            # 15. Valid completion through RPC requires valid assistant message in same conversation
             # Try completing with fake assistant message ID: rejected
             fake_asst = await client.post(
                 f"{postgrest_url}/rpc/complete_chat_request",
@@ -453,7 +517,7 @@ async def test_live_rls_isolation_chat_requests(postgrest_url, headers_user_a, h
             )
             assert res_complete.status_code in (200, 201)
 
-            # 13. Terminal state: Completed request CANNOT be failed or retried
+            # 16. Terminal state: Completed request CANNOT be failed or retried
             res_fail_after_complete = await client.post(
                 f"{postgrest_url}/rpc/fail_chat_request",
                 headers=headers_user_a,
