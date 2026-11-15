@@ -31,3 +31,4 @@ class DatabaseOperationError(DatabaseError):
 class ConversationNotFoundError(DatabaseError):
     """Raised when a requested conversation does not exist or access is denied."""
     pass
+

@@ -544,3 +544,64 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             },
             json_data=payload,
         )
+
+    async def update_assistant_message(
+        self,
+        user_id: UUID,
+        message_id: UUID,
+        content: str,
+        metadata: Optional[dict] = None,
+    ) -> MessageModel:
+        """Update an existing assistant message's content and metadata (for retry recovery)."""
+        payload = {
+            "content": content,
+            "metadata": metadata or {},
+        }
+        res = await self._request(
+            method="PATCH",
+            path="/messages",
+            params={"id": f"eq.{message_id}", "user_id": f"eq.{user_id}"},
+            json_data=payload,
+            prefer="return=representation",
+        )
+        rows = res.json()
+        if not rows:
+            raise DatabaseOperationError(f"Assistant message {message_id} not found to update")
+        r = rows[0]
+        return MessageModel(
+            id=UUID(r["id"]),
+            conversation_id=UUID(r["conversation_id"]),
+            user_id=UUID(r["user_id"]),
+            role=r["role"],
+            content=r["content"],
+            metadata=r.get("metadata", {}) if isinstance(r.get("metadata"), dict) else {},
+            created_at=datetime.fromisoformat(r["created_at"]),
+        )
+
+    async def transition_chat_request_status(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        from_statuses: List[str],
+        to_status: str,
+    ) -> bool:
+        """Atomically transition request status conditional on its current state (for retry recovery)."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        from_in = ",".join(from_statuses)
+        payload = {
+            "status": to_status,
+            "updated_at": now_iso,
+        }
+        res = await self._request(
+            method="PATCH",
+            path="/chat_requests",
+            params={
+                "user_id": f"eq.{user_id}",
+                "idempotency_key": f"eq.{idempotency_key}",
+                "status": f"in.({from_in})",
+            },
+            json_data=payload,
+            prefer="return=representation",
+        )
+        rows = res.json()
+        return len(rows) > 0

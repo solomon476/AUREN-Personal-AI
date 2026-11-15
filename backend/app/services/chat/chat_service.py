@@ -128,73 +128,25 @@ class ChatService:
         repo = self.get_repository(user)
 
         # -------------------------------------------------------------------
-        # 1. Idempotency Check: Already Completed or In-Flight?
+        # 1. Idempotency Check: Explicit handling for all 4 states
         # -------------------------------------------------------------------
+        is_retry = False
+        retry_assistant_msg_id = None
+
         if request.idempotency_key:
             existing_req = await repo.get_chat_request(user.id, request.idempotency_key)
-            if existing_req and existing_req.status == "completed" and existing_req.assistant_message_id:
-                logger.info(
-                    "Idempotency hit: Replaying completed response for key=%s (user=%s)",
-                    request.idempotency_key, user.id,
-                )
-                cached_msg = await repo.get_message_by_id(user.id, existing_req.assistant_message_id)
-                if cached_msg:
-                    meta_event = {
-                        "conversation_id": str(conversation.id),
-                        "user_message_id": str(existing_req.user_message_id),
-                        "title": conversation.title,
-                        "replayed": True,
-                    }
-                    yield f"event: metadata\ndata: {json.dumps(meta_event)}\n\n"
-                    yield f"event: token\ndata: {json.dumps({'text': cached_msg.content})}\n\n"
-                    done_event = {
-                        "message_id": str(cached_msg.id),
-                        "finish_reason": "replayed_from_cache",
-                        "model": cached_msg.metadata.get("model", "cached"),
-                    }
-                    yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
-                    return
-
-            if existing_req and existing_req.status == "processing":
-                logger.warning("Duplicate request while key=%s is still processing", request.idempotency_key)
-                error_event = {
-                    "detail": "A request with this idempotency key is already in progress. Please wait for it to complete.",
-                    "code": "idempotency_in_flight",
-                }
-                yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
-                return
-
-        # -------------------------------------------------------------------
-        # 2. Persist User Message (reusing existing on duplicate)
-        # -------------------------------------------------------------------
-        user_message = await repo.persist_user_message(
-            user_id=user.id,
-            conversation_id=conversation.id,
-            content=request.message,
-            idempotency_key=request.idempotency_key,
-        )
-
-        # -------------------------------------------------------------------
-        # 3. Atomic Idempotency Claiming
-        # -------------------------------------------------------------------
-        if request.idempotency_key:
-            claimed, chat_req = await repo.claim_chat_request(
-                user_id=user.id,
-                idempotency_key=request.idempotency_key,
-                conversation_id=conversation.id,
-                user_message_id=user_message.id,
-            )
-            if not claimed:
-                logger.warning(
-                    "Idempotency claim rejected: key=%s already claimed with status=%s",
-                    request.idempotency_key, chat_req.status,
-                )
-                if chat_req.status == "completed" and chat_req.assistant_message_id:
-                    cached_msg = await repo.get_message_by_id(user.id, chat_req.assistant_message_id)
+            if existing_req:
+                # State 1: COMPLETED -> replay cached response
+                if existing_req.status == "completed" and existing_req.assistant_message_id:
+                    logger.info(
+                        "Idempotency hit: Replaying completed response for key=%s (user=%s)",
+                        request.idempotency_key, user.id,
+                    )
+                    cached_msg = await repo.get_message_by_id(user.id, existing_req.assistant_message_id)
                     if cached_msg:
                         meta_event = {
                             "conversation_id": str(conversation.id),
-                            "user_message_id": str(chat_req.user_message_id),
+                            "user_message_id": str(existing_req.user_message_id),
                             "title": conversation.title,
                             "replayed": True,
                         }
@@ -208,12 +160,95 @@ class ChatService:
                         yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
                         return
 
-                error_event = {
-                    "detail": "A request with this idempotency key is already in progress. Please wait for it to complete.",
-                    "code": "idempotency_in_flight",
-                }
-                yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
-                return
+                # State 2: PROCESSING -> reject duplicate in-flight request
+                if existing_req.status == "processing":
+                    logger.warning("Duplicate request while key=%s is still processing", request.idempotency_key)
+                    error_event = {
+                        "detail": "A request with this idempotency key is already in progress. Please wait for it to complete.",
+                        "code": "idempotency_in_flight",
+                    }
+                    yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+                    return
+
+                # State 3 & 4: FAILED or INTERRUPTED -> deliberate retry / recovery
+                if existing_req.status in ("failed", "interrupted"):
+                    logger.info(
+                        "Idempotency retry initiated for key=%s (previous status=%s)",
+                        request.idempotency_key, existing_req.status,
+                    )
+                    is_retry = True
+                    retry_assistant_msg_id = existing_req.assistant_message_id
+
+        # -------------------------------------------------------------------
+        # 2. Persist User Message (reusing existing on duplicate / retry)
+        # -------------------------------------------------------------------
+        user_message = await repo.persist_user_message(
+            user_id=user.id,
+            conversation_id=conversation.id,
+            content=request.message,
+            idempotency_key=request.idempotency_key,
+        )
+
+        # -------------------------------------------------------------------
+        # 3. Atomic Idempotency Claiming / State Transition
+        # -------------------------------------------------------------------
+        if request.idempotency_key:
+            if is_retry:
+                # Atomic conditional transition from ('failed', 'interrupted') -> 'processing'
+                transitioned = await repo.transition_chat_request_status(
+                    user_id=user.id,
+                    idempotency_key=request.idempotency_key,
+                    from_statuses=["failed", "interrupted"],
+                    to_status="processing",
+                )
+                if not transitioned:
+                    logger.warning(
+                        "Concurrent retry race on key=%s; already transitioned to processing",
+                        request.idempotency_key,
+                    )
+                    error_event = {
+                        "detail": "A request with this idempotency key is already in progress. Please wait for it to complete.",
+                        "code": "idempotency_in_flight",
+                    }
+                    yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+                    return
+            else:
+                claimed, chat_req = await repo.claim_chat_request(
+                    user_id=user.id,
+                    idempotency_key=request.idempotency_key,
+                    conversation_id=conversation.id,
+                    user_message_id=user_message.id,
+                )
+                if not claimed:
+                    logger.warning(
+                        "Idempotency claim rejected: key=%s already claimed with status=%s",
+                        request.idempotency_key, chat_req.status,
+                    )
+                    if chat_req.status == "completed" and chat_req.assistant_message_id:
+                        cached_msg = await repo.get_message_by_id(user.id, chat_req.assistant_message_id)
+                        if cached_msg:
+                            meta_event = {
+                                "conversation_id": str(conversation.id),
+                                "user_message_id": str(chat_req.user_message_id),
+                                "title": conversation.title,
+                                "replayed": True,
+                            }
+                            yield f"event: metadata\ndata: {json.dumps(meta_event)}\n\n"
+                            yield f"event: token\ndata: {json.dumps({'text': cached_msg.content})}\n\n"
+                            done_event = {
+                                "message_id": str(cached_msg.id),
+                                "finish_reason": "replayed_from_cache",
+                                "model": cached_msg.metadata.get("model", "cached"),
+                            }
+                            yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
+                            return
+
+                    error_event = {
+                        "detail": "A request with this idempotency key is already in progress. Please wait for it to complete.",
+                        "code": "idempotency_in_flight",
+                    }
+                    yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+                    return
 
         # Emit initial metadata event
         init_event = {
@@ -301,12 +336,20 @@ class ChatService:
                 logger.info("Stream interrupted due to client disconnect. Skipping completion persistence.")
             else:
                 full_response = "".join(accumulated_chunks)
-                assistant_msg = await repo.persist_assistant_message(
-                    user_id=user.id,
-                    conversation_id=conversation.id,
-                    content=full_response,
-                    metadata={"model": provider.get_model_id()},
-                )
+                if retry_assistant_msg_id:
+                    assistant_msg = await repo.update_assistant_message(
+                        user_id=user.id,
+                        message_id=retry_assistant_msg_id,
+                        content=full_response,
+                        metadata={"model": provider.get_model_id()},
+                    )
+                else:
+                    assistant_msg = await repo.persist_assistant_message(
+                        user_id=user.id,
+                        conversation_id=conversation.id,
+                        content=full_response,
+                        metadata={"model": provider.get_model_id()},
+                    )
                 is_completed = True
                 terminal_state = "completed"
 
@@ -373,16 +416,28 @@ class ChatService:
                 target_status = terminal_state or "interrupted"
                 if accumulated_chunks:
                     partial_text = "".join(accumulated_chunks)
-                    interrupted_msg = await repo.persist_assistant_message(
-                        user_id=user.id,
-                        conversation_id=conversation.id,
-                        content=partial_text,
-                        metadata={
-                            "interrupted": target_status == "interrupted",
-                            "failed": target_status == "failed",
-                            "model": provider.get_model_id(),
-                        },
-                    )
+                    if retry_assistant_msg_id:
+                        interrupted_msg = await repo.update_assistant_message(
+                            user_id=user.id,
+                            message_id=retry_assistant_msg_id,
+                            content=partial_text,
+                            metadata={
+                                "interrupted": target_status == "interrupted",
+                                "failed": target_status == "failed",
+                                "model": provider.get_model_id(),
+                            },
+                        )
+                    else:
+                        interrupted_msg = await repo.persist_assistant_message(
+                            user_id=user.id,
+                            conversation_id=conversation.id,
+                            content=partial_text,
+                            metadata={
+                                "interrupted": target_status == "interrupted",
+                                "failed": target_status == "failed",
+                                "model": provider.get_model_id(),
+                            },
+                        )
                     if request.idempotency_key:
                         await repo.update_chat_request_status(
                             user_id=user.id,
@@ -397,6 +452,7 @@ class ChatService:
                             user_id=user.id,
                             idempotency_key=request.idempotency_key,
                             status=target_status,
+                            assistant_message_id=retry_assistant_msg_id,
                         )
                     logger.info("Updated request status=%s with zero chunks accumulated (user=%s)", target_status, user.id)
 

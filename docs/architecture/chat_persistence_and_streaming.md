@@ -147,3 +147,31 @@ The streaming runner explicitly tracks `terminal_state`:
    - Retrying sends the **exact same** `idempotencyKey`.
    - If the backend already finished generation in the background before the disconnect, it instantly replays the completed response from cache with zero additional AI tokens consumed.
    - If the request was interrupted or failed, the backend cleanly retries.
+
+---
+
+## 7. Phase 3A.3 Retry Lifecycle & Concurrency Guarantees
+
+### Explicit Handling for All Four States
+
+| State | Backend Action | Assistant Message Handling | Provider Invocation |
+|---|---|---|---|
+| `completed` | Replays cached assistant message directly | Emits cached message; no duplicate records | 0 (cached) |
+| `processing` | Returns `idempotency_in_flight` SSE error event | Untouched; prevents race with active worker | 0 (rejected) |
+| `failed` | Atomic state transition `failed -> processing` | New assistant message created upon success | 1 (retried) |
+| `interrupted` | Atomic state transition `interrupted -> processing` | Existing assistant message updated in-place (`update_assistant_message`) | 1 (recovered) |
+
+### Key Invariants
+1. **Atomic Conditional Transition**:
+   - `transition_chat_request_status(user_id, idempotency_key, from_statuses=['failed', 'interrupted'], to_status='processing')`
+   - In SQLite: `UPDATE chat_requests SET status = ? WHERE user_id = ? AND idempotency_key = ? AND status IN (?, ?)`
+   - In Supabase PostgreSQL: PostgREST `PATCH /chat_requests?user_id=eq.{user_id}&idempotency_key=eq.{idempotency_key}&status=in.({from_statuses})`
+   - Exactly one concurrent retry can succeed (row count = 1). Any other concurrent retry sees row count = 0 and is cleanly rejected as `idempotency_in_flight`.
+2. **Assistant Message De-duplication on Interrupted Recovery**:
+   - When recovering an `interrupted` request, `existing_req.assistant_message_id` is preserved.
+   - Upon completion, `repo.update_assistant_message(user_id, message_id, content, metadata)` updates the existing message in-place rather than inserting a duplicate record.
+   - As a result, the conversation history contains exactly one user message and one assistant message.
+3. **SQLite Worker Thread Isolation**:
+   - SQLite is maintained strictly as an isolated local-development adapter (`storage/dev_chat.db`).
+   - All synchronous SQLite calls are offloaded via `asyncio.to_thread` to prevent blocking the asynchronous event loop.
+

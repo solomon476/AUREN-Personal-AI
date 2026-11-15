@@ -90,6 +90,17 @@ class BaseChatRepository(ABC):
         pass
 
     @abstractmethod
+    async def update_assistant_message(
+        self,
+        user_id: UUID,
+        message_id: UUID,
+        content: str,
+        metadata: Optional[dict] = None,
+    ) -> MessageModel:
+        """Update an existing assistant message's content and metadata (for retry recovery)."""
+        pass
+
+    @abstractmethod
     async def get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
         """Fetch request lifecycle record by user_id and idempotency_key."""
         pass
@@ -107,6 +118,21 @@ class BaseChatRepository(ABC):
         Returns:
             (True, ChatRequestModel) if successfully claimed with status='processing'.
             (False, ChatRequestModel) if already claimed / existing record found.
+        """
+        pass
+
+    @abstractmethod
+    async def transition_chat_request_status(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        from_statuses: List[str],
+        to_status: str,
+    ) -> bool:
+        """Atomically transition request status conditional on its current state (for retry recovery).
+
+        Returns:
+            True if row was atomically updated, False if current status was not in from_statuses.
         """
         pass
 

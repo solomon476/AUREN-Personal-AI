@@ -14,6 +14,8 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.main import app
+from app.models.user import AuthenticatedUser
+from app.models.chat import ChatCompletionRequest
 from app.services.chat.repository import ChatRepository, chat_repository
 from app.services.chat.chat_service import chat_service
 from app.services.llm.base import BaseLLMProvider, ChatMessage, LLMResponse
@@ -611,3 +613,238 @@ async def test_stream_timeout_after_partial_tokens_remains_failed(monkeypatch):
     req = await chat_repository.get_chat_request(uuid.UUID(user_id), idempotency_key)
     assert req is not None
     assert req.status == "failed", f"Expected status 'failed', but got '{req.status}'!"
+
+
+
+# ---------------------------------------------------------------------------
+# 14. Failed Request Can Be Retried Successfully With Same Idempotency Key
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_failed_request_can_be_retried_successfully_with_same_key(monkeypatch):
+    """Verify a failed request can be deliberately retried with the exact same idempotency key,
+
+    transitioning status to completed and not duplicating the user message.
+    """
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"retry-fail-{uuid.uuid4()}"
+
+    # Step 1: Initial attempt fails
+    class FailingProvider(BaseLLMProvider):
+        def get_model_id(self) -> str:
+            return "failing-model"
+
+        async def generate_response(self, messages, **kwargs):
+            return LLMResponse(content="fail", model="failing-model")
+
+        async def stream_response(self, messages, **kwargs):
+            if False:
+                yield ""
+            raise RuntimeError("Upstream API quota error")
+
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: FailingProvider())
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res1 = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Prompt to retry", "idempotency_key": idempotency_key},
+        )
+    assert res1.status_code == 200
+    assert "event: error" in res1.text
+
+    # Database assertion: Request is strictly 'failed'
+    req_after_fail = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert req_after_fail is not None
+    assert req_after_fail.status == "failed"
+
+    # Step 2: Retry with working provider and the EXACT SAME idempotency_key
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: spy_provider)
+    initial_spy_calls = spy_provider.call_count
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res2 = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Prompt to retry", "idempotency_key": idempotency_key},
+        )
+    assert res2.status_code == 200
+    assert "event: done" in res2.text
+    assert spy_provider.call_count == initial_spy_calls + 1
+
+    # Database assertions:
+    req_after_retry = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert req_after_retry is not None
+    assert req_after_retry.status == "completed"
+
+    # Verify user message was NOT duplicated: exactly 1 user message in conversation
+    messages = await chat_repository.get_messages(user_uuid, req_after_retry.conversation_id)
+    user_msgs = [m for m in messages if m.role == "user"]
+    assistant_msgs = [m for m in messages if m.role == "assistant"]
+    assert len(user_msgs) == 1
+    assert len(assistant_msgs) == 1
+    assert assistant_msgs[0].content == "Hello from AUREN."
+
+
+# ---------------------------------------------------------------------------
+# 15. Interrupted Request Recovered Safely Without Duplicate Assistant Messages
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_interrupted_request_can_be_recovered_safely_without_duplicate_messages(monkeypatch):
+    """Verify an interrupted request can be recovered with the same idempotency key,
+
+    updating the existing assistant message so no duplicate assistant messages exist.
+    """
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"recover-interrupted-{uuid.uuid4()}"
+
+    # Step 1: Simulate client disconnection after yielding 1 token
+    class DisconnectingProvider(BaseLLMProvider):
+        def get_model_id(self) -> str:
+            return "disc-provider"
+
+        async def generate_response(self, messages, **kwargs):
+            return LLMResponse(content="done", model="disc-provider")
+
+        async def stream_response(self, messages, **kwargs):
+            yield "Partial token 1"
+            await asyncio.sleep(0.05)
+            yield "Token 2"
+
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: DisconnectingProvider())
+
+    class MockDisconnectOnSecondCheck:
+        def __init__(self):
+            self.checks = 0
+
+        async def is_disconnected(self):
+            self.checks += 1
+            return self.checks >= 2
+
+    test_user = AuthenticatedUser(id=user_uuid, email="rec@auren.ai")
+    test_conv = await chat_repository.create_conversation(user_uuid, title="Recovery Conv")
+    test_req = ChatCompletionRequest(message="Prompt to interrupt", conversation_id=test_conv.id, idempotency_key=idempotency_key)
+
+    events1 = []
+    async for event in chat_service.stream_chat_completion(
+        user=test_user,
+        conversation=test_conv,
+        request=test_req,
+        raw_request=MockDisconnectOnSecondCheck(),
+    ):
+        events1.append(event)
+
+    # Database assertion: Request is strictly 'interrupted'
+    req_interrupted = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert req_interrupted is not None
+    assert req_interrupted.status == "interrupted"
+    partial_assistant_msg_id = req_interrupted.assistant_message_id
+    assert partial_assistant_msg_id is not None
+
+    # Step 2: Client reconnects and retries with the SAME idempotency key (no disconnect)
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: spy_provider)
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res2 = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Prompt to interrupt", "conversation_id": str(test_conv.id), "idempotency_key": idempotency_key},
+        )
+    assert res2.status_code == 200
+    assert "event: done" in res2.text
+
+    # Database assertion: Request transitioned from 'interrupted' to 'completed'
+    req_recovered = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert req_recovered is not None
+    assert req_recovered.status == "completed"
+
+    # CRUCIAL ASSERTION: Assistant message was updated in-place, NOT duplicated!
+    messages = await chat_repository.get_messages(user_uuid, test_conv.id)
+    assert len(messages) == 2, f"Expected exactly 2 messages (1 user, 1 assistant), got {len(messages)}"
+    assert messages[0].role == "user"
+    assert messages[1].role == "assistant"
+    assert messages[1].id == partial_assistant_msg_id
+    assert messages[1].content == "Hello from AUREN."
+
+
+# ---------------------------------------------------------------------------
+# 16. Simultaneous Retries on Failed Request Cannot Invoke Provider Twice
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_simultaneous_retries_on_failed_request_cannot_invoke_provider_twice(monkeypatch):
+    """Verify simultaneous retries on a failed request atomically allow only 1 to execute."""
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"concurrent-retry-{uuid.uuid4()}"
+
+    # Setup: Create conversation and a failed chat_request
+    conv = await chat_repository.create_conversation(user_uuid, title="Retry Concurrency Thread")
+    msg = await chat_repository.persist_user_message(user_uuid, conv.id, "Retry concurrency message", idempotency_key=idempotency_key)
+    await chat_repository.claim_chat_request(user_uuid, idempotency_key, conv.id, msg.id)
+    await chat_repository.update_chat_request_status(user_uuid, idempotency_key, status="failed")
+
+    initial_calls = spy_provider.call_count
+
+    # Launch two simultaneous retry requests with the same idempotency key
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        req1 = async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Retry concurrency message", "conversation_id": str(conv.id), "idempotency_key": idempotency_key},
+        )
+        req2 = async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Retry concurrency message", "conversation_id": str(conv.id), "idempotency_key": idempotency_key},
+        )
+        res1, res2 = await asyncio.gather(req1, req2)
+
+    assert res1.status_code == 200
+    assert res2.status_code == 200
+
+    # Exactly one retry succeeded in invoking the provider
+    assert spy_provider.call_count == initial_calls + 1
+
+    texts = [res1.text, res2.text]
+    assert any("event: done" in t for t in texts)
+    assert any("idempotency_in_flight" in t or "replayed" in t for t in texts)
+
+    # Repository assertion: Status transitioned to completed
+    final_req = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert final_req is not None
+    assert final_req.status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# 17. Partial Interrupted Message Not Mistaken For Completed Replay
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_partial_interrupted_message_not_mistaken_for_completed_replay():
+    """Verify that an interrupted request is not falsely treated as completed cache hit."""
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"interrupted-not-completed-{uuid.uuid4()}"
+
+    conv = await chat_repository.create_conversation(user_uuid, title="Interrupted Thread")
+    msg = await chat_repository.persist_user_message(user_uuid, conv.id, "Question", idempotency_key=idempotency_key)
+    assistant_partial = await chat_repository.persist_assistant_message(
+        user_uuid, conv.id, "Partial unfinished thought", metadata={"interrupted": True}
+    )
+    await chat_repository.claim_chat_request(user_uuid, idempotency_key, conv.id, msg.id)
+    await chat_repository.update_chat_request_status(
+        user_uuid, idempotency_key, status="interrupted", assistant_message_id=assistant_partial.id
+    )
+
+    # Fetching the chat request verifies it is NOT status='completed'
+    req = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert req.status == "interrupted"
+    assert req.status != "completed"

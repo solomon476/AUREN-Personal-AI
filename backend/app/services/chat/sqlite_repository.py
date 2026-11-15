@@ -3,11 +3,13 @@
 Explicitly identified local-development option providing:
 - Disk-backed SQLite storage surviving process restarts.
 - Strict ownership verification on all operations.
-- Atomic idempotency claiming via SQLite UNIQUE constraints.
+- Atomic idempotency claiming and conditional state transitions.
+- Synchronous sqlite3 operations isolated in worker threads (asyncio.to_thread)
+  to avoid blocking the asyncio event loop.
 - Foreign keys and WAL mode enabled.
-- Asynchronous contract conformance without unnecessary rewrite.
 """
 
+import asyncio
 import json
 import logging
 import sqlite3
@@ -26,7 +28,11 @@ DEFAULT_SQLITE_PATH = DB_DIR / "auren_chat.db"
 
 
 class SQLiteChatRepository(BaseChatRepository):
-    """SQLite implementation of BaseChatRepository for local development and offline testing."""
+    """SQLite implementation of BaseChatRepository for local development and offline testing.
+
+    Note: This is an explicitly identified local-development option. All database operations
+    are executed via asyncio.to_thread to maintain an asynchronous non-blocking contract.
+    """
 
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or DEFAULT_SQLITE_PATH
@@ -90,8 +96,10 @@ class SQLiteChatRepository(BaseChatRepository):
                 ON chat_requests(user_id, status);
             """)
 
-    async def get_conversation(self, user_id: UUID, conversation_id: UUID) -> Optional[ConversationModel]:
-        """Fetch conversation, strictly verifying that it belongs to user_id."""
+    # -----------------------------------------------------------------------
+    # Synchronous Core Operations (run via asyncio.to_thread)
+    # -----------------------------------------------------------------------
+    def _sync_get_conversation(self, user_id: UUID, conversation_id: UUID) -> Optional[ConversationModel]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -109,13 +117,12 @@ class SQLiteChatRepository(BaseChatRepository):
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
 
-    async def create_conversation(
+    def _sync_create_conversation(
         self,
         user_id: UUID,
-        title: str = "New Conversation",
+        title: str,
         conversation_id: Optional[UUID] = None,
     ) -> ConversationModel:
-        """Create a new conversation thread bound to the authenticated user."""
         conv_id = conversation_id or uuid4()
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
@@ -134,14 +141,13 @@ class SQLiteChatRepository(BaseChatRepository):
             updated_at=now,
         )
 
-    async def get_or_create_conversation(
+    def _sync_get_or_create_conversation(
         self,
         user_id: UUID,
         conversation_id: UUID,
-        title: str = "New Conversation",
+        title: str,
     ) -> ConversationModel:
-        """Atomically get or create a conversation thread with a specific deterministic ID."""
-        existing = await self.get_conversation(user_id, conversation_id)
+        existing = self._sync_get_conversation(user_id, conversation_id)
         if existing:
             return existing
 
@@ -158,7 +164,7 @@ class SQLiteChatRepository(BaseChatRepository):
                 (str(conversation_id), str(user_id), title, now_iso, now_iso),
             )
 
-        conv = await self.get_conversation(user_id, conversation_id)
+        conv = self._sync_get_conversation(user_id, conversation_id)
         if conv:
             return conv
         return ConversationModel(
@@ -169,8 +175,7 @@ class SQLiteChatRepository(BaseChatRepository):
             updated_at=now,
         )
 
-    async def list_conversations(self, user_id: UUID, limit: int = 50) -> List[ConversationModel]:
-        """List all conversation threads owned by user_id, ordered by updated_at descending."""
+    def _sync_list_conversations(self, user_id: UUID, limit: int) -> List[ConversationModel]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -190,8 +195,7 @@ class SQLiteChatRepository(BaseChatRepository):
             for r in rows
         ]
 
-    async def get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
-        """Fetch request lifecycle record by user_id and idempotency_key."""
+    def _sync_get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -212,14 +216,13 @@ class SQLiteChatRepository(BaseChatRepository):
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
 
-    async def persist_user_message(
+    def _sync_persist_user_message(
         self,
         user_id: UUID,
         conversation_id: UUID,
         content: str,
         idempotency_key: Optional[str] = None,
     ) -> MessageModel:
-        """Persist user message into the database, reusing existing message on idempotency match."""
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
         msg_id = uuid4()
@@ -257,7 +260,6 @@ class SQLiteChatRepository(BaseChatRepository):
                     (now_iso, str(conversation_id), str(user_id)),
                 )
             except sqlite3.IntegrityError:
-                # Concurrent insert race with identical idempotency key
                 if idempotency_key:
                     cursor = conn.cursor()
                     cursor.execute(
@@ -288,19 +290,13 @@ class SQLiteChatRepository(BaseChatRepository):
             created_at=now,
         )
 
-    async def claim_chat_request(
+    def _sync_claim_chat_request(
         self,
         user_id: UUID,
         idempotency_key: str,
         conversation_id: UUID,
         user_message_id: UUID,
     ) -> Tuple[bool, ChatRequestModel]:
-        """Atomically claim a chat request.
-
-        Attempts atomic INSERT with status='processing'.
-        If row with (user_id, idempotency_key) already exists, sqlite3.IntegrityError
-        is raised and caught, returning (False, existing_request).
-        """
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
 
@@ -323,20 +319,38 @@ class SQLiteChatRepository(BaseChatRepository):
                 updated_at=now,
             )
         except sqlite3.IntegrityError:
-            # Key was already claimed! Retrieve and return existing request record
-            existing = await self.get_chat_request(user_id, idempotency_key)
+            existing = self._sync_get_chat_request(user_id, idempotency_key)
             if existing:
                 return False, existing
             raise
 
-    async def update_chat_request_status(
+    def _sync_transition_chat_request_status(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        from_statuses: List[str],
+        to_status: str,
+    ) -> bool:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        placeholders = ",".join("?" for _ in from_statuses)
+        sql = f"""
+            UPDATE chat_requests
+            SET status = ?, updated_at = ?
+            WHERE user_id = ? AND idempotency_key = ? AND status IN ({placeholders})
+        """
+        params = [to_status, now_iso, str(user_id), idempotency_key] + from_statuses
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, params)
+            return cursor.rowcount > 0
+
+    def _sync_update_chat_request_status(
         self,
         user_id: UUID,
         idempotency_key: str,
         status: str,
         assistant_message_id: Optional[UUID] = None,
     ) -> None:
-        """Update request status (completed, failed, interrupted) and associate assistant message."""
         now_iso = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
             conn.execute(
@@ -348,14 +362,13 @@ class SQLiteChatRepository(BaseChatRepository):
                 (status, str(assistant_message_id) if assistant_message_id else None, now_iso, str(user_id), idempotency_key),
             )
 
-    async def persist_assistant_message(
+    def _sync_persist_assistant_message(
         self,
         user_id: UUID,
         conversation_id: UUID,
         content: str,
         metadata: Optional[dict] = None,
     ) -> MessageModel:
-        """Persist completed assistant message reliably into the database."""
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
         msg_id = uuid4()
@@ -384,8 +397,43 @@ class SQLiteChatRepository(BaseChatRepository):
             created_at=now,
         )
 
-    async def get_message_by_id(self, user_id: UUID, message_id: UUID) -> Optional[MessageModel]:
-        """Fetch a single message by ID, verifying caller ownership."""
+    def _sync_update_assistant_message(
+        self,
+        user_id: UUID,
+        message_id: UUID,
+        content: str,
+        metadata: Optional[dict] = None,
+    ) -> MessageModel:
+        meta_json = json.dumps(metadata or {})
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE messages
+                SET content = ?, metadata = ?
+                WHERE id = ? AND user_id = ?
+                """,
+                (content, meta_json, str(message_id), str(user_id)),
+            )
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM messages WHERE id = ? AND user_id = ?",
+                (str(message_id), str(user_id)),
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise RuntimeError(f"Message {message_id} not found for user {user_id}")
+            return MessageModel(
+                id=UUID(row["id"]),
+                conversation_id=UUID(row["conversation_id"]),
+                user_id=UUID(row["user_id"]),
+                role=row["role"],
+                content=row["content"],
+                idempotency_key=row["idempotency_key"],
+                metadata=json.loads(row["metadata"]),
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+
+    def _sync_get_message_by_id(self, user_id: UUID, message_id: UUID) -> Optional[MessageModel]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -406,14 +454,13 @@ class SQLiteChatRepository(BaseChatRepository):
                 created_at=datetime.fromisoformat(row["created_at"]),
             )
 
-    async def get_messages(
+    def _sync_get_messages(
         self,
         user_id: UUID,
         conversation_id: UUID,
-        limit: int = 50,
+        limit: int,
     ) -> List[MessageModel]:
-        """Retrieve message history for an owned conversation from the database."""
-        conv = await self.get_conversation(user_id, conversation_id)
+        conv = self._sync_get_conversation(user_id, conversation_id)
         if not conv:
             return []
 
@@ -443,3 +490,96 @@ class SQLiteChatRepository(BaseChatRepository):
             )
             for r in rows
         ]
+
+    # -----------------------------------------------------------------------
+    # Asynchronous Interface Implementation (isolated via asyncio.to_thread)
+    # -----------------------------------------------------------------------
+    async def get_conversation(self, user_id: UUID, conversation_id: UUID) -> Optional[ConversationModel]:
+        return await asyncio.to_thread(self._sync_get_conversation, user_id, conversation_id)
+
+    async def create_conversation(
+        self,
+        user_id: UUID,
+        title: str = "New Conversation",
+        conversation_id: Optional[UUID] = None,
+    ) -> ConversationModel:
+        return await asyncio.to_thread(self._sync_create_conversation, user_id, title, conversation_id)
+
+    async def get_or_create_conversation(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        title: str = "New Conversation",
+    ) -> ConversationModel:
+        return await asyncio.to_thread(self._sync_get_or_create_conversation, user_id, conversation_id, title)
+
+    async def list_conversations(self, user_id: UUID, limit: int = 50) -> List[ConversationModel]:
+        return await asyncio.to_thread(self._sync_list_conversations, user_id, limit)
+
+    async def get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
+        return await asyncio.to_thread(self._sync_get_chat_request, user_id, idempotency_key)
+
+    async def persist_user_message(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        content: str,
+        idempotency_key: Optional[str] = None,
+    ) -> MessageModel:
+        return await asyncio.to_thread(self._sync_persist_user_message, user_id, conversation_id, content, idempotency_key)
+
+    async def claim_chat_request(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        conversation_id: UUID,
+        user_message_id: UUID,
+    ) -> Tuple[bool, ChatRequestModel]:
+        return await asyncio.to_thread(self._sync_claim_chat_request, user_id, idempotency_key, conversation_id, user_message_id)
+
+    async def transition_chat_request_status(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        from_statuses: List[str],
+        to_status: str,
+    ) -> bool:
+        return await asyncio.to_thread(self._sync_transition_chat_request_status, user_id, idempotency_key, from_statuses, to_status)
+
+    async def update_chat_request_status(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        status: str,
+        assistant_message_id: Optional[UUID] = None,
+    ) -> None:
+        await asyncio.to_thread(self._sync_update_chat_request_status, user_id, idempotency_key, status, assistant_message_id)
+
+    async def persist_assistant_message(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        content: str,
+        metadata: Optional[dict] = None,
+    ) -> MessageModel:
+        return await asyncio.to_thread(self._sync_persist_assistant_message, user_id, conversation_id, content, metadata)
+
+    async def update_assistant_message(
+        self,
+        user_id: UUID,
+        message_id: UUID,
+        content: str,
+        metadata: Optional[dict] = None,
+    ) -> MessageModel:
+        return await asyncio.to_thread(self._sync_update_assistant_message, user_id, message_id, content, metadata)
+
+    async def get_message_by_id(self, user_id: UUID, message_id: UUID) -> Optional[MessageModel]:
+        return await asyncio.to_thread(self._sync_get_message_by_id, user_id, message_id)
+
+    async def get_messages(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        limit: int = 50,
+    ) -> List[MessageModel]:
+        return await asyncio.to_thread(self._sync_get_messages, user_id, conversation_id, limit)
