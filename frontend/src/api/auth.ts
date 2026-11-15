@@ -17,3 +17,4 @@ export interface UserProfileResponse {
 export async function fetchMyProfile(): Promise<UserProfileResponse> {
   return apiClient.get<UserProfileResponse>('/auth/me');
 }
+

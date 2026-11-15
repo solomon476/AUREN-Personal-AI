@@ -136,3 +136,4 @@ def test_strict_user_isolation_between_accounts():
     assert res_b.status_code == 200
     assert res_b.json()["id"] == user_b_id
     assert res_b.json()["id"] != user_a_id
+

@@ -144,3 +144,4 @@ CREATE TABLE IF NOT EXISTS public.briefings (
     active_goals_summary TEXT,
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
+

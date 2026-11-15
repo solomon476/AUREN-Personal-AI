@@ -181,3 +181,4 @@ CREATE INDEX IF NOT EXISTS idx_goals_user_status ON public.goals(user_id, status
 CREATE INDEX IF NOT EXISTS idx_milestones_goal_id ON public.milestones(goal_id);
 CREATE INDEX IF NOT EXISTS idx_milestones_user_id ON public.milestones(user_id);
 CREATE INDEX IF NOT EXISTS idx_briefings_user_date ON public.briefings(user_id, briefing_date DESC);
+

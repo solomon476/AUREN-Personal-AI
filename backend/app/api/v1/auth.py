@@ -30,3 +30,4 @@ async def get_my_profile(
         app_metadata=current_user.app_metadata,
         user_metadata=current_user.user_metadata,
     )
+
