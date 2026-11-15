@@ -1,8 +1,33 @@
-"""Abstract interface for replaceable LLM providers."""
+"""Abstract interface and standard types for replaceable LLM providers."""
 
 from abc import ABC, abstractmethod
 from typing import AsyncIterator, List, Optional
 from pydantic import BaseModel, Field
+
+
+class LLMException(Exception):
+    """Base exception for all LLM provider errors."""
+    pass
+
+
+class LLMAuthenticationError(LLMException):
+    """Raised when provider API credentials are invalid or missing."""
+    pass
+
+
+class LLMQuotaExceededError(LLMException):
+    """Raised when rate limits or quota are exhausted."""
+    pass
+
+
+class LLMTimeoutError(LLMException):
+    """Raised when provider request exceeds execution deadline."""
+    pass
+
+
+class LLMProviderError(LLMException):
+    """Generic downstream failure from an LLM provider."""
+    pass
 
 
 class ChatMessage(BaseModel):
@@ -26,6 +51,11 @@ class BaseLLMProvider(ABC):
     """Pluggable abstract interface for LLM backends (Gemini, OpenAI, Anthropic, local)."""
 
     @abstractmethod
+    def get_model_id(self) -> str:
+        """Return the active model ID string."""
+        pass
+
+    @abstractmethod
     async def generate_response(
         self,
         messages: List[ChatMessage],
@@ -46,4 +76,3 @@ class BaseLLMProvider(ABC):
     ) -> AsyncIterator[str]:
         """Stream response chunks for real-time text delivery."""
         pass
-

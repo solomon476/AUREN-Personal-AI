@@ -152,7 +152,18 @@ The frontend will be available at:
   - FastAPI JWT verification with JWKS/secret signing key and `/api/v1/auth/me` endpoint
   - Comprehensive 17-test automated auth and isolation test suite
   - React `AuthContext`, `useAuth`, `AuthModal`, and session restoration
-- [ ] **Phase 3: Core AI & Semantic Memory Engine (pgvector)**
+- [x] **Phase 3A: LLM Abstraction, Gemini Adapter, Persistent Chat & SSE Streaming** *(Completed)*
+  - Provider-independent LLM abstraction with dynamic model ID (`settings.LLM_MODEL`)
+  - Google Gemini adapter using official `google-genai` SDK
+  - Chat persistence: user message persisted before AI request; assistant response reliably stored
+  - Request deduplication & idempotency key enforcement (`004_chat_idempotency.sql`)
+  - Conversation ownership authorization checks on all reads and writes
+  - Resilient Server-Sent Events (SSE) chat streaming (`/api/v1/chat/completions`)
+  - Interactive frontend chat view (`ChatView.tsx`) with stream consumption and turn history
+  - Comprehensive 24-test backend test suite covering streaming, idempotency, and isolation
+- [ ] **Phase 3B: Memory Schema, Embedding Abstraction, pgvector & Retrieval**
+- [ ] **Phase 3C: Memory Classification Taxonomy, Correction & Management**
+- [ ] **Phase 3D: Controlled AI Tool Execution & Backend Authorization Tokens**
 - [ ] **Phase 4: Personal Productivity Modules (Tasks, Journal, Goals)**
 - [ ] **Phase 5: Daily Briefings & Intelligence Synthesis**
 - [ ] **Phase 6: Hardening, Polish & Comprehensive Testing**

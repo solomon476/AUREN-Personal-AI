@@ -188,3 +188,4 @@ async def test_live_rls_isolation_journal_entries(postgrest_url, headers_user_a,
             assert len(res_spy.json()) == 0, "Critical Security Violation: User A read User B's private journal!"
         finally:
             await client.delete(f"{postgrest_url}/journal_entries?id=eq.{journal_id}", headers=headers_user_b)
+

@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     EMBEDDING_API_KEY: Optional[str] = None
     EMBEDDING_MODEL: str = "text-embedding-004"
 
+    # Chat & Stream Configuration
+    CHAT_MAX_MESSAGE_LENGTH: int = 10000
+    CHAT_STREAM_TIMEOUT_SECONDS: int = 60
+    CHAT_HISTORY_LIMIT: int = 10
+
 
 settings = Settings()
 

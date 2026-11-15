@@ -128,3 +128,4 @@ REVOKE ALL ON TABLE public.journal_entries FROM anon;
 REVOKE ALL ON TABLE public.goals FROM anon;
 REVOKE ALL ON TABLE public.milestones FROM anon;
 REVOKE ALL ON TABLE public.briefings FROM anon;
+
