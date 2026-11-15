@@ -21,6 +21,7 @@ from app.core.exceptions import (
     DatabaseAuthError,
     DatabaseConnectionError,
     DatabaseOperationError,
+    IdempotencyConflictError,
 )
 from app.models.chat import ConversationModel, MessageModel, ChatRequestModel
 from app.services.chat.supabase_repository import SupabasePostgresChatRepository
@@ -95,7 +96,7 @@ async def test_supabase_repo_create_and_get_conversation():
 
 @pytest.mark.asyncio
 async def test_supabase_repo_claim_chat_request_atomic_success():
-    """Verify atomic claim returns (True, req) when PostgREST returns 201 Created."""
+    """Verify atomic claim returns (True, req) when RPC claim_chat_request returns claimed=True."""
     req_data = {
         "user_id": str(USER_ID),
         "idempotency_key": "idemp-atomic-1",
@@ -103,13 +104,17 @@ async def test_supabase_repo_claim_chat_request_atomic_success():
         "status": "processing",
         "user_message_id": str(uuid4()),
         "assistant_message_id": None,
+        "request_fingerprint": "a" * 64,
         "created_at": "2026-11-16T00:00:00+00:00",
         "updated_at": "2026-11-16T00:00:00+00:00",
     }
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "POST" and "/chat_requests" in str(request.url):
-            return httpx.Response(201, json=[req_data])
+        if request.method == "POST" and "/rpc/claim_chat_request" in str(request.url):
+            body = json.loads(request.content)
+            assert body["p_idempotency_key"] == "idemp-atomic-1"
+            assert body["p_request_fingerprint"] == "a" * 64
+            return httpx.Response(200, json={"claimed": True, "request": req_data})
         return httpx.Response(404)
 
     transport = httpx.MockTransport(handler)
@@ -126,15 +131,17 @@ async def test_supabase_repo_claim_chat_request_atomic_success():
             idempotency_key="idemp-atomic-1",
             conversation_id=CONV_ID,
             user_message_id=UUID(req_data["user_message_id"]),
+            request_fingerprint="a" * 64,
         )
         assert claimed is True
         assert req.status == "processing"
         assert req.idempotency_key == "idemp-atomic-1"
+        assert req.request_fingerprint == "a" * 64
 
 
 @pytest.mark.asyncio
-async def test_supabase_repo_claim_chat_request_conflict_returns_existing():
-    """Verify atomic claim returns (False, existing_req) when PostgREST returns 409 Conflict."""
+async def test_supabase_repo_claim_chat_request_duplicate_matching_returns_existing():
+    """Verify atomic claim returns (False, existing_req) when duplicate claim matches fingerprint."""
     existing_data = {
         "user_id": str(USER_ID),
         "idempotency_key": "idemp-atomic-conflict",
@@ -142,15 +149,14 @@ async def test_supabase_repo_claim_chat_request_conflict_returns_existing():
         "status": "processing",
         "user_message_id": str(uuid4()),
         "assistant_message_id": None,
+        "request_fingerprint": "b" * 64,
         "created_at": "2026-11-16T00:00:00+00:00",
         "updated_at": "2026-11-16T00:00:00+00:00",
     }
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "POST" and "/chat_requests" in str(request.url):
-            return httpx.Response(409, text="duplicate key value violates unique constraint")
-        if request.method == "GET" and "/chat_requests" in str(request.url):
-            return httpx.Response(200, json=[existing_data])
+        if request.method == "POST" and "/rpc/claim_chat_request" in str(request.url):
+            return httpx.Response(200, json={"claimed": False, "request": existing_data})
         return httpx.Response(404)
 
     transport = httpx.MockTransport(handler)
@@ -167,10 +173,130 @@ async def test_supabase_repo_claim_chat_request_conflict_returns_existing():
             idempotency_key="idemp-atomic-conflict",
             conversation_id=CONV_ID,
             user_message_id=UUID(existing_data["user_message_id"]),
+            request_fingerprint="b" * 64,
         )
         assert claimed is False
         assert req.status == "processing"
         assert req.idempotency_key == "idemp-atomic-conflict"
+        assert req.request_fingerprint == "b" * 64
+
+
+@pytest.mark.asyncio
+async def test_supabase_repo_claim_chat_request_conflicting_fingerprint_raises_conflict_error():
+    """Verify conflicting fingerprint on claim returns HTTP 409 and raises IdempotencyConflictError."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and "/rpc/claim_chat_request" in str(request.url):
+            return httpx.Response(
+                409,
+                json={"message": "Idempotency key was already used with conflicting request content", "code": "23505"},
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token=TEST_USER_TOKEN,
+            http_client=mock_client,
+        )
+
+        with pytest.raises(IdempotencyConflictError) as exc_info:
+            await repo.claim_chat_request(
+                user_id=USER_ID,
+                idempotency_key="idemp-conflict-key",
+                conversation_id=CONV_ID,
+                user_message_id=uuid4(),
+                request_fingerprint="c" * 64,
+            )
+        assert "conflicting" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_supabase_repo_missing_rpc_raises_database_error():
+    """Verify that a missing RPC (404) raises DatabaseOperationError and never falls back to direct table mutation."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        # Simulate PostgREST 404 because RPC was not created
+        return httpx.Response(404, json={"message": "Function not found in schema"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token=TEST_USER_TOKEN,
+            http_client=mock_client,
+        )
+
+        # Claim RPC missing
+        with pytest.raises(DatabaseOperationError) as exc1:
+            await repo.claim_chat_request(
+                user_id=USER_ID,
+                idempotency_key="missing-rpc-claim",
+                conversation_id=CONV_ID,
+                user_message_id=uuid4(),
+                request_fingerprint="d" * 64,
+            )
+        assert "rpc 'claim_chat_request' not found" in str(exc1.value).lower()
+
+        # Update RPC missing
+        with pytest.raises(DatabaseOperationError) as exc2:
+            await repo.update_chat_request_status(
+                user_id=USER_ID,
+                idempotency_key="missing-rpc-update",
+                status="completed",
+                assistant_message_id=uuid4(),
+            )
+        assert "rpc" in str(exc2.value).lower()
+
+        # Retry RPC missing
+        with pytest.raises(DatabaseOperationError) as exc3:
+            await repo.transition_chat_request_status(
+                user_id=USER_ID,
+                idempotency_key="missing-rpc-retry",
+                from_statuses=["failed"],
+                to_status="processing",
+            )
+        assert "rpc 'retry_chat_request' not found" in str(exc3.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_supabase_repo_reconcile_chat_request_via_rpc():
+    """Verify reconcile_chat_request calls /rpc/reconcile_chat_request and returns updated record."""
+    reconciled_id = uuid4()
+    asst_id = uuid4()
+    req_data = {
+        "user_id": str(USER_ID),
+        "idempotency_key": "reconcile-key-1",
+        "conversation_id": str(CONV_ID),
+        "status": "completed",
+        "user_message_id": str(uuid4()),
+        "assistant_message_id": str(asst_id),
+        "request_fingerprint": "e" * 64,
+        "created_at": "2026-11-16T00:00:00+00:00",
+        "updated_at": "2026-11-16T00:00:01+00:00",
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and "/rpc/reconcile_chat_request" in str(request.url):
+            body = json.loads(request.content)
+            assert body["p_idempotency_key"] == "reconcile-key-1"
+            assert body["p_assistant_message_id"] == str(asst_id)
+            return httpx.Response(200, json=req_data)
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token=TEST_USER_TOKEN,
+            http_client=mock_client,
+        )
+
+        res = await repo.reconcile_chat_request(USER_ID, "reconcile-key-1", asst_id)
+        assert res.status == "completed"
+        assert res.assistant_message_id == asst_id
 
 
 @pytest.mark.asyncio

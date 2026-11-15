@@ -139,12 +139,14 @@ async def test_change_request_owner_rejected():
     conv = await chat_repository.create_conversation(user_a, title="Owner Protection Conv")
     msg = await chat_repository.persist_user_message(user_a, conv.id, "Owner Test")
     idemp_key = f"owner-protect-{uuid.uuid4()}"
+    fp = "0" * 64
 
     await chat_repository.claim_chat_request(
         user_id=user_a,
         idempotency_key=idemp_key,
         conversation_id=conv.id,
         user_message_id=msg.id,
+        request_fingerprint=fp,
     )
 
     # Attempt to change owner from User A to User B
@@ -172,16 +174,19 @@ async def test_unauthorized_lifecycle_status_transition_rejected():
     conv = await chat_repository.create_conversation(user_id, title="Status Transition Conv")
     msg = await chat_repository.persist_user_message(user_id, conv.id, "Status Test")
     idemp_key = f"status-protect-{uuid.uuid4()}"
+    fp = "1" * 64
 
     await chat_repository.claim_chat_request(
         user_id=user_id,
         idempotency_key=idemp_key,
         conversation_id=conv.id,
         user_message_id=msg.id,
+        request_fingerprint=fp,
     )
 
-    # Transition to completed
-    await chat_repository.update_chat_request_status(user_id, idemp_key, status="completed")
+    # Transition to completed with assistant message
+    asst_msg = await chat_repository.persist_assistant_message(user_id, conv.id, "Answer")
+    await chat_repository.update_chat_request_status(user_id, idemp_key, status="completed", assistant_message_id=asst_msg.id)
     req_completed = await chat_repository.get_chat_request(user_id, idemp_key)
     assert req_completed.status == "completed"
 
@@ -213,12 +218,14 @@ async def test_direct_delete_on_chat_requests_rejected():
     conv = await chat_repository.create_conversation(user_id, title="Direct Delete Conv")
     msg = await chat_repository.persist_user_message(user_id, conv.id, "Delete Test")
     idemp_key = f"delete-protect-{uuid.uuid4()}"
+    fp = "2" * 64
 
     await chat_repository.claim_chat_request(
         user_id=user_id,
         idempotency_key=idemp_key,
         conversation_id=conv.id,
         user_message_id=msg.id,
+        request_fingerprint=fp,
     )
 
     # Attempt direct DELETE on chat_requests while conversation exists
@@ -299,14 +306,17 @@ async def test_direct_authenticated_update_attempts_rejected_by_database():
     conv = await chat_repository.create_conversation(user_id, title="Direct Update Conv")
     msg = await chat_repository.persist_user_message(user_id, conv.id, "Direct update test prompt")
     idemp_key = f"direct-upd-{uuid.uuid4()}"
+    fp = "3" * 64
 
     await chat_repository.claim_chat_request(
         user_id=user_id,
         idempotency_key=idemp_key,
         conversation_id=conv.id,
         user_message_id=msg.id,
+        request_fingerprint=fp,
     )
-    await chat_repository.update_chat_request_status(user_id, idemp_key, status="completed")
+    asst_msg = await chat_repository.persist_assistant_message(user_id, conv.id, "Answer")
+    await chat_repository.update_chat_request_status(user_id, idemp_key, status="completed", assistant_message_id=asst_msg.id)
 
     # Attempt to tamper with idempotency_key
     with pytest.raises(sqlite3.IntegrityError, match="idempotency_key is immutable"):
@@ -327,35 +337,159 @@ async def test_direct_authenticated_update_attempts_rejected_by_database():
 
 @pytest.mark.asyncio
 async def test_invalid_lifecycle_transitions_rejected():
-    """Verify that completed requests are strictly terminal and cannot be transitioned out of completed status."""
+    """Verify the strict lifecycle transition matrix:
+    Valid transitions:
+      - processing -> completed
+      - processing -> failed
+      - processing -> interrupted
+      - failed -> processing (via retry)
+      - interrupted -> processing (via retry)
+    Invalid transitions (strictly rejected):
+      - failed -> interrupted
+      - interrupted -> failed
+      - failed -> completed (ordinary update)
+      - interrupted -> completed (ordinary update)
+      - completed -> any status
+    """
     user_id = uuid.uuid4()
-    conv = await chat_repository.create_conversation(user_id, title="Invalid Transition Conv")
-    msg = await chat_repository.persist_user_message(user_id, conv.id, "Invalid transition prompt")
-    idemp_key = f"invalid-trans-{uuid.uuid4()}"
+    conv = await chat_repository.create_conversation(user_id, title="Transition Matrix Conv")
 
-    await chat_repository.claim_chat_request(
-        user_id=user_id,
-        idempotency_key=idemp_key,
-        conversation_id=conv.id,
-        user_message_id=msg.id,
+    # 1. Test terminal completed status
+    msg1 = await chat_repository.persist_user_message(user_id, conv.id, "Prompt 1")
+    idemp1 = f"trans-matrix-1-{uuid.uuid4()}"
+    fp1 = compute_request_fingerprint(user_id, "Prompt 1", conv.id)
+    await chat_repository.claim_chat_request(user_id, idemp1, conv.id, msg1.id, fp1)
+    asst1 = await chat_repository.persist_assistant_message(user_id, conv.id, "Answer 1")
+    await chat_repository.update_chat_request_status(user_id, idemp1, "completed", asst1.id)
+
+    with pytest.raises(Exception):
+        await chat_repository.update_chat_request_status(user_id, idemp1, "processing")
+    with pytest.raises(Exception):
+        await chat_repository.update_chat_request_status(user_id, idemp1, "failed")
+    with pytest.raises(Exception):
+        await chat_repository.update_chat_request_status(user_id, idemp1, "interrupted")
+
+    # 2. Test failed transitions: cannot go to interrupted or completed directly
+    msg2 = await chat_repository.persist_user_message(user_id, conv.id, "Prompt 2")
+    idemp2 = f"trans-matrix-2-{uuid.uuid4()}"
+    fp2 = compute_request_fingerprint(user_id, "Prompt 2", conv.id)
+    await chat_repository.claim_chat_request(user_id, idemp2, conv.id, msg2.id, fp2)
+    await chat_repository.update_chat_request_status(user_id, idemp2, "failed")
+
+    with pytest.raises(Exception):
+        await chat_repository.update_chat_request_status(user_id, idemp2, "interrupted")
+    with pytest.raises(Exception):
+        await chat_repository.update_chat_request_status(user_id, idemp2, "completed", asst1.id)
+
+    # But failed -> processing via retry IS permitted
+    retry_ok = await chat_repository.transition_chat_request_status(user_id, idemp2, ["failed"], "processing")
+    assert retry_ok is True
+    req2 = await chat_repository.get_chat_request(user_id, idemp2)
+    assert req2.status == "processing"
+
+    # 3. Test interrupted transitions: cannot go to failed or completed directly
+    msg3 = await chat_repository.persist_user_message(user_id, conv.id, "Prompt 3")
+    idemp3 = f"trans-matrix-3-{uuid.uuid4()}"
+    fp3 = compute_request_fingerprint(user_id, "Prompt 3", conv.id)
+    await chat_repository.claim_chat_request(user_id, idemp3, conv.id, msg3.id, fp3)
+    await chat_repository.update_chat_request_status(user_id, idemp3, "interrupted")
+
+    with pytest.raises(Exception):
+        await chat_repository.update_chat_request_status(user_id, idemp3, "failed")
+    with pytest.raises(Exception):
+        await chat_repository.update_chat_request_status(user_id, idemp3, "completed", asst1.id)
+
+    # But interrupted -> processing via retry IS permitted
+    retry_ok3 = await chat_repository.transition_chat_request_status(user_id, idemp3, ["interrupted"], "processing")
+    assert retry_ok3 is True
+    req3 = await chat_repository.get_chat_request(user_id, idemp3)
+    assert req3.status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_operation_lifecycle():
+    """Verify dedicated reconcile_chat_request completes an incomplete request when assistant message matches."""
+    from app.core.exceptions import DatabaseOperationError
+    user_id = uuid.uuid4()
+    conv = await chat_repository.create_conversation(user_id, title="Reconciliation Conv")
+    msg = await chat_repository.persist_user_message(user_id, conv.id, "Reconcile prompt")
+    idemp = f"reconcile-{uuid.uuid4()}"
+    fp = compute_request_fingerprint(user_id, "Reconcile prompt", conv.id)
+
+    # 1. Claim request and set to failed
+    await chat_repository.claim_chat_request(user_id, idemp, conv.id, msg.id, fp)
+    await chat_repository.update_chat_request_status(user_id, idemp, "failed")
+
+    # Persist assistant message associated with user_message_id
+    asst_msg = await chat_repository.persist_assistant_message(
+        user_id, conv.id, "Reconciled assistant content", metadata={"user_message_id": str(msg.id)}
     )
-    await chat_repository.update_chat_request_status(user_id, idemp_key, status="completed")
 
-    # Attempt transition completed -> processing
-    with pytest.raises(sqlite3.IntegrityError, match="Completed chat requests cannot be transitioned"):
-        with chat_repository._get_connection() as conn:
-            conn.execute(
-                "UPDATE chat_requests SET status = 'processing' WHERE user_id = ? AND idempotency_key = ?",
-                (str(user_id), idemp_key),
-            )
+    # 2. Reconcile succeeds
+    reconciled = await chat_repository.reconcile_chat_request(user_id, idemp, asst_msg.id)
+    assert reconciled.status == "completed"
+    assert reconciled.assistant_message_id == asst_msg.id
 
-    # Attempt transition completed -> failed
-    with pytest.raises(sqlite3.IntegrityError, match="Completed chat requests cannot be transitioned"):
-        with chat_repository._get_connection() as conn:
-            conn.execute(
-                "UPDATE chat_requests SET status = 'failed' WHERE user_id = ? AND idempotency_key = ?",
-                (str(user_id), idemp_key),
-            )
+    # 3. Reconciliation with mismatched user_message_id is rejected
+    idemp_bad = f"reconcile-bad-{uuid.uuid4()}"
+    msg_other = await chat_repository.persist_user_message(user_id, conv.id, "Other prompt")
+    await chat_repository.claim_chat_request(user_id, idemp_bad, conv.id, msg_other.id, "1" * 64)
+    with pytest.raises(DatabaseOperationError, match="Assistant message"):
+        await chat_repository.reconcile_chat_request(user_id, idemp_bad, asst_msg.id)
+
+
+@pytest.mark.asyncio
+async def test_fingerprint_hex_and_length_validation():
+    """Verify fingerprint must be strictly non-null, exactly 64 characters, and hexadecimal."""
+    user_id = uuid.uuid4()
+    conv = await chat_repository.create_conversation(user_id, title="Hex Validation Conv")
+    msg = await chat_repository.persist_user_message(user_id, conv.id, "Prompt")
+    idemp = f"fp-val-{uuid.uuid4()}"
+
+    # Null / empty rejected
+    with pytest.raises(ValueError, match="64-character hexadecimal"):
+        await chat_repository.claim_chat_request(user_id, idemp, conv.id, msg.id, None)
+
+    # Length != 64 rejected
+    with pytest.raises(ValueError, match="64-character hexadecimal"):
+        await chat_repository.claim_chat_request(user_id, idemp, conv.id, msg.id, "a" * 63)
+
+    with pytest.raises(ValueError, match="64-character hexadecimal"):
+        await chat_repository.claim_chat_request(user_id, idemp, conv.id, msg.id, "a" * 65)
+
+    # Non-hex characters rejected
+    with pytest.raises(ValueError, match="64-character hexadecimal"):
+        await chat_repository.claim_chat_request(user_id, idemp, conv.id, msg.id, "g" * 64)
+
+    # Valid 64-hex succeeds
+    claimed, req = await chat_repository.claim_chat_request(user_id, idemp, conv.id, msg.id, "a" * 64)
+    assert claimed is True
+    assert req.request_fingerprint == "a" * 64
+
+
+@pytest.mark.asyncio
+async def test_claim_conflicting_fingerprint_rejected_via_repository():
+    """Verify claim_chat_request rejects reusing the same key with conflicting fingerprint."""
+    from app.core.exceptions import IdempotencyConflictError
+    user_id = uuid.uuid4()
+    conv = await chat_repository.create_conversation(user_id, title="Claim Conflict Conv")
+    msg = await chat_repository.persist_user_message(user_id, conv.id, "Prompt")
+    idemp = f"claim-conflict-{uuid.uuid4()}"
+    fp1 = "a" * 64
+    fp2 = "b" * 64
+
+    # First claim succeeds
+    claimed1, req1 = await chat_repository.claim_chat_request(user_id, idemp, conv.id, msg.id, fp1)
+    assert claimed1 is True
+
+    # Same key with same fingerprint returns existing (claimed=False)
+    claimed2, req2 = await chat_repository.claim_chat_request(user_id, idemp, conv.id, msg.id, fp1)
+    assert claimed2 is False
+    assert req2.idempotency_key == idemp
+
+    # Same key with DIFFERENT fingerprint raises IdempotencyConflictError
+    with pytest.raises(IdempotencyConflictError):
+        await chat_repository.claim_chat_request(user_id, idemp, conv.id, msg.id, fp2)
 
 
 @pytest.mark.asyncio
@@ -366,12 +500,14 @@ async def test_duplicate_and_concurrent_retries_atomic():
     conv = await chat_repository.create_conversation(user_id, title="Concurrent Retry Conv")
     msg = await chat_repository.persist_user_message(user_id, conv.id, "Concurrent prompt")
     idemp_key = f"atomic-concurrent-{uuid.uuid4()}"
+    fp = "4" * 64
 
     await chat_repository.claim_chat_request(
         user_id=user_id,
         idempotency_key=idemp_key,
         conversation_id=conv.id,
         user_message_id=msg.id,
+        request_fingerprint=fp,
     )
     await chat_repository.update_chat_request_status(user_id, idemp_key, status="failed")
 

@@ -157,3 +157,13 @@ class BaseChatRepository(ABC):
     ) -> None:
         """Update request status (completed, failed, interrupted) and associate assistant message."""
         pass
+
+    @abstractmethod
+    async def reconcile_chat_request(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        assistant_message_id: UUID,
+    ) -> ChatRequestModel:
+        """Reconcile an incomplete request to completed status with an existing assistant message."""
+        pass

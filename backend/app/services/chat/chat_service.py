@@ -209,11 +209,10 @@ class ChatService:
                             "Reconciled existing completed assistant message %s for incomplete request %s. Auto-reconciling.",
                             reconciled_assistant_msg.id, request.idempotency_key,
                         )
-                        # Reconcile chat_requests status to completed
-                        await repo.update_chat_request_status(
+                        # Reconcile chat_requests status to completed via dedicated reconciliation operation
+                        await repo.reconcile_chat_request(
                             user_id=user.id,
                             idempotency_key=request.idempotency_key,
-                            status="completed",
                             assistant_message_id=reconciled_assistant_msg.id,
                         )
                         # Replay cached response without invoking LLM

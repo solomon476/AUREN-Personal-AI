@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.main import app
 from app.models.user import AuthenticatedUser
-from app.models.chat import ChatCompletionRequest
+from app.models.chat import ChatCompletionRequest, compute_request_fingerprint
 from app.services.chat.repository import ChatRepository, chat_repository
 from app.services.chat.chat_service import chat_service
 from app.services.llm.base import BaseLLMProvider, ChatMessage, LLMResponse
@@ -787,7 +787,8 @@ async def test_simultaneous_retries_on_failed_request_cannot_invoke_provider_twi
     # Setup: Create conversation and a failed chat_request
     conv = await chat_repository.create_conversation(user_uuid, title="Retry Concurrency Thread")
     msg = await chat_repository.persist_user_message(user_uuid, conv.id, "Retry concurrency message", idempotency_key=idempotency_key)
-    await chat_repository.claim_chat_request(user_uuid, idempotency_key, conv.id, msg.id)
+    fp = compute_request_fingerprint(user_uuid, "Retry concurrency message", conv.id)
+    await chat_repository.claim_chat_request(user_uuid, idempotency_key, conv.id, msg.id, fp)
     await chat_repository.update_chat_request_status(user_uuid, idempotency_key, status="failed")
 
     initial_calls = spy_provider.call_count
@@ -836,10 +837,11 @@ async def test_partial_interrupted_message_not_mistaken_for_completed_replay():
 
     conv = await chat_repository.create_conversation(user_uuid, title="Interrupted Thread")
     msg = await chat_repository.persist_user_message(user_uuid, conv.id, "Question", idempotency_key=idempotency_key)
+    fp = compute_request_fingerprint(user_uuid, "Question", conv.id)
     assistant_partial = await chat_repository.persist_assistant_message(
         user_uuid, conv.id, "Partial unfinished thought", metadata={"interrupted": True}
     )
-    await chat_repository.claim_chat_request(user_uuid, idempotency_key, conv.id, msg.id)
+    await chat_repository.claim_chat_request(user_uuid, idempotency_key, conv.id, msg.id, fp)
     await chat_repository.update_chat_request_status(
         user_uuid, idempotency_key, status="interrupted", assistant_message_id=assistant_partial.id
     )

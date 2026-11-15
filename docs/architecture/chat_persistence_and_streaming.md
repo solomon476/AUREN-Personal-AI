@@ -301,6 +301,79 @@ All lifecycle mutations must pass through dedicated RPC functions executed with 
 ### 4. Zero Service-Role Key Usage
 RPC functions are granted directly to the `authenticated` role (`GRANT EXECUTE ON FUNCTION ... TO authenticated`). All operations run under the end-user's authenticated JWT bearer token and anon key, ensuring complete tenant isolation with zero exposure of administrative database keys.
 
+---
+
+## 12. Phase 3A.7 Strict Lifecycle Matrix, Exclusive RPC Claiming, and Dedicated Reconciliation
+
+Phase 3A.7 closes all remaining bypasses and enforces strict lifecycle invariants at the PostgreSQL engine level.
+
+### 1. Strict Lifecycle Transition Matrix
+The PostgreSQL trigger `handle_chat_requests_immutability()` and RPC functions strictly enforce the following transition matrix:
+
+```
+               ┌───────────────────────┐
+               │      (Created)        │
+               │      processing       │
+               └───┬───────┬───────┬───┘
+                   │       │       │
+       ┌───────────┘       │       └───────────┐
+       ▼                   ▼                   ▼
+┌──────────────┐   ┌───────────────┐   ┌──────────────┐
+│  completed   │   │    failed     │   │ interrupted  │
+│  (TERMINAL)  │   └───┬───────────┘   └───┬──────────┘
+└──────────────┘       │                   │
+       ▲               │ (retry_chat_req)  │ (retry_chat_req)
+       │               ▼                   ▼
+       │               ┌───────────────────┐
+       │               │    processing     │
+       │               └───────────────────┘
+       │
+       └───── [reconcile_chat_request ONLY] ───┘
+```
+
+- **Permitted Transitions**:
+  - `processing → completed`
+  - `processing → failed`
+  - `processing → interrupted`
+  - `failed → processing` (via `retry_chat_request`)
+  - `interrupted → processing` (via `retry_chat_request`)
+  - `completed` is strictly terminal and immutable.
+- **Strictly Rejected Transitions**:
+  - `failed → interrupted` (rejected)
+  - `interrupted → failed` (rejected)
+  - `failed → completed` (rejected in ordinary `complete_chat_request`)
+  - `interrupted → completed` (rejected in ordinary `complete_chat_request`)
+  - `completed → any other status` (rejected)
+
+### 2. Exclusive RPC Creation Path & Direct INSERT Revocation
+Direct table privileges on `public.chat_requests`:
+- `SELECT`: Granted to `authenticated` (filtered by `auth.uid() = user_id`).
+- `INSERT`: **REVOKED** from `authenticated` and `anon`. Direct INSERT policy dropped.
+- `UPDATE`: **REVOKED** from `authenticated` and `anon`.
+- `DELETE`: **REVOKED** from `authenticated` and `anon`.
+
+Clients cannot insert or mutate `chat_requests` rows directly. All creation and mutations occur exclusively through `SECURITY DEFINER` RPC functions validating caller identity via `auth.uid()`.
+
+### 3. Hexadecimal Fingerprint Format & Conflict Detection
+- `request_fingerprint` is non-null and validated against `^[0-9a-fA-F]{64}$`.
+- Legacy NULL fingerprints are migrated via SHA-256 digest backfill.
+- When `claim_chat_request` encounters an existing key:
+  - If stored fingerprint matches incoming: returns `{"claimed": false, "request": ...}`.
+  - If stored fingerprint differs: raises `23505` resulting in HTTP 409 Conflict. Never silently returns an unrelated request.
+
+### 4. Dedicated Narrowly Scoped Reconciliation RPC
+Persistence recovery is isolated in `reconcile_chat_request(p_idempotency_key, p_assistant_message_id)`:
+1. Validates caller via `auth.uid()`.
+2. Locks the request row `FOR UPDATE`.
+3. Verifies `p_assistant_message_id` belongs to `auth.uid()`, belongs to `conversation_id`, and has `role = 'assistant'`.
+4. Verifies metadata binding: `metadata->>'user_message_id' = user_message_id`.
+5. Verifies message is not interrupted (`metadata->>'interrupted' != 'true'`).
+6. Atomically updates status to `'completed'` and binds `assistant_message_id`.
+
+### 5. Repository RPC-Only Enforcement
+`SupabasePostgresChatRepository` removed all legacy direct POST/PATCH fallbacks. Any missing RPC immediately raises `DatabaseOperationError` and never falls back to insecure direct operations.
+
+
 
 
 

@@ -496,10 +496,11 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         user_message_id: UUID,
         request_fingerprint: Optional[str] = None,
     ) -> Tuple[bool, ChatRequestModel]:
-        """Atomically claim a chat request in Supabase PostgreSQL via RPC or direct insert.
+        """Atomically claim a chat request in Supabase PostgreSQL via RPC claim_chat_request.
 
-        Uses least-privilege RPC claim_chat_request, enforcing caller identity (auth.uid()),
-        fingerprint validation, and conversation/message ownership at the database level.
+        Enforces caller identity (auth.uid()), strict 64-character hexadecimal fingerprint
+        validation, and conversation/message ownership at the database level.
+        Exclusive RPC creation path: direct table INSERT is revoked.
         """
         rpc_payload = {
             "p_idempotency_key": idempotency_key,
@@ -513,41 +514,20 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             json_data=rpc_payload,
             allowed_error_codes=(404, 400, 409),
         )
+        if res_rpc.status_code == 404:
+            raise DatabaseOperationError("Required database RPC 'claim_chat_request' not found. Please apply database migrations.")
+
+        if res_rpc.status_code == 409 or (res_rpc.status_code == 400 and "conflicting" in res_rpc.text.lower()):
+            raise IdempotencyConflictError(
+                f"Idempotency key '{idempotency_key}' was already used with conflicting request content."
+            )
+
         if res_rpc.status_code in (200, 201) and res_rpc.json():
             data = res_rpc.json()
             if isinstance(data, dict) and "claimed" in data and "request" in data:
                 return data["claimed"], self._row_to_chat_request(data["request"])
 
-        # Fallback to direct POST for test environments without RPC migration
-        payload = {
-            "user_id": str(user_id),
-            "idempotency_key": idempotency_key,
-            "conversation_id": str(conversation_id),
-            "status": "processing",
-            "user_message_id": str(user_message_id),
-        }
-        if request_fingerprint:
-            payload["request_fingerprint"] = request_fingerprint
-
-        res = await self._request(
-            method="POST",
-            path="/chat_requests",
-            json_data=payload,
-            prefer="return=representation",
-            allowed_error_codes=(409, 400),
-        )
-
-        if res.status_code in (200, 201):
-            rows = res.json()
-            return True, self._row_to_chat_request(rows[0])
-
-        # Conflict (409) or constraint error (400) indicates already claimed
-        if res.status_code in (409, 400):
-            existing = await self.get_chat_request(user_id, idempotency_key)
-            if existing:
-                return False, existing
-
-        raise DatabaseOperationError(f"Unexpected response claiming chat request: {res.status_code}")
+        raise DatabaseOperationError(f"Unexpected response claiming chat request: {res_rpc.status_code}")
 
     async def find_assistant_message_for_request(
         self,
@@ -595,9 +575,14 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         status: str,
         assistant_message_id: Optional[UUID] = None,
     ) -> None:
-        """Update request status and associate assistant message in Supabase via RPC."""
-        # Try RPC operations first
-        if status == "completed" and assistant_message_id:
+        """Update request status and associate assistant message in Supabase via dedicated RPCs.
+
+        Direct UPDATE table access is revoked; operations execute exclusively through
+        validated SECURITY DEFINER stored procedures enforcing the lifecycle transition matrix.
+        """
+        if status == "completed":
+            if not assistant_message_id:
+                raise ValueError("assistant_message_id is required to complete chat request")
             res_rpc = await self._request(
                 method="POST",
                 path="/rpc/complete_chat_request",
@@ -605,8 +590,12 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                     "p_idempotency_key": idempotency_key,
                     "p_assistant_message_id": str(assistant_message_id),
                 },
-                allowed_error_codes=(404,),
+                allowed_error_codes=(404, 400),
             )
+            if res_rpc.status_code == 404:
+                raise DatabaseOperationError("Required database RPC 'complete_chat_request' not found. Please apply migrations.")
+            if res_rpc.status_code == 400:
+                raise DatabaseOperationError(f"Database rejected completion transition: {res_rpc.text}")
             if res_rpc.status_code in (200, 201):
                 return
         elif status == "failed":
@@ -614,8 +603,12 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                 method="POST",
                 path="/rpc/fail_chat_request",
                 json_data={"p_idempotency_key": idempotency_key},
-                allowed_error_codes=(404,),
+                allowed_error_codes=(404, 400),
             )
+            if res_rpc.status_code == 404:
+                raise DatabaseOperationError("Required database RPC 'fail_chat_request' not found. Please apply migrations.")
+            if res_rpc.status_code == 400:
+                raise DatabaseOperationError(f"Database rejected fail transition: {res_rpc.text}")
             if res_rpc.status_code in (200, 201):
                 return
         elif status == "interrupted":
@@ -626,29 +619,42 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                     "p_idempotency_key": idempotency_key,
                     "p_assistant_message_id": str(assistant_message_id) if assistant_message_id else None,
                 },
-                allowed_error_codes=(404,),
+                allowed_error_codes=(404, 400),
             )
+            if res_rpc.status_code == 404:
+                raise DatabaseOperationError("Required database RPC 'interrupt_chat_request' not found. Please apply migrations.")
+            if res_rpc.status_code == 400:
+                raise DatabaseOperationError(f"Database rejected interrupt transition: {res_rpc.text}")
             if res_rpc.status_code in (200, 201):
                 return
+        else:
+            raise ValueError(f"Unsupported status transition target: '{status}'")
 
-        # Direct fallback for mock test harnesses
-        now_iso = datetime.now(timezone.utc).isoformat()
-        payload: Dict[str, Any] = {
-            "status": status,
-            "updated_at": now_iso,
-        }
-        if assistant_message_id:
-            payload["assistant_message_id"] = str(assistant_message_id)
+        raise DatabaseOperationError(f"Unexpected response updating chat request status: {res_rpc.status_code}")
 
-        await self._request(
-            method="PATCH",
-            path="/chat_requests",
-            params={
-                "user_id": f"eq.{user_id}",
-                "idempotency_key": f"eq.{idempotency_key}",
+    async def reconcile_chat_request(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        assistant_message_id: UUID,
+    ) -> ChatRequestModel:
+        """Reconcile an incomplete request to completed status via dedicated RPC reconcile_chat_request."""
+        res_rpc = await self._request(
+            method="POST",
+            path="/rpc/reconcile_chat_request",
+            json_data={
+                "p_idempotency_key": idempotency_key,
+                "p_assistant_message_id": str(assistant_message_id),
             },
-            json_data=payload,
+            allowed_error_codes=(404, 400),
         )
+        if res_rpc.status_code == 404:
+            raise DatabaseOperationError("Required database RPC 'reconcile_chat_request' not found. Please apply migrations.")
+        if res_rpc.status_code == 400:
+            raise DatabaseOperationError(f"Reconciliation rejected by database: {res_rpc.text}")
+        if res_rpc.status_code in (200, 201):
+            return self._row_to_chat_request(res_rpc.json())
+        raise DatabaseOperationError(f"Unexpected response reconciling chat request: {res_rpc.status_code}")
 
     async def update_assistant_message(
         self,
@@ -690,37 +696,24 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         from_statuses: List[str],
         to_status: str,
     ) -> bool:
-        """Atomically transition request status conditional on its current state (for retry recovery)."""
-        # If retrying from failed or interrupted to processing, use RPC retry_chat_request
+        """Atomically transition request status conditional on its current state (for retry recovery).
+
+        Exclusively uses RPC retry_chat_request; direct PATCH table access is revoked.
+        """
         if to_status == "processing" and any(s in from_statuses for s in ("failed", "interrupted")):
             res_rpc = await self._request(
                 method="POST",
                 path="/rpc/retry_chat_request",
                 json_data={"p_idempotency_key": idempotency_key},
-                allowed_error_codes=(404,),
+                allowed_error_codes=(404, 400),
             )
+            if res_rpc.status_code == 404:
+                raise DatabaseOperationError("Required database RPC 'retry_chat_request' not found. Please apply migrations.")
+            if res_rpc.status_code == 400:
+                raise DatabaseOperationError(f"Database rejected retry transition: {res_rpc.text}")
             if res_rpc.status_code in (200, 201):
                 data = res_rpc.json()
                 if isinstance(data, dict) and "transitioned" in data:
                     return bool(data["transitioned"])
 
-        # Fallback to direct conditional PATCH for mock environments
-        now_iso = datetime.now(timezone.utc).isoformat()
-        from_in = ",".join(from_statuses)
-        payload = {
-            "status": to_status,
-            "updated_at": now_iso,
-        }
-        res = await self._request(
-            method="PATCH",
-            path="/chat_requests",
-            params={
-                "user_id": f"eq.{user_id}",
-                "idempotency_key": f"eq.{idempotency_key}",
-                "status": f"in.({from_in})",
-            },
-            json_data=payload,
-            prefer="return=representation",
-        )
-        rows = res.json()
-        return len(rows) > 0
+        raise DatabaseOperationError(f"Unsupported conditional transition from {from_statuses} to '{to_status}'")

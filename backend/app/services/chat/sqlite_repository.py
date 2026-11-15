@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
 
-from app.core.exceptions import IdempotencyConflictError
+from app.core.exceptions import DatabaseOperationError, IdempotencyConflictError
 from app.models.chat import ChatRequestModel, ConversationModel, MessageModel
 from app.services.chat.base_repository import BaseChatRepository
 
@@ -129,6 +129,23 @@ class SQLiteChatRepository(BaseChatRepository):
                 WHEN OLD.status = 'completed' AND NEW.status != 'completed'
                 BEGIN
                     SELECT RAISE(ABORT, 'Completed chat requests cannot be transitioned out of completed status');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS trg_chat_requests_lifecycle_transitions
+                BEFORE UPDATE OF status ON chat_requests
+                FOR EACH ROW
+                WHEN OLD.status IS NOT NEW.status
+                BEGIN
+                    SELECT CASE
+                        WHEN OLD.status = 'completed' THEN
+                            RAISE(ABORT, 'Completed chat requests cannot be transitioned out of completed status')
+                        WHEN OLD.status = 'processing' AND NEW.status NOT IN ('completed', 'failed', 'interrupted') THEN
+                            RAISE(ABORT, 'Invalid status transition: processing can only transition to completed, failed, or interrupted')
+                        WHEN OLD.status = 'failed' AND NEW.status NOT IN ('processing', 'completed') THEN
+                            RAISE(ABORT, 'Invalid status transition: failed can only transition to processing or completed via reconcile')
+                        WHEN OLD.status = 'interrupted' AND NEW.status NOT IN ('processing', 'completed') THEN
+                            RAISE(ABORT, 'Invalid status transition: interrupted can only transition to processing or completed via reconcile')
+                    END;
                 END;
 
                 CREATE TRIGGER IF NOT EXISTS trg_chat_requests_immutable_key
@@ -371,6 +388,10 @@ class SQLiteChatRepository(BaseChatRepository):
         user_message_id: UUID,
         request_fingerprint: Optional[str] = None,
     ) -> Tuple[bool, ChatRequestModel]:
+        # Enforce strictly non-null, 64-character hexadecimal format
+        if not request_fingerprint or len(request_fingerprint) != 64 or not all(c in "0123456789abcdefABCDEF" for c in request_fingerprint):
+            raise ValueError("Valid 64-character hexadecimal request fingerprint is required")
+
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
 
@@ -396,6 +417,10 @@ class SQLiteChatRepository(BaseChatRepository):
         except sqlite3.IntegrityError:
             existing = self._sync_get_chat_request(user_id, idempotency_key)
             if existing:
+                if existing.request_fingerprint != request_fingerprint:
+                    raise IdempotencyConflictError(
+                        f"Idempotency key '{idempotency_key}' was already used with conflicting request content."
+                    )
                 return False, existing
             raise
 
@@ -426,6 +451,33 @@ class SQLiteChatRepository(BaseChatRepository):
         status: str,
         assistant_message_id: Optional[UUID] = None,
     ) -> None:
+        req = self._sync_get_chat_request(user_id, idempotency_key)
+        if not req:
+            raise DatabaseOperationError(f"Chat request '{idempotency_key}' not found")
+
+        if req.status == status:
+            if assistant_message_id and not req.assistant_message_id:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                with self._get_connection() as conn:
+                    conn.execute(
+                        """
+                        UPDATE chat_requests
+                        SET assistant_message_id = ?, updated_at = ?
+                        WHERE user_id = ? AND idempotency_key = ?
+                        """,
+                        (str(assistant_message_id), now_iso, str(user_id), idempotency_key),
+                    )
+            return
+
+        if req.status == "completed":
+            raise sqlite3.IntegrityError("Completed chat requests cannot be transitioned out of completed status")
+
+        if req.status != "processing":
+            raise sqlite3.IntegrityError(f"Invalid status transition: cannot transition from {req.status} to {status}")
+
+        if status not in ("completed", "failed", "interrupted"):
+            raise sqlite3.IntegrityError(f"Invalid status transition: cannot transition to {status}")
+
         now_iso = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
             conn.execute(
@@ -436,6 +488,43 @@ class SQLiteChatRepository(BaseChatRepository):
                 """,
                 (status, str(assistant_message_id) if assistant_message_id else None, now_iso, str(user_id), idempotency_key),
             )
+
+    def _sync_reconcile_chat_request(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        assistant_message_id: UUID,
+    ) -> ChatRequestModel:
+        req = self._sync_get_chat_request(user_id, idempotency_key)
+        if not req:
+            raise DatabaseOperationError(f"Chat request '{idempotency_key}' not found")
+
+        if req.status == "completed":
+            if req.assistant_message_id == assistant_message_id:
+                return req
+            raise sqlite3.IntegrityError("Completed request already associated with different assistant message")
+
+        msg = self._sync_get_message_by_id(user_id, assistant_message_id)
+        if not msg or msg.role != "assistant" or msg.conversation_id != req.conversation_id:
+            raise DatabaseOperationError("Invalid assistant_message_id: message not found in thread or not an assistant response")
+
+        if msg.metadata.get("user_message_id") != str(req.user_message_id):
+            raise DatabaseOperationError("Assistant message was not generated for this user message")
+
+        if msg.metadata.get("interrupted"):
+            raise DatabaseOperationError("Cannot reconcile request with an interrupted assistant message")
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE chat_requests
+                SET status = 'completed', assistant_message_id = ?, updated_at = ?
+                WHERE user_id = ? AND idempotency_key = ?
+                """,
+                (str(assistant_message_id), now_iso, str(user_id), idempotency_key),
+            )
+        return self._sync_get_chat_request(user_id, idempotency_key)
 
     def _sync_persist_assistant_message(
         self,
@@ -682,6 +771,14 @@ class SQLiteChatRepository(BaseChatRepository):
         assistant_message_id: Optional[UUID] = None,
     ) -> None:
         await asyncio.to_thread(self._sync_update_chat_request_status, user_id, idempotency_key, status, assistant_message_id)
+
+    async def reconcile_chat_request(
+        self,
+        user_id: UUID,
+        idempotency_key: str,
+        assistant_message_id: UUID,
+    ) -> ChatRequestModel:
+        return await asyncio.to_thread(self._sync_reconcile_chat_request, user_id, idempotency_key, assistant_message_id)
 
     async def persist_assistant_message(
         self,
