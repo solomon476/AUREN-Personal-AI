@@ -3,7 +3,7 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.core.security import get_current_user
@@ -27,14 +27,20 @@ router = APIRouter(prefix="/chat", tags=["Chat & Conversations"])
 )
 async def stream_chat_completion(
     request: ChatCompletionRequest,
+    raw_request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Initiate an SSE stream for chat interaction."""
+    """Initiate an SSE stream for chat interaction with heartbeat, timeout, and idempotency."""
     # 1. Validate request and resolve conversation with ownership enforcement BEFORE starting the stream
     conversation = chat_service.validate_and_resolve_conversation(current_user, request)
 
     # 2. Return SSE StreamingResponse
-    stream_generator = chat_service.stream_chat_completion(current_user, conversation, request)
+    stream_generator = chat_service.stream_chat_completion(
+        user=current_user,
+        conversation=conversation,
+        request=request,
+        raw_request=raw_request,
+    )
 
     return StreamingResponse(
         stream_generator,

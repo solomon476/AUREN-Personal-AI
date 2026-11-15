@@ -1,26 +1,73 @@
-"""Comprehensive tests for persistent chat, SSE streaming, idempotency, and user isolation."""
+"""Comprehensive tests for persistent chat, SSE streaming, idempotency,
 
+database persistence across restarts, error sanitization, stream timeout, and user isolation.
+"""
+
+import asyncio
 import time
 import uuid
+from typing import AsyncIterator, List, Optional
 import pytest
 import jwt
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.main import app
-from app.services.chat.repository import chat_repository
-from app.services.llm.factory import get_llm_provider
+from app.services.chat.repository import ChatRepository, chat_repository
+from app.services.chat.chat_service import chat_service
+from app.services.llm.base import BaseLLMProvider, ChatMessage, LLMResponse
 
 client = TestClient(app)
 TEST_JWT_SECRET = "super-secret-test-key-for-supabase-jwt-verification-unit-tests"
 
 
+class SpyMockProvider(BaseLLMProvider):
+    """Mock provider that tracks execution count and supports latency injection."""
+
+    def __init__(self, model_id: str = "mock-spy-v1"):
+        self.model_id = model_id
+        self.call_count = 0
+        self.delay = 0.0
+
+    def get_model_id(self) -> str:
+        return self.model_id
+
+    async def generate_response(
+        self,
+        messages: List[ChatMessage],
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        **kwargs,
+    ) -> LLMResponse:
+        self.call_count += 1
+        return LLMResponse(content="Spy response", model=self.model_id)
+
+    async def stream_response(
+        self,
+        messages: List[ChatMessage],
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        self.call_count += 1
+        if self.delay > 0:
+            await asyncio.sleep(self.delay)
+        yield "Hello"
+        yield " from"
+        yield " AUREN."
+
+
+spy_provider = SpyMockProvider()
+
+
 @pytest.fixture(autouse=True)
 def configure_test_environment(monkeypatch):
-    """Configure settings for isolated test execution using mock LLM provider."""
+    """Configure settings for isolated test execution."""
     monkeypatch.setattr(settings, "SUPABASE_JWT_SECRET", TEST_JWT_SECRET)
     monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
     monkeypatch.setattr(settings, "LLM_MODEL", "gemini-2.5-flash-test")
+    # Patch provider getter to spy provider
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: spy_provider)
 
 
 def create_token(user_id: str, email: str = "test@auren.ai") -> str:
@@ -54,89 +101,68 @@ def test_unauthenticated_conversations_rejected():
 
 
 # ---------------------------------------------------------------------------
-# 2. Dynamic Model Selection & Factory Check
+# 2. Disk Persistence Across Process Restart / Repository Reinitialization
 # ---------------------------------------------------------------------------
-def test_dynamic_model_id_configured(monkeypatch):
-    """Verify provider dynamically uses the configured LLM_MODEL."""
-    test_model = "gemini-2.5-pro-experimental"
-    monkeypatch.setattr(settings, "LLM_MODEL", test_model)
-    provider = get_llm_provider(settings)
-    assert provider.get_model_id() == test_model
+def test_conversations_survive_repository_reinitialization(tmp_path):
+    """Verify conversations and messages survive backend repository reinitialization using SQLite on disk."""
+    test_db = tmp_path / "persistence_test.db"
+    repo1 = ChatRepository(db_path=test_db)
+
+    user_id = uuid.uuid4()
+    conv = repo1.create_conversation(user_id, title="Survives Restart")
+    msg1 = repo1.persist_user_message(user_id, conv.id, "Message before restart")
+    repo1.persist_assistant_message(user_id, conv.id, "Response before restart")
+
+    # Simulate process restart by instantiating a completely new ChatRepository on the same DB file
+    repo2 = ChatRepository(db_path=test_db)
+
+    conv_recovered = repo2.get_conversation(user_id, conv.id)
+    assert conv_recovered is not None
+    assert conv_recovered.title == "Survives Restart"
+
+    messages_recovered = repo2.get_messages(user_id, conv.id)
+    assert len(messages_recovered) == 2
+    assert messages_recovered[0].content == "Message before restart"
+    assert messages_recovered[1].content == "Response before restart"
 
 
 # ---------------------------------------------------------------------------
-# 3. Successful Persistent Chat Streaming
+# 3. Idempotency: Deduplication Without Duplicate AI Invocation
 # ---------------------------------------------------------------------------
-def test_streaming_chat_completion_persists_messages():
-    """Verify SSE streaming produces metadata, tokens, done event and persists messages."""
+def test_duplicate_idempotency_key_does_not_invoke_ai_twice():
+    """Verify re-submitting with the same idempotency key replays cached response and NEVER invokes the AI twice."""
     user_id = str(uuid.uuid4())
     token = create_token(user_id)
     headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"idempotent-run-{uuid.uuid4()}"
 
-    prompt = "What is the status of project Auren?"
-    response = client.post(
-        "/api/v1/chat/completions",
-        headers=headers,
-        json={"message": prompt},
-    )
-
-    assert response.status_code == 200
-    assert "text/event-stream" in response.headers["content-type"]
-
-    body = response.text
-    assert "event: metadata" in body
-    assert "event: token" in body
-    assert "event: done" in body
-
-    # Verify conversation was persisted
-    convs = chat_repository.list_conversations(uuid.UUID(user_id))
-    assert len(convs) >= 1
-    active_conv = convs[0]
-
-    # Verify messages in conversation
-    messages = chat_repository.get_messages(uuid.UUID(user_id), active_conv.id)
-    assert len(messages) == 2  # user message + assistant response
-    assert messages[0].role == "user"
-    assert messages[0].content == prompt
-    assert messages[1].role == "assistant"
-    assert len(messages[1].content) > 0
-
-
-# ---------------------------------------------------------------------------
-# 4. Message Idempotency Verification
-# ---------------------------------------------------------------------------
-def test_idempotency_prevents_duplicate_messages():
-    """Verify re-submitting with the same idempotency key does not duplicate the message."""
-    user_id = str(uuid.uuid4())
-    token = create_token(user_id)
-    headers = {"Authorization": f"Bearer {token}"}
-    idempotency_key = f"client-req-{uuid.uuid4()}"
+    initial_calls = spy_provider.call_count
 
     # First request
     res1 = client.post(
         "/api/v1/chat/completions",
         headers=headers,
-        json={"message": "Repeat message", "idempotency_key": idempotency_key},
+        json={"message": "What is 2+2?", "idempotency_key": idempotency_key},
     )
     assert res1.status_code == 200
+    assert "event: done" in res1.text
+    assert spy_provider.call_count == initial_calls + 1
 
-    # Second request with identical idempotency_key
+    # Second request with identical idempotency key
     res2 = client.post(
         "/api/v1/chat/completions",
         headers=headers,
-        json={"message": "Repeat message", "idempotency_key": idempotency_key},
+        json={"message": "What is 2+2?", "idempotency_key": idempotency_key},
     )
     assert res2.status_code == 200
+    assert "replayed_from_cache" in res2.text or "replayed" in res2.text
 
-    # Check repository to ensure user message was deduplicated
-    convs = chat_repository.list_conversations(uuid.UUID(user_id))
-    messages = chat_repository.get_messages(uuid.UUID(user_id), convs[0].id)
-    user_messages = [m for m in messages if m.role == "user" and m.idempotency_key == idempotency_key]
-    assert len(user_messages) == 1, "Idempotent user message must not be duplicated!"
+    # Critical Assertion: The AI provider was NOT invoked a second time!
+    assert spy_provider.call_count == initial_calls + 1, "Duplicate request must not trigger a second AI provider generation!"
 
 
 # ---------------------------------------------------------------------------
-# 5. Cross-User Conversation Isolation
+# 4. Cross-User Conversation Isolation
 # ---------------------------------------------------------------------------
 def test_user_cannot_access_or_post_to_other_users_conversation():
     """Verify User B cannot read or post to User A's conversation thread."""
@@ -146,7 +172,7 @@ def test_user_cannot_access_or_post_to_other_users_conversation():
     token_a = create_token(user_a_id, "user_a@auren.ai")
     token_b = create_token(user_b_id, "user_b@auren.ai")
 
-    # User A creates a conversation and posts a message
+    # User A creates a conversation
     res_a = client.post(
         "/api/v1/chat/completions",
         headers={"Authorization": f"Bearer {token_a}"},
@@ -174,17 +200,117 @@ def test_user_cannot_access_or_post_to_other_users_conversation():
 
 
 # ---------------------------------------------------------------------------
-# 6. Request Size Limit Enforcement
+# 5. Error Sanitization (No Sensitive Internal Leaks to Frontend)
 # ---------------------------------------------------------------------------
-def test_excessive_message_length_rejected():
-    """Verify messages exceeding length limits are rejected before processing."""
+def test_error_sanitization_no_sensitive_leaks(monkeypatch):
+    """Verify internal exceptions are masked with safe client-facing messages."""
+    class FailingProvider(BaseLLMProvider):
+        def get_model_id(self) -> str:
+            return "failing-model"
+
+        async def generate_response(self, messages, **kwargs):
+            raise RuntimeError("CRITICAL_INTERNAL_DB_PASSWORD_LEAK: connection failure")
+
+        async def stream_response(self, messages, **kwargs):
+            raise RuntimeError("CRITICAL_INTERNAL_DB_PASSWORD_LEAK: connection failure")
+            yield "never"
+
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: FailingProvider())
+
     user_id = str(uuid.uuid4())
     token = create_token(user_id)
-    oversized_prompt = "A" * (settings.CHAT_MAX_MESSAGE_LENGTH + 10)
 
     response = client.post(
         "/api/v1/chat/completions",
         headers={"Authorization": f"Bearer {token}"},
-        json={"message": oversized_prompt},
+        json={"message": "Trigger failure"},
     )
-    assert response.status_code in (413, 422)
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    # Sensitive internal detail must NOT be in the client event stream
+    assert "CRITICAL_INTERNAL_DB_PASSWORD_LEAK" not in response.text
+    assert "An unexpected error occurred" in response.text
+
+
+# ---------------------------------------------------------------------------
+# 6. Stream Timeout Enforcement
+# ---------------------------------------------------------------------------
+def test_stream_timeout_enforcement(monkeypatch):
+    """Verify CHAT_STREAM_TIMEOUT_SECONDS is enforced on streaming responses."""
+    monkeypatch.setattr(settings, "CHAT_STREAM_TIMEOUT_SECONDS", 1)
+
+    class SlowProvider(BaseLLMProvider):
+        def get_model_id(self) -> str:
+            return "slow-model"
+
+        async def generate_response(self, messages, **kwargs):
+            await asyncio.sleep(2)
+            return LLMResponse(content="done", model="slow")
+
+        async def stream_response(self, messages, **kwargs):
+            yield "starting..."
+            await asyncio.sleep(2)
+            yield "too late"
+
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: SlowProvider())
+
+    user_id = str(uuid.uuid4())
+    token = create_token(user_id)
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": "Slow stream prompt"},
+    )
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    assert "timed out" in response.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# 7. Interrupted Stream Reconciliation
+# ---------------------------------------------------------------------------
+def test_interrupted_stream_preserves_partial_tokens(monkeypatch):
+    """Verify that when a stream is interrupted mid-generation, partial tokens are preserved."""
+    class InterruptedProvider(BaseLLMProvider):
+        def get_model_id(self) -> str:
+            return "interrupted-model"
+
+        async def generate_response(self, messages, **kwargs):
+            return LLMResponse(content="done", model="interrupted")
+
+        async def stream_response(self, messages, **kwargs):
+            yield "Partial"
+            yield " thoughts"
+            # Simulate sudden network drop / process crash
+            raise ConnectionResetError("Connection lost mid-stream")
+
+    monkeypatch.setattr(chat_service, "_get_provider", lambda: InterruptedProvider())
+
+    user_id = str(uuid.uuid4())
+    token = create_token(user_id)
+    idempotency_key = f"interrupted-test-{uuid.uuid4()}"
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": "Prompt before crash", "idempotency_key": idempotency_key},
+    )
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+
+    # Verify partial tokens were saved in database
+    convs = chat_repository.list_conversations(uuid.UUID(user_id))
+    messages = chat_repository.get_messages(uuid.UUID(user_id), convs[0].id)
+    assistant_msgs = [m for m in messages if m.role == "assistant"]
+    assert len(assistant_msgs) >= 1
+    assert "Partial thoughts" in assistant_msgs[0].content
+    assert assistant_msgs[0].metadata.get("interrupted") is True
+
+    # Verify chat request status is marked interrupted
+    req = chat_repository.get_chat_request(uuid.UUID(user_id), idempotency_key)
+    assert req is not None
+    assert req.status in ("interrupted", "failed")

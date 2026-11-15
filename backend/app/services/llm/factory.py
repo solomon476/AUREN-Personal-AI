@@ -56,3 +56,4 @@ def get_llm_provider(settings: Settings = default_settings) -> BaseLLMProvider:
         raise LLMProviderError(
             f"Unsupported LLM provider '{provider_name}'. Supported providers: 'gemini', 'mock'."
         )
+

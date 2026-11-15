@@ -372,3 +372,4 @@ export const ChatView: React.FC = () => {
     </div>
   );
 };
+

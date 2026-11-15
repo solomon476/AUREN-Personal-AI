@@ -1,4 +1,4 @@
-"""Domain and API schemas for Chat, Conversations, and Messages."""
+"""Domain and API schemas for Chat, Conversations, Messages, and Idempotency Requests."""
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -25,6 +25,19 @@ class ConversationModel(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     user_id: UUID
     title: str = "New Conversation"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ChatRequestModel(BaseModel):
+    """Lifecycle entity tracking in-flight and completed chat requests for strict idempotency."""
+
+    user_id: UUID
+    idempotency_key: str
+    conversation_id: UUID
+    status: str = Field(..., description="'processing', 'completed', 'failed', 'interrupted'")
+    user_message_id: UUID
+    assistant_message_id: Optional[UUID] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

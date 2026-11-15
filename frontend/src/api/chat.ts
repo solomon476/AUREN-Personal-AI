@@ -166,3 +166,4 @@ function loggerInfo(msg: string) {
     console.debug(`[AUREN Chat] ${msg}`);
   }
 }
+

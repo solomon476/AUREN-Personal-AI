@@ -1,3 +1,10 @@
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+data/
+backend/data/
+
 # Environment files & Secrets
 .env
 .env.*

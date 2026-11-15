@@ -153,3 +153,4 @@ class GeminiProvider(BaseLLMProvider):
             if "API_KEY_INVALID" in error_str or "401" in error_str or "403" in error_str:
                 raise LLMAuthenticationError(f"Gemini authentication failed: {error_str}")
             raise LLMProviderError(f"Gemini streaming error: {error_str}")
+
