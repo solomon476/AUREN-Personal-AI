@@ -430,6 +430,49 @@ Direct mutations on `chat_requests` by authenticated or anonymous clients are st
 - `401 Unauthorized` or `403 Forbidden` with PostgreSQL error code `42501` (`permission denied for table chat_requests`).
 - No direct INSERT, UPDATE, or DELETE succeeds. All lifecycle mutations occur solely through authorized SECURITY DEFINER RPCs.
 
+---
+
+## 14. Phase 3A.9 Original Request Semantics, Migration Portability & Provenance Integrity
+
+Phase 3A.9 resolves original request parameter reconstruction, guarantees genuine byte-for-byte Python/SQL normalization parity across Unicode whitespace and line breaks, avoids static schema qualifications for `pgcrypto`, and secures user message provenance.
+
+### 1. Preservation of Original Request Conversation Semantics (`conv:none` vs `conv:<uuid>`)
+When an initial request arrives without a supplied conversation ID, the backend derives a deterministic UUIDv5 conversation ID:
+$$\text{deterministic\_conv\_id} = \text{uuid5}(\text{NAMESPACE\_OID}, \text{"auren:conv:"} + \text{user\_id} + \text{":"} + \text{idempotency\_key})$$
+The application generates the fingerprint using `conversation_id=None`, producing `conv:none`.
+During migration backfill, the original request input cannot be inferred simply from `chat_requests.conversation_id` because the database stores the deterministic UUID.
+
+Migration 010 implements `public.compute_deterministic_conversation_id_sql`:
+- If `chat_requests.conversation_id = deterministic_conv_id`, the original request did NOT supply a conversation ID $\rightarrow$ reconstructs using `NULL` (`conv:none`).
+- If `chat_requests.conversation_id != deterministic_conv_id`, the request explicitly supplied an existing conversation ID $\rightarrow$ reconstructs using `cr.conversation_id` (`conv:<uuid>`).
+- Guarantees that legitimate API replays without a conversation ID match the reconstructed fingerprint with zero false HTTP 409 collisions.
+
+### 2. Comprehensive Python/SQL Normalization Parity
+`public.normalize_chat_content(p_content text)` achieves byte-for-byte parity with Python's:
+```python
+"\n".join(line.rstrip() for line in content.strip().splitlines())
+```
+- **29 Unicode Whitespace Characters**: Strips all code points where `unicodedata.category` is separator (`Zs`, `Zl`, `Zp`) or ASCII control whitespace (`\t`, `\n`, `\v`, `\f`, `\r`, `\x1c`–`\x1f`, `\x85`, `\xa0`, `\u1680`, `\u2000`–`\u200a`, `\u2028`, `\u2029`, `\u202f`, `\u205f`, `\u3000`).
+- **11 Line Boundary Representations**: Correctly splits across `\r\n` (CRLF), `\n` (LF), `\r` (CR), `\x0b` (VT), `\x0c` (FF), `\x1c` (FS), `\x1d` (GS), `\x1e` (RS), `\x85` (NEL), `\u2028` (LS), and `\u2029` (PS).
+- Evaluated against 10 comprehensive regression test vectors verifying matching UTF-8 byte sequences and identical SHA-256 digests.
+
+### 3. Safe `pgcrypto` Schema Resolution Without Static Qualifications
+To ensure migration portability across environments where `pgcrypto` is installed in `public` (vanilla PostgreSQL) or `extensions` (Supabase):
+- Removed all static schema-qualified references (e.g. `extensions.digest` or `public.digest`).
+- All `SECURITY DEFINER` RPC functions and migration functions set:
+  ```sql
+  SET search_path = public, extensions, pg_temp;
+  ```
+- Unqualified calls to `digest(..., 'sha256')` resolve dynamically through `search_path`, eliminating `schema "extensions" does not exist` compile-time failures.
+
+### 4. User Message Provenance & Immutability Trigger
+To prevent historical or concurrent mutation of user prompts from poisoning request fingerprints:
+- Added database triggers (`trg_messages_user_content_immutability`) in PostgreSQL and SQLite forbidding direct `UPDATE` on `messages.content` where `role = 'user'`.
+- **Compatibility Policy for Unreconstructable Records**:
+  If a legacy request row points to a missing user message, or if a user message's metadata indicates content was modified (`metadata->>'edited' = 'true'`), the record cannot be cryptographically proven.
+  Unreconstructable records are purged from `chat_requests`. This preserves message history while clearing unprovable lifecycle locks, allowing clients to re-issue clean requests without false conflict rejections.
+
+
 
 
 

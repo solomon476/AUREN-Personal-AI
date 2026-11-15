@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -114,32 +115,48 @@ class SQLiteChatRepository(BaseChatRepository):
             conn.execute("DROP TRIGGER IF EXISTS trg_chat_requests_prevent_direct_delete")
 
             # Safe legacy fingerprint reconstruction and compatibility policy
-            # 1. Reconstruct exact fingerprint for records whose source message exists
+            # 1. Reconstruct exact fingerprint for records whose source message exists and provenance is intact
             cursor.execute(
                 """
-                SELECT cr.user_id, cr.idempotency_key, cr.conversation_id, m.content
+                SELECT cr.user_id, cr.idempotency_key, cr.conversation_id, m.content, m.metadata
                 FROM chat_requests cr
                 JOIN messages m ON m.id = cr.user_message_id
                 WHERE cr.request_fingerprint IS NULL
                 """
             )
-            for r_uid, r_key, r_cid, m_content in cursor.fetchall():
+            for r_uid, r_key, r_cid, m_content, m_metadata in cursor.fetchall():
+                user_uuid = UUID(r_uid)
+                meta = json.loads(m_metadata) if isinstance(m_metadata, str) else (m_metadata or {})
+                if meta.get("edited") is True or meta.get("content_changed") is True:
+                    # Message content was altered: provenance broken -> unreconstructable, purge
+                    conn.execute("DELETE FROM chat_requests WHERE user_id = ? AND idempotency_key = ?", (r_uid, r_key))
+                    continue
+
+                # Determine original conversation input:
+                # Was it an initial request without conversation_id?
+                det_conv_id = uuid.uuid5(uuid.NAMESPACE_OID, f"auren:conv:{user_uuid}:{r_key}")
+                if UUID(r_cid) == det_conv_id:
+                    # Request was originally submitted without conversation_id -> conv:none
+                    orig_conv_id = None
+                else:
+                    # Request was originally submitted with an explicit conversation_id -> conv:<uuid>
+                    orig_conv_id = UUID(r_cid)
+
                 fp = compute_request_fingerprint(
-                    UUID(r_uid),
+                    user_uuid,
                     m_content,
-                    UUID(r_cid) if r_cid else None,
+                    orig_conv_id,
                 )
                 conn.execute(
                     "UPDATE chat_requests SET request_fingerprint = ? WHERE user_id = ? AND idempotency_key = ?",
                     (fp, r_uid, r_key),
                 )
 
-            # 2. Compatibility policy: purge orphaned records whose source message was deleted
+            # 2. Compatibility policy: purge unreconstructable records (orphans whose source message was deleted or missing)
             cursor.execute(
                 """
                 DELETE FROM chat_requests
                 WHERE request_fingerprint IS NULL
-                  AND user_message_id NOT IN (SELECT id FROM messages)
                 """
             )
 
@@ -202,6 +219,15 @@ class SQLiteChatRepository(BaseChatRepository):
                   AND (SELECT 1 FROM messages WHERE id = OLD.user_message_id) IS NOT NULL
                 BEGIN
                     SELECT RAISE(ABORT, 'Direct DELETE on chat_requests is forbidden; deletion must cascade from conversation');
+                END;
+
+                DROP TRIGGER IF EXISTS trg_messages_user_content_immutability;
+                CREATE TRIGGER trg_messages_user_content_immutability
+                BEFORE UPDATE OF content ON messages
+                FOR EACH ROW
+                WHEN OLD.role = 'user' AND NEW.content IS NOT OLD.content
+                BEGIN
+                    SELECT RAISE(ABORT, 'User message content is immutable and cannot be modified');
                 END;
             """)
 
