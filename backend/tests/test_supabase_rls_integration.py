@@ -278,7 +278,26 @@ async def test_live_rls_isolation_messages(postgrest_url, headers_user_a, header
             )
             assert inject_b.status_code in (400, 403, 404, 409), "Security Violation: User B inserted message into User A's conversation!"
 
-            # 4. Anon CANNOT read message
+            # 4. User B CANNOT update User A's message
+            update_b = await client.patch(
+                f"{postgrest_url}/messages?id=eq.{msg_id}",
+                headers=headers_user_b,
+                json={"content": "Hacked message content by User B"},
+            )
+            assert update_b.status_code in (200, 204)
+            verify_a = await client.get(f"{postgrest_url}/messages?id=eq.{msg_id}", headers=headers_user_a)
+            assert verify_a.json()[0]["content"] == "Secret note", "Security Violation: User B modified User A's message!"
+
+            # 5. User B CANNOT delete User A's message
+            delete_b = await client.delete(
+                f"{postgrest_url}/messages?id=eq.{msg_id}",
+                headers=headers_user_b,
+            )
+            assert delete_b.status_code in (200, 204)
+            verify_exists = await client.get(f"{postgrest_url}/messages?id=eq.{msg_id}", headers=headers_user_a)
+            assert len(verify_exists.json()) == 1, "Security Violation: User B deleted User A's message!"
+
+            # 6. Anon CANNOT read message
             anon_read = await client.get(f"{postgrest_url}/messages?id=eq.{msg_id}", headers=headers_anon)
             assert anon_read.status_code in (401, 200)
             if anon_read.status_code == 200:

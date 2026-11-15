@@ -112,6 +112,7 @@ class BaseChatRepository(ABC):
         idempotency_key: str,
         conversation_id: UUID,
         user_message_id: UUID,
+        request_fingerprint: Optional[str] = None,
     ) -> Tuple[bool, ChatRequestModel]:
         """Atomically claim a chat request.
 
@@ -119,6 +120,16 @@ class BaseChatRepository(ABC):
             (True, ChatRequestModel) if successfully claimed with status='processing'.
             (False, ChatRequestModel) if already claimed / existing record found.
         """
+        pass
+
+    @abstractmethod
+    async def find_assistant_message_for_request(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        user_message_id: UUID,
+    ) -> Optional[MessageModel]:
+        """Find an assistant message in a conversation produced for a specific user message."""
         pass
 
     @abstractmethod

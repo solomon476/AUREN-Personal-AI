@@ -19,6 +19,7 @@ from app.models.chat import (
     ChatCompletionRequest,
     ConversationModel,
     MessageModel,
+    compute_request_fingerprint,
 )
 from app.models.user import AuthenticatedUser
 from app.services.chat.base_repository import BaseChatRepository
@@ -81,6 +82,16 @@ class ChatService:
         if request.idempotency_key:
             existing_req = await repo.get_chat_request(user.id, request.idempotency_key)
             if existing_req:
+                incoming_fp = compute_request_fingerprint(
+                    user_id=user.id,
+                    content=request.message,
+                    conversation_id=request.conversation_id,
+                )
+                if existing_req.request_fingerprint and existing_req.request_fingerprint != incoming_fp:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Idempotency key reused with conflicting request parameters.",
+                    )
                 existing_conv = await repo.get_conversation(user.id, existing_req.conversation_id)
                 if existing_conv:
                     return existing_conv
@@ -128,14 +139,33 @@ class ChatService:
         repo = self.get_repository(user)
 
         # -------------------------------------------------------------------
-        # 1. Idempotency Check: Explicit handling for all 4 states
+        # 1. Idempotency Check: Explicit handling for all 4 states & reconciliation
         # -------------------------------------------------------------------
         is_retry = False
         retry_assistant_msg_id = None
+        incoming_fp = None
 
         if request.idempotency_key:
+            incoming_fp = compute_request_fingerprint(
+                user_id=user.id,
+                content=request.message,
+                conversation_id=request.conversation_id,
+            )
             existing_req = await repo.get_chat_request(user.id, request.idempotency_key)
             if existing_req:
+                # Fingerprint Conflict Detection: Reject reuse of key with different parameters
+                if existing_req.request_fingerprint and existing_req.request_fingerprint != incoming_fp:
+                    logger.warning(
+                        "Idempotency conflict for key=%s (user=%s): fingerprints do not match",
+                        request.idempotency_key, user.id,
+                    )
+                    error_event = {
+                        "detail": "Idempotency key reused with conflicting request parameters.",
+                        "code": "idempotency_conflict",
+                    }
+                    yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+                    return
+
                 # State 1: COMPLETED -> replay cached response
                 if existing_req.status == "completed" and existing_req.assistant_message_id:
                     logger.info(
@@ -156,6 +186,49 @@ class ChatService:
                             "message_id": str(cached_msg.id),
                             "finish_reason": "replayed_from_cache",
                             "model": cached_msg.metadata.get("model", "cached"),
+                        }
+                        yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
+                        return
+
+                # Persistence Failure Recovery:
+                # If existing_req is NOT completed, check whether a completed assistant message was already persisted
+                # in a previous run (e.g. LLM generated response and saved message, but updating chat_requests failed)
+                if existing_req.status != "completed":
+                    reconciled_assistant_msg = None
+                    if existing_req.assistant_message_id:
+                        reconciled_assistant_msg = await repo.get_message_by_id(user.id, existing_req.assistant_message_id)
+                    if not reconciled_assistant_msg:
+                        reconciled_assistant_msg = await repo.find_assistant_message_for_request(
+                            user_id=user.id,
+                            conversation_id=conversation.id,
+                            user_message_id=existing_req.user_message_id,
+                        )
+
+                    if reconciled_assistant_msg and not reconciled_assistant_msg.metadata.get("interrupted"):
+                        logger.info(
+                            "Reconciled existing completed assistant message %s for incomplete request %s. Auto-reconciling.",
+                            reconciled_assistant_msg.id, request.idempotency_key,
+                        )
+                        # Reconcile chat_requests status to completed
+                        await repo.update_chat_request_status(
+                            user_id=user.id,
+                            idempotency_key=request.idempotency_key,
+                            status="completed",
+                            assistant_message_id=reconciled_assistant_msg.id,
+                        )
+                        # Replay cached response without invoking LLM
+                        meta_event = {
+                            "conversation_id": str(conversation.id),
+                            "user_message_id": str(existing_req.user_message_id),
+                            "title": conversation.title,
+                            "replayed": True,
+                        }
+                        yield f"event: metadata\ndata: {json.dumps(meta_event)}\n\n"
+                        yield f"event: token\ndata: {json.dumps({'text': reconciled_assistant_msg.content})}\n\n"
+                        done_event = {
+                            "message_id": str(reconciled_assistant_msg.id),
+                            "finish_reason": "replayed_from_cache",
+                            "model": reconciled_assistant_msg.metadata.get("model", "cached"),
                         }
                         yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
                         return
@@ -218,6 +291,7 @@ class ChatService:
                     idempotency_key=request.idempotency_key,
                     conversation_id=conversation.id,
                     user_message_id=user_message.id,
+                    request_fingerprint=incoming_fp,
                 )
                 if not claimed:
                     logger.warning(
@@ -341,14 +415,22 @@ class ChatService:
                         user_id=user.id,
                         message_id=retry_assistant_msg_id,
                         content=full_response,
-                        metadata={"model": provider.get_model_id()},
+                        metadata={
+                            "model": provider.get_model_id(),
+                            "user_message_id": str(user_message.id),
+                            "idempotency_key": request.idempotency_key,
+                        },
                     )
                 else:
                     assistant_msg = await repo.persist_assistant_message(
                         user_id=user.id,
                         conversation_id=conversation.id,
                         content=full_response,
-                        metadata={"model": provider.get_model_id()},
+                        metadata={
+                            "model": provider.get_model_id(),
+                            "user_message_id": str(user_message.id),
+                            "idempotency_key": request.idempotency_key,
+                        },
                     )
                 is_completed = True
                 terminal_state = "completed"
@@ -425,6 +507,8 @@ class ChatService:
                                 "interrupted": target_status == "interrupted",
                                 "failed": target_status == "failed",
                                 "model": provider.get_model_id(),
+                                "user_message_id": str(user_message.id),
+                                "idempotency_key": request.idempotency_key,
                             },
                         )
                     else:
@@ -436,6 +520,8 @@ class ChatService:
                                 "interrupted": target_status == "interrupted",
                                 "failed": target_status == "failed",
                                 "model": provider.get_model_id(),
+                                "user_message_id": str(user_message.id),
+                                "idempotency_key": request.idempotency_key,
                             },
                         )
                     if request.idempotency_key:

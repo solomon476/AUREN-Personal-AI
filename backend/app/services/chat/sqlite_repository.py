@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
 
+from app.core.exceptions import IdempotencyConflictError
 from app.models.chat import ChatRequestModel, ConversationModel, MessageModel
 from app.services.chat.base_repository import BaseChatRepository
 
@@ -87,6 +88,7 @@ class SQLiteChatRepository(BaseChatRepository):
                     status TEXT NOT NULL CHECK (status IN ('processing', 'completed', 'failed', 'interrupted')),
                     user_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
                     assistant_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+                    request_fingerprint TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY (user_id, idempotency_key)
@@ -95,6 +97,13 @@ class SQLiteChatRepository(BaseChatRepository):
                 CREATE INDEX IF NOT EXISTS idx_chat_requests_user_status
                 ON chat_requests(user_id, status);
             """)
+
+            # Run incremental migration if request_fingerprint is missing in existing sqlite table
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(chat_requests)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if "request_fingerprint" not in columns:
+                conn.execute("ALTER TABLE chat_requests ADD COLUMN request_fingerprint TEXT")
 
     # -----------------------------------------------------------------------
     # Synchronous Core Operations (run via asyncio.to_thread)
@@ -212,6 +221,7 @@ class SQLiteChatRepository(BaseChatRepository):
                 status=row["status"],
                 user_message_id=UUID(row["user_message_id"]),
                 assistant_message_id=UUID(row["assistant_message_id"]) if row["assistant_message_id"] else None,
+                request_fingerprint=row["request_fingerprint"] if "request_fingerprint" in row.keys() else None,
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
@@ -236,6 +246,16 @@ class SQLiteChatRepository(BaseChatRepository):
                 )
                 row = cursor.fetchone()
                 if row:
+                    existing_normalized = "\n".join(line.rstrip() for line in row["content"].strip().splitlines())
+                    incoming_normalized = "\n".join(line.rstrip() for line in content.strip().splitlines())
+                    if existing_normalized != incoming_normalized:
+                        raise IdempotencyConflictError(
+                            f"Idempotency key '{idempotency_key}' was already used with different message content."
+                        )
+                    if UUID(row["conversation_id"]) != conversation_id:
+                        raise IdempotencyConflictError(
+                            f"Idempotency key '{idempotency_key}' was already used with a different conversation."
+                        )
                     return MessageModel(
                         id=UUID(row["id"]),
                         conversation_id=UUID(row["conversation_id"]),
@@ -268,6 +288,16 @@ class SQLiteChatRepository(BaseChatRepository):
                     )
                     row = cursor.fetchone()
                     if row:
+                        existing_normalized = "\n".join(line.rstrip() for line in row["content"].strip().splitlines())
+                        incoming_normalized = "\n".join(line.rstrip() for line in content.strip().splitlines())
+                        if existing_normalized != incoming_normalized:
+                            raise IdempotencyConflictError(
+                                f"Idempotency key '{idempotency_key}' was already used with different message content."
+                            )
+                        if UUID(row["conversation_id"]) != conversation_id:
+                            raise IdempotencyConflictError(
+                                f"Idempotency key '{idempotency_key}' was already used with a different conversation."
+                            )
                         return MessageModel(
                             id=UUID(row["id"]),
                             conversation_id=UUID(row["conversation_id"]),
@@ -296,6 +326,7 @@ class SQLiteChatRepository(BaseChatRepository):
         idempotency_key: str,
         conversation_id: UUID,
         user_message_id: UUID,
+        request_fingerprint: Optional[str] = None,
     ) -> Tuple[bool, ChatRequestModel]:
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
@@ -304,10 +335,10 @@ class SQLiteChatRepository(BaseChatRepository):
             with self._get_connection() as conn:
                 conn.execute(
                     """
-                    INSERT INTO chat_requests (user_id, idempotency_key, conversation_id, status, user_message_id, created_at, updated_at)
-                    VALUES (?, ?, ?, 'processing', ?, ?, ?)
+                    INSERT INTO chat_requests (user_id, idempotency_key, conversation_id, status, user_message_id, request_fingerprint, created_at, updated_at)
+                    VALUES (?, ?, ?, 'processing', ?, ?, ?, ?)
                     """,
-                    (str(user_id), idempotency_key, str(conversation_id), str(user_message_id), now_iso, now_iso),
+                    (str(user_id), idempotency_key, str(conversation_id), str(user_message_id), request_fingerprint, now_iso, now_iso),
                 )
             return True, ChatRequestModel(
                 user_id=user_id,
@@ -315,6 +346,7 @@ class SQLiteChatRepository(BaseChatRepository):
                 conversation_id=conversation_id,
                 status="processing",
                 user_message_id=user_message_id,
+                request_fingerprint=request_fingerprint,
                 created_at=now,
                 updated_at=now,
             )
@@ -454,6 +486,38 @@ class SQLiteChatRepository(BaseChatRepository):
                 created_at=datetime.fromisoformat(row["created_at"]),
             )
 
+    def _sync_find_assistant_message_for_request(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        user_message_id: UUID,
+    ) -> Optional[MessageModel]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM messages
+                WHERE user_id = ? AND conversation_id = ? AND role = 'assistant'
+                ORDER BY created_at DESC
+                """,
+                (str(user_id), str(conversation_id)),
+            )
+            rows = cursor.fetchall()
+            for row in rows:
+                meta = json.loads(row["metadata"]) if row["metadata"] else {}
+                if meta.get("user_message_id") == str(user_message_id):
+                    return MessageModel(
+                        id=UUID(row["id"]),
+                        conversation_id=UUID(row["conversation_id"]),
+                        user_id=UUID(row["user_id"]),
+                        role=row["role"],
+                        content=row["content"],
+                        idempotency_key=row["idempotency_key"],
+                        metadata=meta,
+                        created_at=datetime.fromisoformat(row["created_at"]),
+                    )
+            return None
+
     def _sync_get_messages(
         self,
         user_id: UUID,
@@ -534,8 +598,29 @@ class SQLiteChatRepository(BaseChatRepository):
         idempotency_key: str,
         conversation_id: UUID,
         user_message_id: UUID,
+        request_fingerprint: Optional[str] = None,
     ) -> Tuple[bool, ChatRequestModel]:
-        return await asyncio.to_thread(self._sync_claim_chat_request, user_id, idempotency_key, conversation_id, user_message_id)
+        return await asyncio.to_thread(
+            self._sync_claim_chat_request,
+            user_id,
+            idempotency_key,
+            conversation_id,
+            user_message_id,
+            request_fingerprint,
+        )
+
+    async def find_assistant_message_for_request(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        user_message_id: UUID,
+    ) -> Optional[MessageModel]:
+        return await asyncio.to_thread(
+            self._sync_find_assistant_message_for_request,
+            user_id,
+            conversation_id,
+            user_message_id,
+        )
 
     async def transition_chat_request_status(
         self,

@@ -32,3 +32,9 @@ class ConversationNotFoundError(DatabaseError):
     """Raised when a requested conversation does not exist or access is denied."""
     pass
 
+
+class IdempotencyConflictError(DatabaseError):
+    """Raised when an idempotency key is reused with conflicting request parameters."""
+    pass
+
+

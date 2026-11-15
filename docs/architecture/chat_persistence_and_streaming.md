@@ -175,3 +175,52 @@ The streaming runner explicitly tracks `terminal_state`:
    - SQLite is maintained strictly as an isolated local-development adapter (`storage/dev_chat.db`).
    - All synchronous SQLite calls are offloaded via `asyncio.to_thread` to prevent blocking the asynchronous event loop.
 
+---
+
+## 8. Phase 3A.4 Request Fingerprint & Content Binding
+
+To guarantee that an idempotency key strictly identifies one logical request and cannot be hijacked or reused with conflicting input:
+
+### Fingerprint Formulation
+```python
+def compute_request_fingerprint(
+    user_id: UUID,
+    content: str,
+    conversation_id: Optional[UUID] = None,
+) -> str:
+    normalized_content = "\n".join(line.rstrip() for line in content.strip().splitlines())
+    conv_part = str(conversation_id) if conversation_id else "none"
+    payload = f"user:{str(user_id)}|conv:{conv_part}|content:{normalized_content}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+```
+
+### Invariants:
+1. **Binding**: The immutable fingerprint is stored in `chat_requests.request_fingerprint` upon claiming.
+2. **Conflicting Reuse Rejection**: If an existing idempotency key is submitted with differing normalized content or conversation target:
+   - Request is immediately rejected with HTTP 409 Conflict (or SSE `idempotency_conflict`).
+   - The LLM is **never** invoked.
+   - The original user message is **not** modified.
+   - The original request lifecycle record is **not** altered.
+3. **Identical Retries**: Requests with identical parameters yield the exact same fingerprint and proceed through standard replay or recovery.
+
+---
+
+## 9. Phase 3A.4 Persistence Failure Recovery & Reconciliation
+
+### Scenario
+1. The LLM finishes generating a response.
+2. The assistant message is persisted to the database.
+3. Updating the corresponding `chat_requests` record to `status = 'completed'` fails (e.g. database network error or constraint failure).
+4. The client retries using the same idempotency key.
+
+### Recovery Mechanism
+- On retry, `chat_service` inspects `chat_requests`. If `status != 'completed'`:
+  - It queries the database via `find_assistant_message_for_request(user_id, conversation_id, user_message_id)`.
+  - If a completed assistant message already exists in that conversation matching that user request (identified via `user_message_id` and not marked `interrupted`):
+    1. **Reconciles Lifecycle**: Updates `chat_requests` to `status = 'completed'` and sets `assistant_message_id`.
+    2. **Replays Response**: Immediately streams the cached assistant response.
+    3. **Zero Duplication**: Does not persist duplicate assistant or user messages.
+    4. **Zero AI Cost**: Does not call `provider.stream_response` again.
+    5. **No Deadlocks**: Prevents requests from becoming permanently stuck in `processing`.
+
+

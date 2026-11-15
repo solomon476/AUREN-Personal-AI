@@ -12,6 +12,7 @@ from app.core.exceptions import (
     DatabaseConnectionError,
     DatabaseError,
     DatabaseOperationError,
+    IdempotencyConflictError,
 )
 from app.core.security import get_current_user
 from app.models.chat import (
@@ -49,6 +50,12 @@ async def stream_chat_completion(
     try:
         # 1. Validate request and resolve conversation with ownership enforcement BEFORE starting the stream
         conversation = await chat_service.validate_and_resolve_conversation(current_user, request)
+    except IdempotencyConflictError as exc:
+        logger.warning("Idempotency conflict in stream_chat_completion: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
     except DatabaseAuthError as exc:
         logger.error("Database auth failure in stream_chat_completion: %s", exc.technical_details)
         raise HTTPException(

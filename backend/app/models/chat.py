@@ -1,9 +1,22 @@
 """Domain and API schemas for Chat, Conversations, Messages, and Idempotency Requests."""
 
 from datetime import datetime, timezone
+import hashlib
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
+
+
+def compute_request_fingerprint(
+    user_id: UUID,
+    content: str,
+    conversation_id: Optional[UUID] = None,
+) -> str:
+    """Compute immutable SHA-256 fingerprint binding user, normalized content, and conversation."""
+    normalized_content = "\n".join(line.rstrip() for line in content.strip().splitlines())
+    conv_part = str(conversation_id) if conversation_id else "none"
+    payload = f"user:{str(user_id)}|conv:{conv_part}|content:{normalized_content}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 class MessageModel(BaseModel):
@@ -38,6 +51,7 @@ class ChatRequestModel(BaseModel):
     status: str = Field(..., description="'processing', 'completed', 'failed', 'interrupted'")
     user_message_id: UUID
     assistant_message_id: Optional[UUID] = None
+    request_fingerprint: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

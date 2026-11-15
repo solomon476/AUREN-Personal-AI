@@ -848,3 +848,165 @@ async def test_partial_interrupted_message_not_mistaken_for_completed_replay():
     req = await chat_repository.get_chat_request(user_uuid, idempotency_key)
     assert req.status == "interrupted"
     assert req.status != "completed"
+
+
+# ---------------------------------------------------------------------------
+# 18. Idempotency Fingerprint: Identical Retries Succeed, Conflicting Reuse Rejected (409)
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_idempotency_fingerprint_identical_retry_succeeds_and_conflicting_reuse_rejected():
+    """Verify that identical retries succeed while conflicting reuse of an existing idempotency key
+
+    is rejected with HTTP 409, does not invoke the LLM, does not modify the user message,
+    and does not alter the original lifecycle record.
+    """
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"fingerprint-test-{uuid.uuid4()}"
+
+    initial_calls = spy_provider.call_count
+
+    # 1. First request with message "Original prompt"
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res1 = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Original prompt", "idempotency_key": idempotency_key},
+        )
+    assert res1.status_code == 200
+    assert "event: done" in res1.text
+    assert spy_provider.call_count == initial_calls + 1
+
+    # Database assertion: Request completed
+    req_initial = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert req_initial is not None
+    assert req_initial.status == "completed"
+    original_user_msg = await chat_repository.get_message_by_id(user_uuid, req_initial.user_message_id)
+    assert original_user_msg.content == "Original prompt"
+
+    # 2. Identical retry (normalized content matches) -> Replays cached response, zero new LLM calls
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res_retry = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Original prompt  \n", "idempotency_key": idempotency_key},
+        )
+    assert res_retry.status_code == 200
+    assert "replayed" in res_retry.text
+    assert spy_provider.call_count == initial_calls + 1
+
+    # 3. Conflicting reuse: Same key, DIFFERENT content ("Malicious modified prompt")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res_conflict = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Malicious modified prompt", "idempotency_key": idempotency_key},
+        )
+    # Must reject with HTTP 409 Conflict
+    assert res_conflict.status_code == 409
+    assert "conflicting" in res_conflict.text.lower() or "idempotency" in res_conflict.text.lower()
+
+    # Invariants verification:
+    # A. LLM was NOT invoked
+    assert spy_provider.call_count == initial_calls + 1
+
+    # B. Original user message was NOT modified
+    verify_user_msg = await chat_repository.get_message_by_id(user_uuid, req_initial.user_message_id)
+    assert verify_user_msg.content == "Original prompt"
+
+    # C. Original request lifecycle record was NOT altered
+    req_after_conflict = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert req_after_conflict.status == "completed"
+    assert req_after_conflict.user_message_id == req_initial.user_message_id
+    assert req_after_conflict.assistant_message_id == req_initial.assistant_message_id
+
+
+# ---------------------------------------------------------------------------
+# 19. Persistence Failure During Completion Recovery
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_persistence_failure_during_completion_reconciliation(monkeypatch):
+    """Simulate sequence:
+
+    1. LLM successfully generates response.
+    2. Assistant message is persisted.
+    3. Updating the corresponding chat_requests record fails.
+    4. Client retries using the same idempotency key.
+    Ensure AUREN reconciles existing assistant message without duplicate messages or re-invoking LLM.
+    """
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    token = create_token(user_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    idempotency_key = f"reconcile-fail-{uuid.uuid4()}"
+
+    initial_calls = spy_provider.call_count
+    fail_on_update = True
+    orig_update_status = chat_repository.update_chat_request_status
+
+    async def flaky_update_status(user_id, idempotency_key, status, assistant_message_id=None, **kwargs):
+        nonlocal fail_on_update
+        if fail_on_update and status == "completed":
+            fail_on_update = False
+            raise RuntimeError("Simulated database failure during chat_requests completion update")
+        await orig_update_status(
+            user_id=user_id,
+            idempotency_key=idempotency_key,
+            status=status,
+            assistant_message_id=assistant_message_id,
+        )
+
+    monkeypatch.setattr(chat_repository, "update_chat_request_status", flaky_update_status)
+
+    # Initial attempt: LLM succeeds, message persisted, but updating chat_requests throws
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res1 = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Prompt testing persistence failure", "idempotency_key": idempotency_key},
+        )
+    # The stream terminates with error event due to simulated failure
+    assert res1.status_code == 200
+    assert "event: error" in res1.text
+    assert spy_provider.call_count == initial_calls + 1
+
+    # Verify state in database after failure:
+    req_after_fail = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert req_after_fail is not None
+    assert req_after_fail.status != "completed"
+
+    # Crucial check: Assistant message was indeed persisted in step 2!
+    messages_after_fail = await chat_repository.get_messages(user_uuid, req_after_fail.conversation_id)
+    assistant_msgs_after_fail = [m for m in messages_after_fail if m.role == "assistant"]
+    assert len(assistant_msgs_after_fail) == 1
+    persisted_assistant_id = assistant_msgs_after_fail[0].id
+
+    # Step 4: Client retries with the EXACT SAME idempotency key (now database update will succeed)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+        res2 = await async_client.post(
+            "/api/v1/chat/completions",
+            headers=headers,
+            json={"message": "Prompt testing persistence failure", "idempotency_key": idempotency_key},
+        )
+    assert res2.status_code == 200
+    assert "event: done" in res2.text
+    assert "replayed" in res2.text
+
+    # RECONCILIATION GUARANTEES:
+    # 1. Did NOT invoke LLM again
+    assert spy_provider.call_count == initial_calls + 1
+
+    # 2. No duplicate assistant messages in database (exactly 1 assistant message)
+    final_messages = await chat_repository.get_messages(user_uuid, req_after_fail.conversation_id)
+    user_msgs = [m for m in final_messages if m.role == "user"]
+    assistant_msgs = [m for m in final_messages if m.role == "assistant"]
+    assert len(user_msgs) == 1, f"Expected 1 user message, found {len(user_msgs)}"
+    assert len(assistant_msgs) == 1, f"Expected 1 assistant message, found {len(assistant_msgs)}"
+    assert assistant_msgs[0].id == persisted_assistant_id
+
+    # 3. Request is reconciled to completed (NOT stuck in processing)
+    final_req = await chat_repository.get_chat_request(user_uuid, idempotency_key)
+    assert final_req.status == "completed"
+    assert final_req.assistant_message_id == persisted_assistant_id

@@ -23,6 +23,7 @@ from app.core.exceptions import (
     DatabaseConnectionError,
     DatabaseError,
     DatabaseOperationError,
+    IdempotencyConflictError,
 )
 from app.models.chat import ChatRequestModel, ConversationModel, MessageModel
 from app.services.chat.base_repository import BaseChatRepository
@@ -328,6 +329,16 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             rows = res_existing.json()
             if rows:
                 r = rows[0]
+                existing_normalized = "\n".join(line.rstrip() for line in r["content"].strip().splitlines())
+                incoming_normalized = "\n".join(line.rstrip() for line in content.strip().splitlines())
+                if existing_normalized != incoming_normalized:
+                    raise IdempotencyConflictError(
+                        f"Idempotency key '{idempotency_key}' was already used with different message content."
+                    )
+                if UUID(r["conversation_id"]) != conversation_id:
+                    raise IdempotencyConflictError(
+                        f"Idempotency key '{idempotency_key}' was already used with a different conversation."
+                    )
                 return MessageModel(
                     id=UUID(r["id"]),
                     conversation_id=UUID(r["conversation_id"]),
@@ -366,6 +377,12 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             )
             if existing.json():
                 r = existing.json()[0]
+                existing_normalized = "\n".join(line.rstrip() for line in r["content"].strip().splitlines())
+                incoming_normalized = "\n".join(line.rstrip() for line in content.strip().splitlines())
+                if existing_normalized != incoming_normalized or UUID(r["conversation_id"]) != conversation_id:
+                    raise IdempotencyConflictError(
+                        f"Idempotency key '{idempotency_key}' was already used with conflicting parameters."
+                    )
                 return MessageModel(
                     id=UUID(r["id"]),
                     conversation_id=UUID(r["conversation_id"]),
@@ -464,6 +481,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             status=r["status"],
             user_message_id=UUID(r["user_message_id"]),
             assistant_message_id=UUID(r["assistant_message_id"]) if r.get("assistant_message_id") else None,
+            request_fingerprint=r.get("request_fingerprint"),
             created_at=datetime.fromisoformat(r["created_at"]),
             updated_at=datetime.fromisoformat(r["updated_at"]),
         )
@@ -474,6 +492,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         idempotency_key: str,
         conversation_id: UUID,
         user_message_id: UUID,
+        request_fingerprint: Optional[str] = None,
     ) -> Tuple[bool, ChatRequestModel]:
         """Atomically claim a chat request in Supabase PostgreSQL.
 
@@ -488,6 +507,8 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             "status": "processing",
             "user_message_id": str(user_message_id),
         }
+        if request_fingerprint:
+            payload["request_fingerprint"] = request_fingerprint
 
         res = await self._request(
             method="POST",
@@ -507,6 +528,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                 status=r["status"],
                 user_message_id=UUID(r["user_message_id"]),
                 assistant_message_id=UUID(r["assistant_message_id"]) if r.get("assistant_message_id") else None,
+                request_fingerprint=r.get("request_fingerprint"),
                 created_at=datetime.fromisoformat(r["created_at"]),
                 updated_at=datetime.fromisoformat(r["updated_at"]),
             )
@@ -518,6 +540,45 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                 return False, existing
 
         raise DatabaseOperationError(f"Unexpected response claiming chat request: {res.status_code}")
+
+    async def find_assistant_message_for_request(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        user_message_id: UUID,
+    ) -> Optional[MessageModel]:
+        """Find an assistant message in a conversation produced for a specific user message."""
+        res = await self._request(
+            method="GET",
+            path="/messages",
+            params={
+                "conversation_id": f"eq.{conversation_id}",
+                "user_id": f"eq.{user_id}",
+                "role": "eq.assistant",
+                "order": "created_at.desc",
+                "select": "*",
+            },
+        )
+        rows = res.json()
+        for r in rows:
+            meta = r.get("metadata", {})
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except Exception:
+                    meta = {}
+            if meta.get("user_message_id") == str(user_message_id):
+                return MessageModel(
+                    id=UUID(r["id"]),
+                    conversation_id=UUID(r["conversation_id"]),
+                    user_id=UUID(r["user_id"]),
+                    role=r["role"],
+                    content=r["content"],
+                    idempotency_key=r.get("idempotency_key"),
+                    metadata=meta,
+                    created_at=datetime.fromisoformat(r["created_at"]),
+                )
+        return None
 
     async def update_chat_request_status(
         self,
