@@ -1012,3 +1012,75 @@ async def test_persistence_failure_during_completion_reconciliation(monkeypatch)
     final_req = await chat_repository.get_chat_request(user_uuid, idempotency_key)
     assert final_req.status == "completed"
     assert final_req.assistant_message_id == persisted_assistant_id
+
+
+@pytest.mark.asyncio
+async def test_list_conversations_database_aggregation_and_isolation():
+    """Verify list_conversations uses database-side aggregation for message counts and enforces strict user isolation."""
+    user_a_id = str(uuid.uuid4())
+    user_b_id = str(uuid.uuid4())
+    token_a = create_token(user_a_id, "user_a@example.com")
+    token_b = create_token(user_b_id, "user_b@example.com")
+
+    # User A creates two conversations:
+    # Conv 1: will have 2 messages (1 user, 1 assistant)
+    res_a1 = client.post(
+        "/api/v1/chat/completions",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"message": "Message 1 for Thread A1"},
+    )
+    assert res_a1.status_code == 200
+
+    # Retrieve conversation 1 ID
+    convs_a = await chat_repository.list_conversations(uuid.UUID(user_a_id))
+    assert len(convs_a) == 1
+    conv_a1_id = str(convs_a[0].id)
+
+    # Conv 2: explicitly created with 0 messages
+    res_a2 = client.post(
+        "/api/v1/chat/conversations",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"title": "Empty Thread A2"},
+    )
+    assert res_a2.status_code == 201
+    conv_a2_id = res_a2.json()["id"]
+
+    # User B creates a conversation
+    res_b = client.post(
+        "/api/v1/chat/completions",
+        headers={"Authorization": f"Bearer {token_b}"},
+        json={"message": "Message for User B"},
+    )
+    assert res_b.status_code == 200
+
+    # User A queries GET /api/v1/chat/conversations
+    res_list_a = client.get(
+        "/api/v1/chat/conversations",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert res_list_a.status_code == 200
+    list_a_data = res_list_a.json()
+    assert len(list_a_data) == 2
+
+    # Map by id
+    map_a = {c["id"]: c for c in list_a_data}
+    assert conv_a1_id in map_a
+    assert conv_a2_id in map_a
+
+    # Thread A1 has exactly 2 messages (user message + assistant message)
+    assert map_a[conv_a1_id]["message_count"] == 2
+    # Thread A2 has exactly 0 messages
+    assert map_a[conv_a2_id]["message_count"] == 0
+
+    # User B queries GET /api/v1/chat/conversations
+    res_list_b = client.get(
+        "/api/v1/chat/conversations",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert res_list_b.status_code == 200
+    list_b_data = res_list_b.json()
+    assert len(list_b_data) == 1
+    # User B's thread has 2 messages
+    assert list_b_data[0]["message_count"] == 2
+    # User B cannot see User A's threads
+    assert list_b_data[0]["id"] not in map_a

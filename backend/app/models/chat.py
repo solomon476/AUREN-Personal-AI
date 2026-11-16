@@ -40,6 +40,7 @@ class ConversationModel(BaseModel):
     title: str = "New Conversation"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    message_count: int = 0
 
 
 class ChatRequestModel(BaseModel):

@@ -325,7 +325,16 @@ class SQLiteChatRepository(BaseChatRepository):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?",
+                """
+                SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at,
+                       COUNT(m.id) AS message_count
+                FROM conversations c
+                LEFT JOIN messages m ON m.conversation_id = c.id AND m.user_id = c.user_id
+                WHERE c.user_id = ?
+                GROUP BY c.id, c.user_id, c.title, c.created_at, c.updated_at
+                ORDER BY c.updated_at DESC
+                LIMIT ?
+                """,
                 (str(user_id), limit),
             )
             rows = cursor.fetchall()
@@ -337,6 +346,7 @@ class SQLiteChatRepository(BaseChatRepository):
                 title=r["title"],
                 created_at=datetime.fromisoformat(r["created_at"]),
                 updated_at=datetime.fromisoformat(r["updated_at"]),
+                message_count=int(r["message_count"]) if "message_count" in r.keys() else 0,
             )
             for r in rows
         ]

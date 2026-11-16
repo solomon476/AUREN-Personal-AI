@@ -476,3 +476,50 @@ async def test_supabase_repo_unauthorized_rpc_call_raises_auth_error():
 
         with pytest.raises(DatabaseAuthError):
             await repo.update_chat_request_status(USER_ID, "key-unauth", status="completed", assistant_message_id=uuid4())
+
+
+@pytest.mark.asyncio
+async def test_supabase_repo_list_conversations_with_aggregated_counts():
+    """Verify list_conversations requests messages(count) via PostgREST and properly aggregates message counts."""
+    c1_id = uuid4()
+    c2_id = uuid4()
+    mock_rows = [
+        {
+            "id": str(c1_id),
+            "user_id": str(USER_ID),
+            "title": "Thread with Messages",
+            "created_at": "2026-11-16T00:00:00+00:00",
+            "updated_at": "2026-11-16T00:05:00+00:00",
+            "messages": [{"count": 7}],
+        },
+        {
+            "id": str(c2_id),
+            "user_id": str(USER_ID),
+            "title": "Empty Thread",
+            "created_at": "2026-11-16T00:00:00+00:00",
+            "updated_at": "2026-11-16T00:01:00+00:00",
+            "messages": [{"count": 0}],
+        },
+    ]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert "/conversations" in str(request.url)
+        assert f"user_id=eq.{USER_ID}" in str(request.url)
+        assert "messages(count)" in str(request.url) or "messages%28count%29" in str(request.url)
+        return httpx.Response(200, json=mock_rows)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token=TEST_USER_TOKEN,
+            http_client=mock_client,
+        )
+
+        convs = await repo.list_conversations(USER_ID)
+        assert len(convs) == 2
+        assert convs[0].id == c1_id
+        assert convs[0].message_count == 7
+        assert convs[1].id == c2_id
+        assert convs[1].message_count == 0

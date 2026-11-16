@@ -221,7 +221,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         raise DatabaseOperationError("Failed to resolve or create conversation.")
 
     async def list_conversations(self, user_id: UUID, limit: int = 50) -> List[ConversationModel]:
-        """List conversation threads owned by user_id, ordered by updated_at descending."""
+        """List conversation threads owned by user_id, ordered by updated_at descending with aggregated message counts."""
         res = await self._request(
             method="GET",
             path="/conversations",
@@ -229,20 +229,33 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                 "user_id": f"eq.{user_id}",
                 "order": "updated_at.desc",
                 "limit": str(limit),
-                "select": "*",
+                "select": "id,user_id,title,created_at,updated_at,messages(count)",
             },
         )
         rows = res.json()
-        return [
-            ConversationModel(
-                id=UUID(r["id"]),
-                user_id=UUID(r["user_id"]),
-                title=r["title"],
-                created_at=datetime.fromisoformat(r["created_at"]),
-                updated_at=datetime.fromisoformat(r["updated_at"]),
+        results = []
+        for r in rows:
+            msg_count = 0
+            if "messages" in r:
+                msgs = r["messages"]
+                if isinstance(msgs, list) and len(msgs) > 0 and isinstance(msgs[0], dict) and "count" in msgs[0]:
+                    msg_count = int(msgs[0]["count"])
+                elif isinstance(msgs, list):
+                    msg_count = len(msgs)
+            elif "message_count" in r:
+                msg_count = int(r["message_count"])
+
+            results.append(
+                ConversationModel(
+                    id=UUID(r["id"]),
+                    user_id=UUID(r["user_id"]),
+                    title=r["title"],
+                    created_at=datetime.fromisoformat(r["created_at"]),
+                    updated_at=datetime.fromisoformat(r["updated_at"]),
+                    message_count=msg_count,
+                )
             )
-            for r in rows
-        ]
+        return results
 
     async def get_messages(
         self,

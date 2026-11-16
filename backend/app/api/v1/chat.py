@@ -107,19 +107,16 @@ async def list_conversations(
     """Return all conversations owned by the caller."""
     try:
         conversations = await repo.list_conversations(current_user.id)
-        results = []
-        for c in conversations:
-            messages = await repo.get_messages(current_user.id, c.id)
-            results.append(
-                ConversationResponse(
-                    id=c.id,
-                    title=c.title,
-                    created_at=c.created_at,
-                    updated_at=c.updated_at,
-                    message_count=len(messages),
-                )
+        return [
+            ConversationResponse(
+                id=c.id,
+                title=c.title,
+                created_at=c.created_at,
+                updated_at=c.updated_at,
+                message_count=c.message_count,
             )
-        return results
+            for c in conversations
+        ]
     except DatabaseAuthError as exc:
         logger.error("Database auth error: %s", exc.technical_details)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database authentication error.")

@@ -1,8 +1,9 @@
 /**
- * Persistent Chat & Streaming Conversational View for Phase 3A.
+ * Persistent Chat & Streaming Conversational View.
+ * Enhanced with TanStack Router navigation and TanStack Query state caching.
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Send, 
   Square, 
@@ -15,25 +16,41 @@ import {
   Loader2,
   RotateCcw 
 } from 'lucide-react';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import { 
-  Conversation, 
   ChatMessage, 
-  listConversations, 
-  createConversation, 
-  getConversationMessages, 
   streamChat 
 } from '../../api/chat';
 import { useAuth } from '../../context/AuthContext';
+import { useConversations, useCreateConversation } from '../../hooks/useConversations';
+import { useConversationMessages, useInvalidateMessages } from '../../hooks/useConversationMessages';
 
-export const ChatView: React.FC = () => {
+interface ChatViewProps {
+  conversationId?: string;
+}
+
+export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversationId }) => {
   const { user } = useAuth();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const routeParams = useParams({ strict: false }) as { conversationId?: string };
+
+  const activeConversationId = propConversationId || routeParams?.conversationId || null;
+
+  // TanStack Query Hooks for Server State Caching
+  const { data: conversations = [], isLoading: isLoadingConversations } = useConversations(user?.id);
+  const createConversationMutation = useCreateConversation(user?.id);
+  const { 
+    data: fetchedMessages, 
+    isLoading: isLoadingMessages, 
+    error: messagesError 
+  } = useConversationMessages(user?.id, activeConversationId || undefined);
+  const invalidateMessages = useInvalidateMessages();
+
+  // Local State for interactive stream accumulation and input
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingRetry, setPendingRetry] = useState<{
     message: string;
@@ -52,70 +69,46 @@ export const ChatView: React.FC = () => {
     scrollToBottom();
   }, [messages, streamingContent]);
 
-  // Load conversations list
-  const loadConversations = useCallback(async () => {
-    if (!user) return;
-    try {
-      const data = await listConversations();
-      setConversations(data);
-      if (data.length > 0 && !activeConversationId) {
-        setActiveConversationId(data[0].id);
-      }
-    } catch (err) {
-      console.warn('Failed to load conversations:', err);
-    }
-  }, [user, activeConversationId]);
-
+  // Sync server-cached messages into local state when conversation loads
   useEffect(() => {
-    loadConversations();
-  }, [loadConversations]);
-
-  // Load messages when active conversation changes
-  useEffect(() => {
-    if (!activeConversationId || !user) {
+    if (fetchedMessages) {
+      setMessages(fetchedMessages);
+      setErrorMessage(null);
+    } else if (!activeConversationId) {
       setMessages([]);
-      return;
     }
+  }, [fetchedMessages, activeConversationId]);
 
-    let isMounted = true;
-    setIsLoadingMessages(true);
-    setErrorMessage(null);
-
-    getConversationMessages(activeConversationId)
-      .then((data) => {
-        if (isMounted) {
-          setMessages(data);
-          setIsLoadingMessages(false);
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          setErrorMessage(err instanceof Error ? err.message : 'Could not load messages');
-          setIsLoadingMessages(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [activeConversationId, user]);
+  // Handle invalid conversation ID or fetch failure safely
+  useEffect(() => {
+    if (messagesError) {
+      setErrorMessage(
+        messagesError instanceof Error ? messagesError.message : 'Could not load conversation messages'
+      );
+    }
+  }, [messagesError]);
 
   const handleNewConversation = async () => {
     if (isStreaming) return;
     try {
-      const newConv = await createConversation('New Conversation');
-      setConversations((prev) => [newConv, ...prev]);
-      setActiveConversationId(newConv.id);
+      const newConv = await createConversationMutation.mutateAsync('New Conversation');
       setMessages([]);
       setErrorMessage(null);
+      navigate({ to: '/chat/$conversationId', params: { conversationId: newConv.id } });
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to create conversation');
     }
   };
 
+  const handleSelectConversation = (id: string) => {
+    if (isStreaming) return;
+    setErrorMessage(null);
+    navigate({ to: '/chat/$conversationId', params: { conversationId: id } });
+  };
+
   const executeChatStream = async (
     messageText: string,
-    conversationId: string | undefined,
+    targetConversationId: string | undefined,
     idempotencyKey: string,
   ) => {
     setIsStreaming(true);
@@ -126,12 +119,11 @@ export const ChatView: React.FC = () => {
     try {
       await streamChat(
         messageText,
-        conversationId,
+        targetConversationId,
         {
           onMetadata: (meta) => {
             if (!activeConversationId || activeConversationId !== meta.conversation_id) {
-              setActiveConversationId(meta.conversation_id);
-              loadConversations();
+              navigate({ to: '/chat/$conversationId', params: { conversationId: meta.conversation_id } });
             }
           },
           onToken: (token) => {
@@ -151,11 +143,15 @@ export const ChatView: React.FC = () => {
             });
             setPendingRetry(null);
             setIsStreaming(false);
-            loadConversations();
+
+            // Re-fetch conversation messages and conversations list in background
+            if (activeConversationId) {
+              invalidateMessages(user?.id, activeConversationId);
+            }
           },
           onError: (err) => {
             setErrorMessage(err);
-            setPendingRetry({ message: messageText, conversationId, idempotencyKey });
+            setPendingRetry({ message: messageText, conversationId: targetConversationId, idempotencyKey });
             setIsStreaming(false);
           },
         },
@@ -166,7 +162,7 @@ export const ChatView: React.FC = () => {
       if (!abortControllerRef.current?.signal.aborted) {
         const msg = err instanceof Error ? err.message : 'Streaming failed';
         setErrorMessage(msg);
-        setPendingRetry({ message: messageText, conversationId, idempotencyKey });
+        setPendingRetry({ message: messageText, conversationId: targetConversationId, idempotencyKey });
       }
       setIsStreaming(false);
     }
@@ -209,13 +205,13 @@ export const ChatView: React.FC = () => {
   const activeConv = conversations.find((c) => c.id === activeConversationId);
 
   return (
-    <div className="flex h-[calc(100vh-12rem)] min-h-[500px] bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl backdrop-blur">
+    <div className="flex h-[calc(100vh-5rem)] min-h-[500px] bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl backdrop-blur">
       {/* Sidebar: Threads History */}
       <aside className="w-64 sm:w-72 bg-slate-950/80 border-r border-slate-800/80 flex flex-col flex-shrink-0">
         <div className="p-3 border-b border-slate-800">
           <button
             onClick={handleNewConversation}
-            disabled={isStreaming}
+            disabled={isStreaming || createConversationMutation.isPending}
             className="w-full flex items-center justify-center space-x-2 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 transition"
           >
             <Plus className="h-4 w-4" />
@@ -224,7 +220,12 @@ export const ChatView: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {conversations.length === 0 ? (
+          {isLoadingConversations ? (
+            <div className="p-4 text-center text-xs text-slate-500 flex items-center justify-center space-x-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+              <span>Loading threads...</span>
+            </div>
+          ) : conversations.length === 0 ? (
             <div className="p-4 text-center text-xs text-slate-500">
               No conversations yet. Start one above!
             </div>
@@ -234,9 +235,7 @@ export const ChatView: React.FC = () => {
               return (
                 <button
                   key={c.id}
-                  onClick={() => {
-                    if (!isStreaming) setActiveConversationId(c.id);
-                  }}
+                  onClick={() => handleSelectConversation(c.id)}
                   className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg text-left text-xs transition truncate ${
                     isActive
                       ? 'bg-indigo-950/60 border border-indigo-800/50 text-indigo-200'
@@ -245,6 +244,11 @@ export const ChatView: React.FC = () => {
                 >
                   <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
                   <span className="truncate flex-1 font-medium">{c.title}</span>
+                  {typeof c.message_count === 'number' && c.message_count > 0 && (
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {c.message_count}
+                    </span>
+                  )}
                 </button>
               );
             })
@@ -263,7 +267,7 @@ export const ChatView: React.FC = () => {
             </h3>
           </div>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-            SSE Stream &bull; Backend Verified
+            SSE Stream &bull; TanStack Query Cached
           </span>
         </div>
 
@@ -349,7 +353,7 @@ export const ChatView: React.FC = () => {
                   <span>{errorMessage}</span>
                 </div>
               </div>
-              {pendingRetry && (
+              {pendingRetry ? (
                 <button
                   type="button"
                   onClick={handleRetry}
@@ -360,7 +364,15 @@ export const ChatView: React.FC = () => {
                   <RotateCcw className="h-3.5 w-3.5" />
                   <span>Retry</span>
                 </button>
-              )}
+              ) : activeConversationId && messagesError ? (
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: '/chat' })}
+                  className="ml-3 px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200 text-xs font-medium"
+                >
+                  Return to Chat
+                </button>
+              ) : null}
             </div>
           )}
 
@@ -417,4 +429,3 @@ export const ChatView: React.FC = () => {
     </div>
   );
 };
-
