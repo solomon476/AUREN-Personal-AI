@@ -6,6 +6,7 @@ import re
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from app.services.embeddings.base import BaseEmbeddingProvider
 from app.services.llm.base import BaseLLMProvider, ChatMessage
 from app.services.memory.models import ExtractedMemoryItem
 from app.services.memory.queue_sanitizer import sanitize_extraction_error
@@ -47,12 +48,14 @@ class MemoryExtractionWorker:
         worker_id: str,
         db_pool,
         llm_provider: BaseLLMProvider,
+        embedding_provider: Optional[BaseEmbeddingProvider] = None,
         batch_size: int = 5,
         lease_seconds: int = 300,
     ):
         self.worker_id = worker_id
         self.db_pool = db_pool
         self.llm_provider = llm_provider
+        self.embedding_provider = embedding_provider
         self.batch_size = batch_size
         self.lease_seconds = lease_seconds
 
@@ -210,11 +213,17 @@ class MemoryExtractionWorker:
                 assistant_text=source["assistant_content"],
             )
 
-            # 3. Ingest each extracted memory
-            for item in extracted_items:
-                await self.ingest_memory(conn, job_id, claim_token, item)
+            # 3. Generate embeddings if embedding provider configured
+            embeddings: List[Optional[List[float]]] = [None] * len(extracted_items)
+            if extracted_items and self.embedding_provider is not None:
+                texts = [item.content for item in extracted_items]
+                embeddings = await self.embedding_provider.embed_batch(texts)
 
-            # 4. Atomically complete the job with terminal lease cleanup
+            # 4. Ingest each extracted memory with its vector embedding
+            for item, emb in zip(extracted_items, embeddings):
+                await self.ingest_memory(conn, job_id, claim_token, item, embedding=emb)
+
+            # 5. Atomically complete the job with terminal lease cleanup
             await self.complete_job(conn, job_id, claim_token)
             return True
 

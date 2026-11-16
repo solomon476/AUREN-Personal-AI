@@ -348,11 +348,18 @@ class ChatService:
 
         if settings.MEMORY_RETRIEVAL_ENABLED:
             try:
+                from app.services.embeddings.factory import get_embedding_provider
                 from app.services.memory.context_manager import MemoryContextManager
                 from app.services.memory.retriever import MemoryRetriever
 
+                embedding_provider = None
+                try:
+                    embedding_provider = get_embedding_provider(settings)
+                except Exception as emb_init_err:
+                    logger.warning("Could not initialize embedding provider for retrieval: %s", emb_init_err)
+
                 retriever = MemoryRetriever(repository=repo)
-                ctx_mgr = MemoryContextManager(retriever=retriever)
+                ctx_mgr = MemoryContextManager(retriever=retriever, embedding_provider=embedding_provider)
                 mem_context = await ctx_mgr.build_memory_context(
                     user_id=user.id,
                     query_text=request.message,

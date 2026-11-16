@@ -184,6 +184,14 @@ class Settings(BaseSettings):
     MEMORY_SEARCH_LIMIT: int = 5
     MEMORY_SIMILARITY_THRESHOLD: float = 0.0
 
+    # Memory Extraction Background Worker Configuration
+    WORKER_DATABASE_URL: Optional[str] = None
+    MEMORY_WORKER_ENABLED: bool = True
+    MEMORY_WORKER_POLL_INTERVAL_SECONDS: float = 2.0
+    MEMORY_WORKER_BATCH_SIZE: int = 5
+    MEMORY_WORKER_LEASE_SECONDS: int = 300
+    MEMORY_WORKER_CONCURRENCY: int = 2
+
     # Journal Privacy & Consent Configuration
     JOURNAL_HMAC_SECRET: Optional[SecretStr] = Field(
         default=None,

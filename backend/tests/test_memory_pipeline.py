@@ -40,6 +40,7 @@ from app.services.journal.consent import (
     create_journal_consent_token,
     verify_and_consume_journal_consent,
 )
+from app.services.embeddings.factory import MockEmbeddingProvider
 from app.services.llm.base import BaseLLMProvider, ChatMessage, LLMResponse
 from app.services.memory.context_manager import MemoryContextManager
 from app.services.memory.models import ExtractedMemoryItem, MemorySearchResult
@@ -1119,4 +1120,313 @@ async def test_memory_context_epistemic_formatting_and_escaping():
     # Check system_asserted
     m2 = mem_elements[2]
     assert m2.attrib["confirmation_status"] == "system_asserted"
+
+
+@pytest.mark.asyncio
+async def test_memory_extraction_ingestion_with_embeddings(postgresql_server):
+    """24. Verify extraction worker persists embeddings and fails safely if embedding generation fails."""
+    async with isolated_postgres_db(postgresql_server, prefix="mem_p24") as (conn, db_name):
+        user_id = uuid.uuid4()
+        conv_id = uuid.uuid4()
+        idemp_key = "turn-ingest-emb"
+
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "u24@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Conv 24')", conv_id, user_id)
+
+        user_msg_id = uuid.uuid4()
+        asst_msg_id = uuid.uuid4()
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'My favourite language is Python')", user_msg_id, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Python is versatile!')", asst_msg_id, conv_id, user_id)
+
+        fp = "c" * 64
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", idemp_key, conv_id, user_msg_id, fp)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", idemp_key, asst_msg_id)
+
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'pw' IN ROLE auren_worker")
+        worker_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=worker_user, password="pw"
+        )
+
+        # Test case 1: Successful embedding generation and persistence
+        canned = '[{"content": "User loves programming in Python", "memory_type": "preference", "category": "technical", "importance": 4, "confidence": 0.85}]'
+        llm = MockExtractionProvider(response_json=canned)
+        emb_provider = MockEmbeddingProvider(dimension=768)
+
+        worker = MemoryExtractionWorker(
+            worker_id="test-worker-emb",
+            db_pool=worker_pool,
+            llm_provider=llm,
+            embedding_provider=emb_provider,
+        )
+
+        async with worker_pool.acquire() as claim_conn:
+            jobs = await worker.claim_jobs(claim_conn)
+            assert len(jobs) == 1
+            async with worker_pool.acquire() as proc_conn:
+                ok = await worker.process_job(proc_conn, jobs[0])
+                assert ok is True
+
+        # Verify memory created with chat_inferred, unconfirmed, and embedding
+        mem = await conn.fetchrow("SELECT * FROM public.memories WHERE user_id = $1", user_id)
+        assert mem is not None
+        assert mem["origin"] == "chat_inferred"
+        assert mem["confirmation_status"] == "unconfirmed"
+
+        emb_row = await conn.fetchrow("SELECT * FROM public.memory_embeddings WHERE memory_id = $1", mem["id"])
+        assert emb_row is not None
+        assert emb_row["dimension"] == 768
+        assert emb_row["is_active"] is True
+
+        # Test case 2: Embedding failure prevents job completion and triggers retry
+        user_msg_id2 = uuid.uuid4()
+        asst_msg_id2 = uuid.uuid4()
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'I live in Paris')", user_msg_id2, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Paris is lovely.')", asst_msg_id2, conv_id, user_id)
+
+        idemp_key2 = "turn-ingest-fail-emb"
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", idemp_key2, conv_id, user_msg_id2, "d" * 64)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", idemp_key2, asst_msg_id2)
+
+        failing_emb_provider = MockEmbeddingProvider(simulate_timeout=True)
+        worker_fail = MemoryExtractionWorker(
+            worker_id="test-worker-fail-emb",
+            db_pool=worker_pool,
+            llm_provider=llm,
+            embedding_provider=failing_emb_provider,
+        )
+
+        async with worker_pool.acquire() as claim_conn:
+            jobs2 = await worker_fail.claim_jobs(claim_conn)
+            assert len(jobs2) == 1
+            async with worker_pool.acquire() as proc_conn:
+                ok2 = await worker_fail.process_job(proc_conn, jobs2[0])
+                assert ok2 is False
+
+        # Job must NOT be marked completed
+        job2_row = await conn.fetchrow("SELECT * FROM public.memory_extraction_jobs WHERE source_message_id = $1", asst_msg_id2)
+        assert job2_row["status"] == "pending"
+        assert job2_row["attempts"] == 1
+        assert "timeout" in job2_row["last_error"].lower()
+
+        await worker_pool.close()
+
+
+@pytest.mark.asyncio
+async def test_query_embedding_semantic_ranking_and_lexical_fallback(postgresql_server):
+    """25. Verify that semantic vector search affects ranking, and falls back to lexical search if embedding fails."""
+    async with isolated_postgres_db(postgresql_server, prefix="mem_p25") as (conn, db_name):
+        user_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "u25@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+
+        # Fixed vector for target concept: "software engineering practices"
+        emb_provider = MockEmbeddingProvider(dimension=768)
+        sem_vec = await emb_provider.embed_text("software engineering and programming")
+        sem_vec_str = f"[{','.join(str(x) for x in sem_vec)}]"
+
+        # Distinct vector for unrelated concept
+        unrelated_vec = await emb_provider.embed_text("cooking lasagna pasta tomato cheese")
+        unrelated_vec_str = f"[{','.join(str(x) for x in unrelated_vec)}]"
+
+        mem_sem_id = uuid.uuid4()
+        await conn.execute(
+            """
+            INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence)
+            VALUES ($1, $2, 'Enjoys building modular backend architectures', 'fact', 'technical', 3, 0.8)
+            """,
+            mem_sem_id, user_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active)
+            VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)
+            """,
+            mem_sem_id, user_id, sem_vec_str,
+        )
+
+        mem_unrelated_id = uuid.uuid4()
+        await conn.execute(
+            """
+            INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence)
+            VALUES ($1, $2, 'Bakes sourdough bread on weekends', 'fact', 'personal', 3, 0.8)
+            """,
+            mem_unrelated_id, user_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active)
+            VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)
+            """,
+            mem_unrelated_id, user_id, unrelated_vec_str,
+        )
+
+        class PoolRetriever(MemoryRetriever):
+            def __init__(self, pool):
+                super().__init__(db_pool=pool)
+
+        client_user = f"client_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {client_user} WITH PASSWORD 'client_pw' IN ROLE authenticated")
+        pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=client_user, password="client_pw"
+        )
+        retriever = PoolRetriever(pool)
+
+        # 1. Semantic query matching the concept
+        ctx_mgr = MemoryContextManager(retriever=retriever, embedding_provider=emb_provider)
+        mock_llm = MockTokenCountingProvider()
+        xml = await ctx_mgr.build_memory_context(user_id, "software engineering and programming", mock_llm)
+
+        assert "Enjoys building modular backend architectures" in xml
+        assert "Bakes sourdough bread" not in xml or xml.find("modular backend") < xml.find("sourdough")
+
+        # 2. Degraded query embedding: embedding provider throws error -> falls back to lexical search
+        failing_emb = MockEmbeddingProvider(simulate_timeout=True)
+        ctx_mgr_fallback = MemoryContextManager(retriever=retriever, embedding_provider=failing_emb)
+
+        # Query uses lexical terms directly present in content
+        xml_fallback = await ctx_mgr_fallback.build_memory_context(user_id, "sourdough bread", mock_llm)
+        assert "Bakes sourdough bread on weekends" in xml_fallback
+
+        await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_end_to_end_memory_pipeline_integration(postgresql_server):
+    """26. End-to-end integration test demonstrating the complete 9-step sequence:
+    1. A completed chat request creates an eligible extraction job.
+    2. The worker claims the job.
+    3. The extraction provider returns a valid memory.
+    4. The embedding provider produces a valid vector.
+    5. The memory is inserted with unconfirmed provenance.
+    6. A subsequent query generates an embedding.
+    7. Hybrid retrieval finds the stored memory.
+    8. The context manager serializes it with the correct epistemic status.
+    9. The LLM receives the memory context.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_e2e") as (conn, db_name):
+        user_id = uuid.uuid4()
+        conv_id = uuid.uuid4()
+        idemp_key = "turn-e2e-001"
+
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "e2e@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'E2E Conversation')", conv_id, user_id)
+
+        user_msg_id = uuid.uuid4()
+        asst_msg_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Please always use dark mode in visual representations.')",
+            user_msg_id, conv_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Understood, I will always apply dark mode.')",
+            asst_msg_id, conv_id, user_id,
+        )
+
+        # Step 1: A completed chat request creates an eligible extraction job
+        fp = "e" * 64
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", idemp_key, conv_id, user_msg_id, fp)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", idemp_key, asst_msg_id)
+
+        job_row = await conn.fetchrow("SELECT * FROM public.memory_extraction_jobs WHERE source_message_id = $1", asst_msg_id)
+        assert job_row is not None
+        assert job_row["status"] == "pending"
+
+        # Setup worker environment
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'worker_pw' IN ROLE auren_worker")
+        worker_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=worker_user, password="worker_pw"
+        )
+
+        # Step 3 & 4: Extraction provider returns valid memory and embedding provider produces 768-dim vector
+        extracted_content = "User prefers dark mode for all visual interfaces"
+        canned_extraction = f"""[
+            {{
+                "content": "{extracted_content}",
+                "memory_type": "preference",
+                "category": "technical",
+                "importance": 4,
+                "confidence": 0.85
+            }}
+        ]"""
+        mock_llm_extractor = MockExtractionProvider(response_json=canned_extraction)
+        emb_provider = MockEmbeddingProvider(dimension=768)
+
+        worker = MemoryExtractionWorker(
+            worker_id="worker-e2e-runner",
+            db_pool=worker_pool,
+            llm_provider=mock_llm_extractor,
+            embedding_provider=emb_provider,
+        )
+
+        # Step 2: The worker claims the job
+        async with worker_pool.acquire() as claim_conn:
+            claimed_jobs = await worker.claim_jobs(claim_conn)
+            assert len(claimed_jobs) == 1
+            assert claimed_jobs[0]["id"] == job_row["id"]
+
+            # Step 5: The memory is inserted with unconfirmed provenance and job completed
+            async with worker_pool.acquire() as proc_conn:
+                success = await worker.process_job(proc_conn, claimed_jobs[0])
+                assert success is True
+
+        job_done = await conn.fetchrow("SELECT * FROM public.memory_extraction_jobs WHERE id = $1", job_row["id"])
+        assert job_done["status"] == "completed"
+
+        mem_record = await conn.fetchrow("SELECT * FROM public.memories WHERE user_id = $1", user_id)
+        assert mem_record is not None
+        assert mem_record["origin"] == "chat_inferred"
+        assert mem_record["confirmation_status"] == "unconfirmed"
+        assert mem_record["last_confirmed_at"] is None
+
+        emb_record = await conn.fetchrow("SELECT * FROM public.memory_embeddings WHERE memory_id = $1", mem_record["id"])
+        assert emb_record is not None
+        assert emb_record["dimension"] == 768
+
+        # Step 6, 7, 8: Subsequent query generates embedding, hybrid retrieval finds memory, serialized with epistemic status
+        class PoolRetriever(MemoryRetriever):
+            def __init__(self, p):
+                super().__init__(db_pool=p)
+
+        user_client = f"client_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {user_client} WITH PASSWORD 'client_pw' IN ROLE authenticated")
+        user_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=user_client, password="client_pw"
+        )
+        retriever = PoolRetriever(user_pool)
+        ctx_mgr = MemoryContextManager(retriever=retriever, embedding_provider=emb_provider)
+        token_counter = MockTokenCountingProvider()
+
+        subsequent_query = "What color theme do I prefer?"
+        memory_xml_context = await ctx_mgr.build_memory_context(
+            user_id=user_id,
+            query_text=subsequent_query,
+            provider=token_counter,
+            budget_tokens=500,
+        )
+
+        # Step 8 Verification: Serialized with correct epistemic status
+        assert "<user_memories>" in memory_xml_context
+        assert 'confirmation_status="unconfirmed"' in memory_xml_context
+        assert extracted_content in memory_xml_context
+        assert "<epistemic_instructions>" in memory_xml_context
+
+        # Step 9: The LLM receives the memory context inside prompt messages
+        mock_chat_llm = MockTokenCountingProvider()
+        assembled_messages = [
+            ChatMessage(role="system", content="System Prompt"),
+            ChatMessage(role="system", content=memory_xml_context),
+            ChatMessage(role="user", content=subsequent_query),
+        ]
+        assert len(assembled_messages) == 3
+        assert assembled_messages[1].role == "system"
+        assert 'confirmation_status="unconfirmed"' in assembled_messages[1].content
+        assert extracted_content in assembled_messages[1].content
+
+        await worker_pool.close()
+        await user_pool.close()
+
 

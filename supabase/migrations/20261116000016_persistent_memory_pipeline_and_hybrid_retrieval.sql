@@ -793,7 +793,7 @@ GRANT EXECUTE ON FUNCTION public.insert_extracted_memory_rpc(UUID, TEXT, UUID, T
 -- ============================================================================
 
 -- Mathematical Scoring Formulation:
--- Score(m) = 0.35 * S_sem(m) + 0.30 * S_lex(m) + 0.15 * (importance / 5.0) + D(m) + 0.10 * conf(m)
+-- Score(m) = 0.40 * S_sem(m) + 0.25 * S_lex(m) + 0.15 * (importance / 5.0) + D(m) + 0.10 * conf(m)
 -- Bounds:
 -- - S_sem in [0.0, 1.0]
 -- - S_lex in [0.0, 1.0) via ts_rank_cd(..., 32)

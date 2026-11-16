@@ -6,6 +6,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from app.core.config import settings
+from app.services.embeddings.base import BaseEmbeddingProvider
 from app.services.llm.base import BaseLLMProvider
 from app.services.memory.models import MemorySearchResult
 from app.services.memory.retriever import MemoryRetriever
@@ -16,8 +17,13 @@ logger = logging.getLogger(__name__)
 class MemoryContextManager:
     """Manages memory retrieval, strict native token budget enforcement, and context XML formatting."""
 
-    def __init__(self, retriever: Optional[MemoryRetriever] = None):
+    def __init__(
+        self,
+        retriever: Optional[MemoryRetriever] = None,
+        embedding_provider: Optional[BaseEmbeddingProvider] = None,
+    ):
         self._retriever = retriever or MemoryRetriever()
+        self._embedding_provider = embedding_provider
 
     def _format_memory_xml(self, memories: List[MemorySearchResult]) -> str:
         """Serializes memories into a safe XML context block with untrusted data boundary and epistemic instructions."""
@@ -65,11 +71,24 @@ class MemoryContextManager:
         """
         budget = budget_tokens if budget_tokens is not None else settings.MEMORY_CONTEXT_BUDGET_TOKENS
 
-        # 1. Retrieve candidates via hybrid retrieval
+        # 1. Generate query embedding if embedding provider is available (with graceful lexical degradation)
+        actual_query_embedding = query_embedding
+        if actual_query_embedding is None and self._embedding_provider is not None:
+            try:
+                actual_query_embedding = await self._embedding_provider.embed_text(query_text)
+                logger.debug("Generated 768-dim query embedding for semantic memory retrieval")
+            except Exception as emb_err:
+                logger.warning(
+                    "Query embedding generation failed (graceful degradation to lexical-only retrieval): %s",
+                    emb_err,
+                )
+                actual_query_embedding = None
+
+        # 2. Retrieve candidates via hybrid retrieval
         candidates = await self._retriever.search_memories(
             user_id=user_id,
             query_text=query_text,
-            query_embedding=query_embedding,
+            query_embedding=actual_query_embedding,
             limit=settings.MEMORY_SEARCH_LIMIT,
             min_similarity=settings.MEMORY_SIMILARITY_THRESHOLD,
         )
