@@ -14,7 +14,8 @@ import {
   Target, 
   BookOpen, 
   Settings,
-  LogIn
+  LogIn,
+  Activity
 } from 'lucide-react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
@@ -42,6 +43,34 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       badgeColor: 'bg-indigo-950/80 text-indigo-300 border-indigo-800/40',
     },
     {
+      to: '/productivity',
+      label: 'Productivity',
+      icon: LayoutDashboard,
+      badge: 'Overview',
+      badgeColor: 'bg-indigo-950/80 text-indigo-300 border-indigo-800/40',
+    },
+    {
+      to: '/tasks',
+      label: 'Tasks & Timetable',
+      icon: CheckSquare,
+      badge: 'Active',
+      badgeColor: 'bg-blue-950/80 text-blue-300 border-blue-800/40',
+    },
+    {
+      to: '/projects',
+      label: 'Projects',
+      icon: FolderKanban,
+      badge: 'Workspaces',
+      badgeColor: 'bg-emerald-950/80 text-emerald-300 border-emerald-800/40',
+    },
+    {
+      to: '/goals',
+      label: 'Goals & Milestones',
+      icon: Target,
+      badge: 'Active',
+      badgeColor: 'bg-purple-950/80 text-purple-300 border-purple-800/40',
+    },
+    {
       to: '/memories',
       label: 'Long-term Memory',
       icon: Brain,
@@ -51,31 +80,13 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     {
       to: '/system',
       label: 'System & Database',
-      icon: LayoutDashboard,
+      icon: Activity,
       badge: null,
       badgeColor: '',
     },
   ];
 
   const roadmapNavItems = [
-    {
-      to: '/tasks',
-      label: 'Tasks & Timetable',
-      icon: CheckSquare,
-      badge: 'Phase 3C.4',
-    },
-    {
-      to: '/projects',
-      label: 'Projects',
-      icon: FolderKanban,
-      badge: 'Phase 3C.4',
-    },
-    {
-      to: '/goals',
-      label: 'Goals & Milestones',
-      icon: Target,
-      badge: 'Phase 3C.4',
-    },
     {
       to: '/journal',
       label: 'Private Journal',

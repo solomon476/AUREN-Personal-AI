@@ -10,9 +10,6 @@ import {
   redirect,
 } from '@tanstack/react-router';
 import {
-  CheckSquare,
-  FolderKanban,
-  Target,
   BookOpen,
   Settings,
 } from 'lucide-react';
@@ -20,6 +17,10 @@ import { AppLayout } from './components/layout/AppLayout';
 import { ChatView } from './features/chat/ChatView';
 import { SystemView } from './features/system/SystemView';
 import { MemoryView } from './features/memory/MemoryView';
+import { TasksView } from './features/tasks/TasksView';
+import { ProjectsView } from './features/projects/ProjectsView';
+import { GoalsView } from './features/goals/GoalsView';
+import { ProductivityDashboardView } from './features/productivity/ProductivityDashboardView';
 import { SectionPlaceholder } from './components/placeholders/SectionPlaceholder';
 import { NotFound } from './components/common/NotFound';
 
@@ -66,68 +67,32 @@ export const memoriesRoute = createRoute({
   component: MemoryView,
 });
 
-// Tasks & Timetable Placeholder (Phase 3C.4)
+// Tasks & Timetable Management (Phase 3C.4)
 export const tasksRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tasks',
-  component: () => (
-    <SectionPlaceholder
-      title="Tasks & Timetable"
-      icon={CheckSquare}
-      badge="Schema Ready"
-      phase="Phase 3C.4"
-      description="Personal task management with timetable scheduling, priority tiers, and due date tracking."
-      backendStatus="Active: PostgreSQL tasks table with user-isolated RLS"
-      plannedFeatures={[
-        'Task Board (Pending, In Progress, Completed)',
-        'Priority Filtering (Low, Medium, High, Urgent)',
-        'Due Date Reminders & Timetable',
-        'AI-Assisted Task Breakdown from Dialogues',
-      ]}
-    />
-  ),
+  component: TasksView,
 });
 
-// Projects Workspace Placeholder (Phase 3C.4)
+// Projects Workspace Management (Phase 3C.4)
 export const projectsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/projects',
-  component: () => (
-    <SectionPlaceholder
-      title="Project Workspaces"
-      icon={FolderKanban}
-      badge="Schema Ready"
-      phase="Phase 3C.4"
-      description="Focused project spaces to group conversations, memories, and tasks into coherent workstreams."
-      backendStatus="Active: PostgreSQL projects table with user-isolated RLS"
-      plannedFeatures={[
-        'Custom Project Workspaces with Color & Icon tagging',
-        'Project-bound Conversations & Task association',
-        'Cross-project Intelligence & Status Summaries',
-      ]}
-    />
-  ),
+  component: ProjectsView,
 });
 
-// Goals & Milestones Placeholder (Phase 3C.4)
+// Strategic Goals & Milestones Management (Phase 3C.4)
 export const goalsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/goals',
-  component: () => (
-    <SectionPlaceholder
-      title="Personal Goals & Milestones"
-      icon={Target}
-      badge="Schema Ready"
-      phase="Phase 3C.4"
-      description="Long-range personal and professional goals with measurable milestone tracking."
-      backendStatus="Active: PostgreSQL goals and milestones tables with RLS"
-      plannedFeatures={[
-        'Strategic Goal Roadmaps',
-        'Measurable Milestone Checklists',
-        'AI Progress Reflection & Review',
-      ]}
-    />
-  ),
+  component: GoalsView,
+});
+
+// Productivity Overview Dashboard (Phase 3C.4)
+export const productivityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/productivity',
+  component: ProductivityDashboardView,
 });
 
 // Private Journaling Placeholder (Phase 3C.5)
@@ -182,6 +147,7 @@ export const routeTree = rootRoute.addChildren([
   tasksRoute,
   projectsRoute,
   goalsRoute,
+  productivityRoute,
   journalRoute,
   settingsRoute,
 ]);

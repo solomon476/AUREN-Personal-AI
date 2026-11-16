@@ -384,6 +384,26 @@ class ChatService:
             except Exception as mem_err:
                 logger.warning("Failed injecting memory context (safe continue): %s", mem_err)
 
+        # -------------------------------------------------------------------
+        # Assemble Productivity Context (Phase 3C.4)
+        # -------------------------------------------------------------------
+        productivity_context_data: dict[str, Any] = {}
+        try:
+            from app.services.productivity.repository import get_productivity_repository
+            from app.services.productivity.context_manager import ProductivityContextManager
+
+            prod_repo = get_productivity_repository(user_token=user_token)
+            prod_ctx_mgr = ProductivityContextManager(repository=prod_repo)
+            prod_context, prod_summary = await prod_ctx_mgr.assemble_productivity_context(
+                user_id=user.id,
+                query_text=request.message,
+            )
+            if prod_context:
+                llm_messages.append(ChatMessage(role="system", content=prod_context))
+                productivity_context_data = prod_summary.model_dump()
+        except Exception as prod_err:
+            logger.warning("Failed injecting productivity context (safe continue): %s", prod_err)
+
         for msg in history:
             llm_messages.append(ChatMessage(role=msg.role, content=msg.content))
 
@@ -454,6 +474,7 @@ class ChatService:
                     "user_message_id": str(user_message.id),
                     "idempotency_key": request.idempotency_key,
                     "retrieved_memories": retrieved_memories_data,
+                    "productivity_context": productivity_context_data,
                 }
                 if retry_assistant_msg_id:
                     assistant_msg = await repo.update_assistant_message(
@@ -548,6 +569,7 @@ class ChatService:
                                 "user_message_id": str(user_message.id),
                                 "idempotency_key": request.idempotency_key,
                                 "retrieved_memories": retrieved_memories_data,
+                                "productivity_context": productivity_context_data,
                             },
                         )
                     else:
@@ -562,6 +584,7 @@ class ChatService:
                                 "user_message_id": str(user_message.id),
                                 "idempotency_key": request.idempotency_key,
                                 "retrieved_memories": retrieved_memories_data,
+                                "productivity_context": productivity_context_data,
                             },
                         )
                     if request.idempotency_key:

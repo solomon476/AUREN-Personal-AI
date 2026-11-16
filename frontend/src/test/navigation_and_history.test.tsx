@@ -47,15 +47,15 @@ describe('Navigation and Browser History', () => {
     const user = userEvent.setup();
     const { history } = await renderRouter('/chat');
 
-    // Click Tasks & Timetable roadmap section
-    const tasksLink = screen.getByRole('link', { name: /tasks & timetable/i });
-    await user.click(tasksLink);
+    // Click Private Journal roadmap section
+    const journalLink = screen.getByRole('link', { name: /private journal/i });
+    await user.click(journalLink);
 
     await waitFor(() => {
-      expect(history.location.pathname).toBe('/tasks');
-      expect(screen.getByRole('heading', { name: 'Tasks & Timetable' })).toBeInTheDocument();
-      expect(screen.getByText(/Schema Ready/i)).toBeInTheDocument();
-      expect(screen.getByText(/Task Board/i)).toBeInTheDocument();
+      expect(history.location.pathname).toBe('/journal');
+      expect(screen.getByRole('heading', { name: /private journaling/i })).toBeInTheDocument();
+      expect(screen.getByText(/Consent Protected/i)).toBeInTheDocument();
+      expect(screen.getByText(/Distraction-free Markdown/i)).toBeInTheDocument();
     });
 
     // Click Long-term Memory active feature
