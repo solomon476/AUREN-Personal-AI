@@ -183,15 +183,21 @@ EXECUTE FUNCTION public.handle_messages_immutability();
 -- ============================================================================
 
 -- Step 4a: Compatibility Policy for unreconstructable legacy records:
--- If a legacy record's user_message_id does not exist in public.messages, OR if the message's
--- provenance is broken (e.g. edited/altered content, original_content preserved), original content
--- cannot be proved. Robustly check JSONB metadata without fragile type casting.
--- To avoid fabricating false fingerprints that cause permanent HTTP 409 collisions on retry,
--- unreconstructable records are purged from chat_requests.
+-- A legacy request must only be reconstructed when its source message satisfies ALL of these conditions:
+--   1. messages.id = chat_requests.user_message_id
+--   2. messages.user_id = chat_requests.user_id
+--   3. messages.conversation_id = chat_requests.conversation_id
+--   4. messages.role = 'user'
+--   5. Existing provenance metadata checks permit reconstruction (not edited, content not changed, no original_content)
+-- Any legacy record failing ANY of these checks cannot be proved and must be purged from chat_requests
+-- per compatibility policy to prevent fabricating false fingerprints that cause permanent HTTP 409 collisions.
 DELETE FROM public.chat_requests cr
 WHERE NOT EXISTS (
     SELECT 1 FROM public.messages m
     WHERE m.id = cr.user_message_id
+      AND m.user_id = cr.user_id
+      AND m.conversation_id = cr.conversation_id
+      AND m.role = 'user'
       AND COALESCE(m.metadata->>'edited' = 'true', FALSE) IS FALSE
       AND COALESCE(m.metadata->>'content_changed' = 'true', FALSE) IS FALSE
       AND NOT (m.metadata ? 'original_content')
@@ -262,6 +268,12 @@ BEGIN
     )
     FROM public.messages m
     WHERE cr.user_message_id = m.id
+      AND m.user_id = cr.user_id
+      AND m.conversation_id = cr.conversation_id
+      AND m.role = 'user'
+      AND COALESCE(m.metadata->>'edited' = 'true', FALSE) IS FALSE
+      AND COALESCE(m.metadata->>'content_changed' = 'true', FALSE) IS FALSE
+      AND NOT (m.metadata ? 'original_content')
       AND (
           cr.request_fingerprint IS NULL
           OR cr.request_fingerprint !~ '^[0-9a-fA-F]{64}$'
@@ -311,9 +323,11 @@ CREATE TRIGGER trg_chat_requests_immutability
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_chat_requests_immutability();
 
--- Any remaining records with NULL fingerprint cannot be reconstructed: purge per compatibility policy
+-- Any remaining records with NULL, synthetic or unreconstructed fingerprint cannot be reconstructed: purge per compatibility policy
 DELETE FROM public.chat_requests
-WHERE request_fingerprint IS NULL;
+WHERE request_fingerprint IS NULL
+   OR request_fingerprint = encode(digest(convert_to('legacy:' || user_id::text || ':' || idempotency_key, 'UTF8'), 'sha256'), 'hex')
+   OR request_fingerprint !~ '^[0-9a-fA-F]{64}$';
 
 -- ============================================================================
 -- 5. ENFORCE STRICT TABLE CONSTRAINTS

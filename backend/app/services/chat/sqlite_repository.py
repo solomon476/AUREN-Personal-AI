@@ -115,25 +115,36 @@ class SQLiteChatRepository(BaseChatRepository):
             conn.execute("DROP TRIGGER IF EXISTS trg_chat_requests_prevent_direct_delete")
 
             # Safe legacy fingerprint reconstruction and compatibility policy
-            # 1. Reconstruct exact fingerprint for records whose source message exists and provenance is intact
+            # 1. Reconstruct exact fingerprint for records whose source message satisfies ALL provenance checks:
+            #    - messages.id = chat_requests.user_message_id
+            #    - messages.user_id = chat_requests.user_id
+            #    - messages.conversation_id = chat_requests.conversation_id
+            #    - messages.role = 'user'
+            #    - provenance metadata is intact (not edited, not content_changed, no original_content)
             cursor.execute(
                 """
-                SELECT cr.user_id, cr.idempotency_key, cr.conversation_id, m.content, m.metadata
+                SELECT cr.user_id, cr.idempotency_key, cr.conversation_id, cr.user_message_id,
+                       m.content, m.metadata, m.user_id, m.conversation_id, m.role
                 FROM chat_requests cr
-                JOIN messages m ON m.id = cr.user_message_id
+                LEFT JOIN messages m ON m.id = cr.user_message_id
                 WHERE cr.request_fingerprint IS NULL
                 """
             )
-            for r_uid, r_key, r_cid, m_content, m_metadata in cursor.fetchall():
-                user_uuid = UUID(r_uid)
+            for r_uid, r_key, r_cid, r_umsg_id, m_content, m_metadata, m_uid, m_cid, m_role in cursor.fetchall():
+                # Provenance checks: source message must exist, belong to same user, same conversation, and role == 'user'
+                if not r_umsg_id or not m_uid or m_uid != r_uid or m_cid != r_cid or m_role != "user":
+                    conn.execute("DELETE FROM chat_requests WHERE user_id = ? AND idempotency_key = ?", (r_uid, r_key))
+                    continue
+
                 meta = json.loads(m_metadata) if isinstance(m_metadata, str) else (m_metadata or {})
-                if meta.get("edited") is True or meta.get("content_changed") is True:
+                if meta.get("edited") is True or meta.get("content_changed") is True or "original_content" in meta:
                     # Message content was altered: provenance broken -> unreconstructable, purge
                     conn.execute("DELETE FROM chat_requests WHERE user_id = ? AND idempotency_key = ?", (r_uid, r_key))
                     continue
 
                 # Determine original conversation input:
                 # Was it an initial request without conversation_id?
+                user_uuid = UUID(r_uid)
                 det_conv_id = uuid.uuid5(uuid.NAMESPACE_OID, f"auren:conv:{user_uuid}:{r_key}")
                 if UUID(r_cid) == det_conv_id:
                     # Request was originally submitted without conversation_id -> conv:none
@@ -152,11 +163,11 @@ class SQLiteChatRepository(BaseChatRepository):
                     (fp, r_uid, r_key),
                 )
 
-            # 2. Compatibility policy: purge unreconstructable records (orphans whose source message was deleted or missing)
+            # 2. Compatibility policy: purge unreconstructable records (orphans whose source message was deleted, missing, or invalid)
             cursor.execute(
                 """
                 DELETE FROM chat_requests
-                WHERE request_fingerprint IS NULL
+                WHERE request_fingerprint IS NULL OR length(request_fingerprint) != 64
                 """
             )
 

@@ -504,6 +504,30 @@ In both configurations, `digest(...)` resolves dynamically without static schema
 - JSONB metadata checks use safe text equality (`COALESCE(m.metadata->>'edited' = 'true', FALSE)`) rather than direct boolean type casting, preventing non-boolean or invalid metadata values from aborting the migration.
 - User message content immutability trigger (`trg_messages_user_content_immutability`) verified to block direct `UPDATE` on user messages in PostgreSQL.
 
+---
+
+## 16. Phase 3A.11 PostgreSQL Test Isolation and Legacy Provenance Integrity
+
+Phase 3A.11 establishes genuine test database isolation for all PostgreSQL integration tests and strengthens legacy provenance validation in both PostgreSQL Migration 010 and the application repository.
+
+### 1. Ephemeral Test Database Isolation Strategy
+- **Per-Test Dedicated Database Lifecycle**: Every PostgreSQL integration test executes within an isolated, uniquely named ephemeral database (`auren_test_<uuid>`).
+- **Pristine Migration Establishment**: Each test explicitly provisions its own schema and proves migration state before executing any functions or assertions.
+- **Zero Residual State Dependency**: No test connects to the default `postgres` database for application objects. The default database is utilized solely for administrative `CREATE DATABASE` and `DROP DATABASE` operations.
+- **Safe Teardown with Automatic Cleanup**: Managed via the `isolated_postgres_db` asynchronous context manager. Teardown employs `DROP DATABASE IF EXISTS <dbname> WITH (FORCE)`, forcibly terminating any dangling connections and dropping the ephemeral database, even if assertions fail.
+- **Consecutive Execution Repeatability**: The test suite executes deterministically across consecutive runs with zero state leakage, zero cross-test interference, and zero collision risk.
+
+### 2. Strengthened Legacy Provenance Validation Contract
+In Migration 010 (`20261115000010_correct_legacy_fingerprints_and_pgcrypto.sql`) and `SQLiteChatRepository._init_database()`, both the pre-migration cleanup query and the backfill reconstruction query enforce that the source message satisfies ALL five provenance conditions:
+1. `messages.id = chat_requests.user_message_id`: Message exists in database.
+2. `messages.user_id = chat_requests.user_id`: Message is strictly owned by the same user.
+3. `messages.conversation_id = chat_requests.conversation_id`: Message strictly belongs to the referenced conversation.
+4. `messages.role = 'user'`: Message role is strictly `'user'` (never `'assistant'`).
+5. **Intact Content Provenance**: Safe metadata inspection proves the message content was never edited or altered (`COALESCE(m.metadata->>'edited' = 'true', FALSE) IS FALSE`, `COALESCE(m.metadata->>'content_changed' = 'true', FALSE) IS FALSE`, and `NOT (m.metadata ? 'original_content')`).
+
+Any legacy record failing ANY of these conditions is classified as unreconstructable and purged per compatibility policy, never assigned a fabricated or synthetic fingerprint.
+
+
 
 
 

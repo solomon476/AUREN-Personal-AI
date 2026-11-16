@@ -926,3 +926,111 @@ async def test_migration_behaviour_when_no_legacy_records_exist():
             """
         )
         assert cursor.rowcount == 0
+
+
+@pytest.mark.asyncio
+async def test_legacy_provenance_validation_purges_invalid_records_sqlite():
+    """Verify that SQLite legacy reconstruction purges records failing ANY provenance check:
+
+    - Mismatched user_id
+    - Mismatched conversation_id
+    - Assistant-role message referenced as user message
+    - Altered message metadata (edited, content_changed, original_content)
+    - Missing source message
+    While valid records survive with exact reconstructed fingerprints.
+    """
+    user_a = uuid.uuid4()
+    user_b = uuid.uuid4()
+    conv_a1 = await chat_repository.create_conversation(user_a, title="User A Conv 1")
+    conv_a2 = await chat_repository.create_conversation(user_a, title="User A Conv 2")
+    conv_b = await chat_repository.create_conversation(user_b, title="User B Conv")
+
+    # 1. Valid user message belonging to correct user & conversation
+    msg_valid = await chat_repository.persist_user_message(user_a, conv_a1.id, "Valid prompt A")
+    key_valid = f"prov-valid-{uuid.uuid4()}"
+
+    # 2. Message belonging to another user (user_b)
+    msg_user_b = await chat_repository.persist_user_message(user_b, conv_b.id, "Prompt from user B")
+    key_cross_user = f"prov-cross-user-{uuid.uuid4()}"
+
+    # 3. Message belonging to another conversation of the same user (conv_a2 vs conv_a1)
+    msg_other_conv = await chat_repository.persist_user_message(user_a, conv_a2.id, "Prompt in conv A2")
+    key_cross_conv = f"prov-cross-conv-{uuid.uuid4()}"
+
+    # 4. Message with role='assistant'
+    msg_assistant = await chat_repository.persist_assistant_message(user_a, conv_a1.id, "Assistant reply")
+    key_assistant = f"prov-assistant-{uuid.uuid4()}"
+
+    # 5. Message with metadata edited=True
+    msg_edited = await chat_repository.persist_user_message(user_a, conv_a1.id, "Edited prompt")
+    with chat_repository._get_connection() as conn:
+        conn.execute("UPDATE messages SET metadata = ? WHERE id = ?", (json.dumps({"edited": True}), str(msg_edited.id)))
+    key_edited = f"prov-edited-{uuid.uuid4()}"
+
+    # 6. Message with metadata content_changed=True
+    msg_changed = await chat_repository.persist_user_message(user_a, conv_a1.id, "Changed prompt")
+    with chat_repository._get_connection() as conn:
+        conn.execute("UPDATE messages SET metadata = ? WHERE id = ?", (json.dumps({"content_changed": True}), str(msg_changed.id)))
+    key_changed = f"prov-changed-{uuid.uuid4()}"
+
+    # 7. Message with metadata original_content
+    msg_orig = await chat_repository.persist_user_message(user_a, conv_a1.id, "Original prompt")
+    with chat_repository._get_connection() as conn:
+        conn.execute("UPDATE messages SET metadata = ? WHERE id = ?", (json.dumps({"original_content": "old text"}), str(msg_orig.id)))
+    key_orig = f"prov-orig-{uuid.uuid4()}"
+
+    # 8. Missing message ID
+    fake_msg_id = uuid.uuid4()
+    key_missing = f"prov-missing-{uuid.uuid4()}"
+
+    # 9. Valid message with non-boolean metadata string
+    msg_non_bool = await chat_repository.persist_user_message(user_a, conv_a1.id, "Safe metadata prompt")
+    with chat_repository._get_connection() as conn:
+        conn.execute("UPDATE messages SET metadata = ? WHERE id = ?", (json.dumps({"edited": "not-a-bool", "notes": "ok"}), str(msg_non_bool.id)))
+    key_non_bool = f"prov-non-bool-{uuid.uuid4()}"
+
+    # Insert legacy records with NULL fingerprints
+    with chat_repository._get_connection() as conn:
+        conn.execute("PRAGMA foreign_keys = OFF")
+        legacy_rows = [
+            (str(user_a), key_valid, str(conv_a1.id), str(msg_valid.id)),
+            (str(user_a), key_cross_user, str(conv_a1.id), str(msg_user_b.id)),      # Mismatched user_id
+            (str(user_a), key_cross_conv, str(conv_a1.id), str(msg_other_conv.id)),   # Mismatched conversation_id
+            (str(user_a), key_assistant, str(conv_a1.id), str(msg_assistant.id)),    # role='assistant'
+            (str(user_a), key_edited, str(conv_a1.id), str(msg_edited.id)),          # edited=True
+            (str(user_a), key_changed, str(conv_a1.id), str(msg_changed.id)),        # content_changed=True
+            (str(user_a), key_orig, str(conv_a1.id), str(msg_orig.id)),              # original_content present
+            (str(user_a), key_missing, str(conv_a1.id), str(fake_msg_id)),           # Missing message
+            (str(user_a), key_non_bool, str(conv_a1.id), str(msg_non_bool.id)),      # Safe metadata
+        ]
+        for u, k, c, m in legacy_rows:
+            conn.execute(
+                """
+                INSERT INTO chat_requests (user_id, idempotency_key, conversation_id, status, user_message_id, request_fingerprint, created_at, updated_at)
+                VALUES (?, ?, ?, 'completed', ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                (u, k, c, m),
+            )
+        conn.execute("PRAGMA foreign_keys = ON")
+
+    # Run repository init (migration backfill)
+    chat_repository._init_database()
+
+    # Assert valid records survived and received accurate fingerprints
+    rec_valid = await chat_repository.get_chat_request(user_a, key_valid)
+    assert rec_valid is not None
+    assert rec_valid.request_fingerprint == compute_request_fingerprint(user_a, "Valid prompt A", conv_a1.id)
+
+    rec_non_bool = await chat_repository.get_chat_request(user_a, key_non_bool)
+    assert rec_non_bool is not None
+    assert rec_non_bool.request_fingerprint == compute_request_fingerprint(user_a, "Safe metadata prompt", conv_a1.id)
+
+    # Assert ALL invalid / unprovable records were purged
+    assert await chat_repository.get_chat_request(user_a, key_cross_user) is None
+    assert await chat_repository.get_chat_request(user_a, key_cross_conv) is None
+    assert await chat_repository.get_chat_request(user_a, key_assistant) is None
+    assert await chat_repository.get_chat_request(user_a, key_edited) is None
+    assert await chat_repository.get_chat_request(user_a, key_changed) is None
+    assert await chat_repository.get_chat_request(user_a, key_orig) is None
+    assert await chat_repository.get_chat_request(user_a, key_missing) is None
+
