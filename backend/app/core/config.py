@@ -1,5 +1,7 @@
 """Application configuration module using Pydantic Settings."""
 
+from collections import Counter
+import math
 from typing import List, Optional, Set
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,7 +14,67 @@ KNOWN_INSECURE_SECRETS: Set[str] = {
     "default",
     "test",
     "1234567890",
+    "admin",
+    "root",
 }
+
+
+def calculate_shannon_entropy(s: str) -> float:
+    """Calculates Shannon entropy in bits per character."""
+    if not s:
+        return 0.0
+    counts = Counter(s)
+    n = len(s)
+    return -sum((c / n) * math.log2(c / n) for c in counts.values())
+
+
+def validate_cryptographic_secret_strength(secret_val: str, env: str) -> None:
+    """Validates that a secret is a securely generated cryptographic secret.
+
+    Cryptographic secret generation methods:
+      - OpenSSL (CLI): openssl rand -hex 32
+      - Python:        python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+
+    Never reveals the secret value in exception messages or logs.
+    """
+    if secret_val.lower() in KNOWN_INSECURE_SECRETS:
+        raise ValueError(
+            f"JOURNAL_HMAC_SECRET cannot be a known default or insecure test value in {env}."
+        )
+
+    if len(secret_val) < 32:
+        raise ValueError(
+            f"JOURNAL_HMAC_SECRET must be at least 32 characters (256 bits) in {env}; got {len(secret_val)} characters."
+        )
+
+    # Reject low character variety
+    unique_count = len(set(secret_val))
+    if unique_count < 12:
+        raise ValueError(
+            f"JOURNAL_HMAC_SECRET has insufficient character variety ({unique_count} unique characters in {env}). "
+            f"Use a cryptographic secret generated with: openssl rand -hex 32"
+        )
+
+    # Reject low Shannon entropy
+    entropy = calculate_shannon_entropy(secret_val)
+    if entropy < 3.0:
+        raise ValueError(
+            f"JOURNAL_HMAC_SECRET has insufficient entropy ({entropy:.2f} bits/character < 3.0 required in {env}). "
+            f"Use a cryptographic secret generated with: openssl rand -hex 32"
+        )
+
+    # Reject predictable sequential characters (e.g. '12345678' or 'abcdefgh')
+    consecutive_run = 1
+    for i in range(len(secret_val) - 1):
+        if ord(secret_val[i + 1]) == ord(secret_val[i]) + 1:
+            consecutive_run += 1
+            if consecutive_run >= 6:
+                raise ValueError(
+                    f"JOURNAL_HMAC_SECRET contains predictable sequential characters in {env}. "
+                    f"Use a cryptographic secret generated with: openssl rand -hex 32"
+                )
+        else:
+            consecutive_run = 1
 
 
 class Settings(BaseSettings):
@@ -75,14 +137,7 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"JOURNAL_HMAC_SECRET must be explicitly configured in {env} environment."
                 )
-            if secret_val.lower() in KNOWN_INSECURE_SECRETS:
-                raise ValueError(
-                    f"JOURNAL_HMAC_SECRET cannot be a known default or insecure test value in {env}."
-                )
-            if len(secret_val) < 32:
-                raise ValueError(
-                    f"JOURNAL_HMAC_SECRET must be at least 32 characters (256 bits) in {env}; got {len(secret_val)} characters."
-                )
+            validate_cryptographic_secret_strength(secret_val, env)
         elif env in ("development", "test"):
             if not secret_val:
                 object.__setattr__(

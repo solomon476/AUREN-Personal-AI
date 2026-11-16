@@ -33,16 +33,58 @@ def test_production_short_hmac_secret_rejected():
         )
 
 
+def test_production_low_variety_hmac_secret_rejected():
+    # Only 1 unique character
+    with pytest.raises(ValidationError, match="insufficient character variety"):
+        Settings(
+            ENVIRONMENT="production",
+            JOURNAL_HMAC_SECRET="a" * 32,
+        )
+
+    # Only 2 unique characters
+    with pytest.raises(ValidationError, match="insufficient character variety"):
+        Settings(
+            ENVIRONMENT="production",
+            JOURNAL_HMAC_SECRET="ab" * 16,
+        )
+
+
+def test_production_predictable_sequence_hmac_secret_rejected():
+    # Consecutive alphabet run >= 6
+    with pytest.raises(ValidationError, match="predictable sequential characters"):
+        Settings(
+            ENVIRONMENT="production",
+            JOURNAL_HMAC_SECRET="abcdefghijklmnopqrstuvwxyz!@#$%^",
+        )
+
+    # Consecutive digit run >= 6
+    with pytest.raises(ValidationError, match="predictable sequential characters"):
+        Settings(
+            ENVIRONMENT="production",
+            JOURNAL_HMAC_SECRET="0123456789abcdefghijklmnopqrstuv",
+        )
+
+
 def test_production_valid_hmac_secret_accepted():
-    valid_secret = "auren_super_secure_production_hmac_key_2026_512bits_entropy"
-    cfg = Settings(
+    # Valid hex output (like 'openssl rand -hex 32')
+    valid_hex = "8f3b2a1c9e4d5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a"
+    cfg_hex = Settings(
         ENVIRONMENT="production",
-        JOURNAL_HMAC_SECRET=valid_secret,
+        JOURNAL_HMAC_SECRET=valid_hex,
     )
-    assert cfg.get_journal_hmac_secret() == valid_secret
-    # Ensure raw secret is not exposed in string conversion
-    assert valid_secret not in str(cfg.JOURNAL_HMAC_SECRET)
-    assert "**********" in str(cfg.JOURNAL_HMAC_SECRET)
+    assert cfg_hex.get_journal_hmac_secret() == valid_hex
+    assert valid_hex not in str(cfg_hex.JOURNAL_HMAC_SECRET)
+    assert valid_hex not in repr(cfg_hex.JOURNAL_HMAC_SECRET)
+
+    # Valid base64url output (like 'secrets.token_urlsafe(32)')
+    valid_urlsafe = "D8s7F_3kL9m-Qz2wX4vB1nC6vM8kP0qR_tY5uI7oP9s"
+    cfg_url = Settings(
+        ENVIRONMENT="production",
+        JOURNAL_HMAC_SECRET=valid_urlsafe,
+    )
+    assert cfg_url.get_journal_hmac_secret() == valid_urlsafe
+    assert valid_urlsafe not in str(cfg_url.JOURNAL_HMAC_SECRET)
+    assert valid_urlsafe not in repr(cfg_url.JOURNAL_HMAC_SECRET)
 
 
 def test_staging_missing_hmac_secret_rejected():
@@ -53,3 +95,4 @@ def test_staging_missing_hmac_secret_rejected():
 def test_development_fallback_hmac_secret():
     cfg = Settings(ENVIRONMENT="development", JOURNAL_HMAC_SECRET=None)
     assert len(cfg.get_journal_hmac_secret()) >= 32
+

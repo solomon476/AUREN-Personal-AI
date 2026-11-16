@@ -57,6 +57,7 @@ MOCK_AUTH_SQL = """
     DO $$ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN CREATE ROLE postgres NOLOGIN; END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auren_worker') THEN CREATE ROLE auren_worker NOLOGIN NOINHERIT; END IF;
     END $$;
 """
@@ -93,7 +94,7 @@ async def isolated_postgres_db(server_info, prefix="auren_mem_test", apply_all_m
         await conn.execute(MOCK_AUTH_SQL)
         if apply_all_migrations:
             migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
-            assert len(migration_files) >= 14, f"Expected at least 14 migration files, found {len(migration_files)}"
+            assert len(migration_files) >= 15, f"Expected at least 15 migration files, found {len(migration_files)}"
             for mf in migration_files:
                 sql = Path(mf).read_text(encoding="utf-8")
                 await conn.execute(sql)
@@ -116,10 +117,10 @@ async def isolated_postgres_db(server_info, prefix="auren_mem_test", apply_all_m
 
 
 @pytest.mark.asyncio
-async def test_fresh_migration_001_through_014(postgresql_server):
-    """Execute complete migration sequence 001 through 014 and verify all memory tables,
+async def test_fresh_migration_001_through_015(postgresql_server):
+    """Execute complete migration sequence 001 through 015 and verify all memory tables,
     indexes, schema columns, NULL confidence support, claim_token on extraction jobs,
-    and date_range on consumed consent tokens exist accurately.
+    date_range on consumed consent tokens, and administrative audit tables exist accurately.
     """
     async with isolated_postgres_db(postgresql_server, prefix="mem_fresh", apply_all_migrations=True) as (conn, db_name):
         tables = await conn.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
@@ -130,6 +131,13 @@ async def test_fresh_migration_001_through_014(postgresql_server):
         assert "embedding_models" in table_names
         assert "consumed_consent_tokens" in table_names
         assert "memory_extraction_jobs" in table_names
+        assert "admin_maintenance_audit_log" in table_names
+
+        # Verify routines exist
+        routines = await conn.fetch("SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public'")
+        routine_names = {r["routine_name"] for r in routines}
+        assert "is_authorized_worker_session" in routine_names
+        assert "admin_emergency_reset_job_rpc" in routine_names
 
         # Verify vector columns on memory_embeddings
         cols = await conn.fetch("SELECT column_name, data_type, udt_name, is_nullable FROM information_schema.columns WHERE table_name = 'memories'")
@@ -173,7 +181,7 @@ async def test_legacy_memory_records_null_confidence_preservation(postgresql_ser
         # Apply 001 through 010 first
         migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
         for mf in migration_files:
-            if any(x in mf for x in ("011_", "012_", "013_", "014_")):
+            if any(x in mf for x in ("011_", "012_", "013_", "014_", "015_")):
                 continue
             sql = Path(mf).read_text(encoding="utf-8")
             await conn.execute(sql)
@@ -202,8 +210,8 @@ async def test_legacy_memory_records_null_confidence_preservation(postgresql_ser
             )
             legacy_ids.append((mid, cat, content, imp))
 
-        # Now execute Migration 011, 012, 013, and 014 in order
-        for suffix in ("011_", "012_", "013_", "014_"):
+        # Now execute Migration 011, 012, 013, 014, and 015 in order
+        for suffix in ("011_", "012_", "013_", "014_", "015_"):
             target_mf = [mf for mf in migration_files if suffix in mf][0]
             sql = Path(target_mf).read_text(encoding="utf-8")
             await conn.execute(sql)
@@ -299,8 +307,92 @@ async def test_worker_role_privilege_boundaries_and_assumption_rejection(postgre
                         """,
                         user_id,
                     )
+
+                # Unprivileged client user cannot invoke administrative emergency reset
+                with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                    await client_conn.execute(
+                        "SELECT public.admin_emergency_reset_job_rpc($1, 'Unauthorized reset attempt')",
+                        uuid.uuid4(),
+                    )
             finally:
                 await client_conn.close()
+
+            # 3. PostgreSQL Administrator (super-user / postgres) WITHOUT auren_worker role
+            # is strictly rejected by worker-only RPCs (no implicit admin bypass)
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="does not possess the auren_worker role"):
+                await conn.execute("SELECT * FROM public.claim_memory_extraction_jobs_rpc('admin-worker')")
+
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="does not possess the auren_worker role"):
+                await conn.execute(
+                    """
+                    SELECT public.create_system_asserted_memory_rpc(
+                        p_user_id => $1,
+                        p_content => 'Admin assertion',
+                        p_memory_type => 'fact',
+                        p_category => 'general'
+                    )
+                    """,
+                    user_id,
+                )
+
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="does not possess the auren_worker role"):
+                await conn.execute("SELECT public.activate_embedding_model_rpc('gemini', 'text-embedding-004', 'v1')")
+
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="does not possess the auren_worker role"):
+                await conn.execute("SELECT public.reap_stale_extraction_jobs_rpc(3)")
+
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="does not possess the auren_worker role"):
+                await conn.execute(
+                    "SELECT public.complete_memory_extraction_job_rpc($1, 'admin-worker', $2)",
+                    uuid.uuid4(),
+                    uuid.uuid4(),
+                )
+
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="does not possess the auren_worker role"):
+                await conn.execute(
+                    "SELECT public.fail_memory_extraction_job_rpc($1, 'admin-worker', $2, 'error')",
+                    uuid.uuid4(),
+                    uuid.uuid4(),
+                )
+
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="does not possess the auren_worker role"):
+                await conn.execute(
+                    """
+                    SELECT public.insert_extracted_memory_rpc(
+                        p_job_id => $1,
+                        p_worker_id => 'admin-worker',
+                        p_claim_token => $2,
+                        p_content => 'Admin content',
+                        p_memory_type => 'fact',
+                        p_category => 'general'
+                    )
+                    """,
+                    uuid.uuid4(),
+                    uuid.uuid4(),
+                )
+
+            # 4. Administrator CAN execute the auditable administrative emergency procedure
+            test_conv_id = uuid.uuid4()
+            test_msg_id = uuid.uuid4()
+            await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Admin Test Conv')", test_conv_id, user_id)
+            await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Admin Msg')", test_msg_id, test_conv_id, user_id)
+            test_job_id = await conn.fetchval("SELECT public.enqueue_memory_extraction_job_rpc($1, $2)", test_conv_id, test_msg_id)
+            await conn.execute("UPDATE public.memory_extraction_jobs SET status = 'processing', locked_by = 'hung-worker' WHERE id = $1", test_job_id)
+
+            admin_reset = await conn.fetchval(
+                "SELECT public.admin_emergency_reset_job_rpc($1, 'Emergency reset of hung extraction job')",
+                test_job_id,
+            )
+            assert admin_reset is True
+            job_after_admin = await conn.fetchrow("SELECT status, locked_by, last_error FROM public.memory_extraction_jobs WHERE id = $1", test_job_id)
+            assert job_after_admin["status"] == "pending"
+            assert job_after_admin["locked_by"] is None
+            assert "Admin emergency reset" in job_after_admin["last_error"]
+
+            audit_entry = await conn.fetchrow("SELECT * FROM public.admin_maintenance_audit_log WHERE target_id = $1", test_job_id)
+            assert audit_entry is not None
+            assert audit_entry["action"] == "admin_emergency_reset_job"
+            assert "hung extraction job" in audit_entry["reason"]
 
             # Connect as test_worker_role (real worker connection)
             worker_conn = await asyncpg.connect(
@@ -679,6 +771,58 @@ async def test_journal_consent_hmac_and_database_verification(postgresql_server)
         assert stored_complex["date_range"] == complex_range
         assert stored_complex["idempotency_key"] == complex_idemp.strip()
 
+        # 13. Full microsecond datetime precision preservation (RFC 8785 canonical JSON)
+        now_micro = datetime(2026, 11, 16, 10, 0, 0, 123456, tzinfo=timezone.utc)
+        micro_token = create_journal_consent_token(
+            user_id=user_a,
+            conversation_id=conv_a,
+            idempotency_key="micro-key",
+            scope="journal.read",
+            date_range="2026-11-01:2026-11-16",
+            nonce=uuid.uuid4(),
+            expires_at=now_micro + timedelta(seconds=120),
+            secret=secret,
+        )
+        assert verify_journal_consent_token(
+            token=micro_token,
+            secret=secret,
+            expected_user_id=user_a,
+            expected_conversation_id=conv_a,
+            expected_idempotency_key="micro-key",
+            expected_date_range="2026-11-01:2026-11-16",
+            now=now_micro,
+        ) is True
+
+        # 14. Timezone offset normalization to UTC
+        tz_plus_3 = timezone(timedelta(hours=3))
+        exp_plus_3 = datetime(2026, 11, 16, 13, 2, 0, 123456, tzinfo=tz_plus_3)
+        offset_token = create_journal_consent_token(
+            user_id=user_a,
+            conversation_id=conv_a,
+            idempotency_key="micro-key",
+            scope="journal.read",
+            date_range="2026-11-01:2026-11-16",
+            nonce=micro_token.payload.nonce,
+            expires_at=exp_plus_3,
+            secret=secret,
+        )
+        # 13:02:00.123456+03:00 normalizes to 10:02:00.123456Z in UTC, yielding identical signature
+        assert offset_token.signature == micro_token.signature
+
+        # 15. Naive datetime rejection
+        naive_dt = datetime(2026, 11, 16, 10, 2, 0, 123456)
+        with pytest.raises(ValueError, match="naive datetimes rejected"):
+            create_journal_consent_token(
+                user_id=user_a,
+                conversation_id=conv_a,
+                idempotency_key="naive-key",
+                scope="journal.read",
+                date_range="2026-11-01:2026-11-16",
+                nonce=uuid.uuid4(),
+                expires_at=naive_dt,
+                secret=secret,
+            )
+
 
 @pytest.mark.asyncio
 async def test_embedding_dimension_and_model_registry_integrity(postgresql_server):
@@ -773,9 +917,23 @@ async def test_embedding_dimension_and_model_registry_integrity(postgresql_serve
         assert count == 2
 
         # 6. Model registry cutover: activate openai model as auren_worker
-        await conn.execute("SET ROLE auren_worker")
-        await conn.execute("SELECT public.activate_embedding_model_rpc('openai', 'text-embedding-3-small', 'v1')")
-        await conn.execute("RESET ROLE")
+        worker_user = f"worker_emb_{uuid.uuid4().hex[:8]}"
+        worker_pass = "worker_pass_123"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD '{worker_pass}' IN ROLE auren_worker")
+        try:
+            worker_conn = await asyncpg.connect(
+                host=postgresql_server["host"],
+                port=postgresql_server["port"],
+                database=db_name,
+                user=worker_user,
+                password=worker_pass,
+            )
+            try:
+                await worker_conn.execute("SELECT public.activate_embedding_model_rpc('openai', 'text-embedding-3-small', 'v1')")
+            finally:
+                await worker_conn.close()
+        finally:
+            await conn.execute(f"DROP USER IF EXISTS {worker_user}")
 
         active_models = await conn.fetch("SELECT provider, model FROM public.embedding_models WHERE purpose = 'retrieval' AND is_active = TRUE")
         assert len(active_models) == 1
@@ -803,149 +961,196 @@ async def test_worker_queue_concurrency_lease_and_stale_rejection(postgresql_ser
         job_1 = await conn.fetchval("SELECT public.enqueue_memory_extraction_job_rpc($1, $2)", conv_id, msg_1)
         job_2 = await conn.fetchval("SELECT public.enqueue_memory_extraction_job_rpc($1, $2)", conv_id, msg_2)
 
-        # 1. Parameter validation in claim_memory_extraction_jobs_rpc
-        await conn.execute("SET ROLE auren_worker")
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Batch size must be between 1 and 50"):
-            await conn.execute("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', p_batch_size => 0)")
+        # Create authentic worker login user
+        worker_user = f"worker_q_{uuid.uuid4().hex[:8]}"
+        worker_pass = "worker_secret_123"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD '{worker_pass}' IN ROLE auren_worker")
 
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Lease duration must be between 10 and 3600"):
-            await conn.execute("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', p_lease_seconds => 5)")
+        try:
+            worker_conn = await asyncpg.connect(
+                host=postgresql_server["host"],
+                port=postgresql_server["port"],
+                database=db_name,
+                user=worker_user,
+                password=worker_pass,
+            )
+            try:
+                # 1. Parameter validation in claim_memory_extraction_jobs_rpc
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Batch size must be between 1 and 50"):
+                    await worker_conn.execute("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', p_batch_size => 0)")
 
-        # 2. Concurrent claims: Worker A claims 1 job
-        claimed_a = await conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', 1, 30)")
-        assert len(claimed_a) == 1
-        job_a_id = claimed_a[0]["id"]
-        token_a = claimed_a[0]["claim_token"]
-        assert token_a is not None
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Lease duration must be between 10 and 3600"):
+                    await worker_conn.execute("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', p_lease_seconds => 5)")
 
-        # Worker B concurrently claims 1 job; must receive the other job without collision
-        claimed_b = await conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-b', 1, 30)")
-        assert len(claimed_b) == 1
-        job_b_id = claimed_b[0]["id"]
-        token_b = claimed_b[0]["claim_token"]
-        assert job_a_id != job_b_id
-        assert token_b is not None
+                # 2. Concurrent claims: Worker A claims 1 job
+                claimed_a = await worker_conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', 1, 30)")
+                assert len(claimed_a) == 1
+                job_a_id = claimed_a[0]["id"]
+                token_a = claimed_a[0]["claim_token"]
+                assert token_a is not None
 
-        # 3. Stale worker completion rejection: artificially expire Worker A's lease
-        await conn.execute("RESET ROLE")
-        await conn.execute(
-            "UPDATE public.memory_extraction_jobs SET lease_expires_at = now() - INTERVAL '5 seconds' WHERE id = $1",
-            job_a_id,
-        )
+                # Worker B concurrently claims 1 job; must receive the other job without collision
+                claimed_b = await worker_conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-b', 1, 30)")
+                assert len(claimed_b) == 1
+                job_b_id = claimed_b[0]["id"]
+                token_b = claimed_b[0]["claim_token"]
+                assert job_a_id != job_b_id
+                assert token_b is not None
 
-        await conn.execute("SET ROLE auren_worker")
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
-            await conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a)
-
-        # Stale worker ingestion rejection on expired lease
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
-            await conn.execute(
-                """
-                SELECT public.insert_extracted_memory_rpc(
-                    p_job_id => $1,
-                    p_worker_id => 'worker-a',
-                    p_claim_token => $2,
-                    p_content => 'Stale ingestion attempt',
-                    p_memory_type => 'fact',
-                    p_category => 'general'
+                # 3. Stale worker completion rejection: artificially expire Worker A's lease
+                await conn.execute(
+                    "UPDATE public.memory_extraction_jobs SET lease_expires_at = now() - INTERVAL '5 seconds' WHERE id = $1",
+                    job_a_id,
                 )
-                """,
-                job_a_id,
-                token_a,
-            )
 
-        # Stale worker failure report rejection on expired lease
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
-            await conn.execute("SELECT public.fail_memory_extraction_job_rpc($1, 'worker-a', $2, 'Failed expired')", job_a_id, token_a)
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
+                    await worker_conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a)
 
-        # 4. Reclamation by reaper
-        reaped = await conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
-        assert reaped >= 1
+                # Stale worker ingestion rejection on expired lease
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
+                    await worker_conn.execute(
+                        """
+                        SELECT public.insert_extracted_memory_rpc(
+                            p_job_id => $1,
+                            p_worker_id => 'worker-a',
+                            p_claim_token => $2,
+                            p_content => 'Stale ingestion attempt',
+                            p_memory_type => 'fact',
+                            p_category => 'general'
+                        )
+                        """,
+                        job_a_id,
+                        token_a,
+                    )
 
-        reaped_row = await conn.fetchrow("SELECT status, locked_by, claim_token FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
-        assert reaped_row["status"] == "pending"
-        assert reaped_row["locked_by"] is None
-        assert reaped_row["claim_token"] != token_a  # New claim token generated on requeue
+                # Stale worker failure report rejection on expired lease
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
+                    await worker_conn.execute("SELECT public.fail_memory_extraction_job_rpc($1, 'worker-a', $2, 'Failed expired')", job_a_id, token_a)
 
-        # 5. Same-worker lease generation protection test:
-        # Worker A re-claims job_a (new claim token issued)
-        reclaimed_a = await conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', 1, 30)")
-        assert len(reclaimed_a) == 1
-        assert reclaimed_a[0]["id"] == job_a_id
-        token_a_new = reclaimed_a[0]["claim_token"]
-        assert token_a_new != token_a
+                # 4. Reclamation by reaper
+                reaped = await worker_conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
+                assert reaped >= 1
 
-        # Delayed thread from Worker A using OLD token_a attempts to complete job: REJECTED with Stale claim token
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
-            await conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a)
+                reaped_row = await conn.fetchrow("SELECT status, locked_by, claim_token FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
+                assert reaped_row["status"] == "pending"
+                assert reaped_row["locked_by"] is None
+                assert reaped_row["claim_token"] != token_a  # New claim token generated on requeue
 
-        # Delayed thread from Worker A using OLD token_a attempts to insert extracted memory: REJECTED with Stale claim token
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
-            await conn.execute(
-                """
-                SELECT public.insert_extracted_memory_rpc(
-                    p_job_id => $1,
-                    p_worker_id => 'worker-a',
-                    p_claim_token => $2,
-                    p_content => 'Delayed thread attempt',
-                    p_memory_type => 'fact',
-                    p_category => 'general'
+                # 5. Same-worker lease generation protection test:
+                # Worker A re-claims job_a (new claim token issued)
+                reclaimed_a = await worker_conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', 1, 30)")
+                assert len(reclaimed_a) == 1
+                assert reclaimed_a[0]["id"] == job_a_id
+                token_a_new = reclaimed_a[0]["claim_token"]
+                assert token_a_new != token_a
+
+                # Delayed thread from Worker A using OLD token_a attempts to complete job: REJECTED with Stale claim token
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
+                    await worker_conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a)
+
+                # Delayed thread from Worker A using OLD token_a attempts to insert extracted memory: REJECTED with Stale claim token
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
+                    await worker_conn.execute(
+                        """
+                        SELECT public.insert_extracted_memory_rpc(
+                            p_job_id => $1,
+                            p_worker_id => 'worker-a',
+                            p_claim_token => $2,
+                            p_content => 'Delayed thread attempt',
+                            p_memory_type => 'fact',
+                            p_category => 'general'
+                        )
+                        """,
+                        job_a_id,
+                        token_a,
+                    )
+
+                # Delayed thread from Worker A using OLD token_a attempts to fail job: REJECTED with Stale claim token
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
+                    await worker_conn.execute("SELECT public.fail_memory_extraction_job_rpc($1, 'worker-a', $2, 'Delayed failure')", job_a_id, token_a)
+
+                # Ingestion with valid current token_a_new succeeds
+                new_mem_id = await worker_conn.fetchval(
+                    """
+                    SELECT public.insert_extracted_memory_rpc(
+                        p_job_id => $1,
+                        p_worker_id => 'worker-a',
+                        p_claim_token => $2,
+                        p_content => 'Valid extracted memory',
+                        p_memory_type => 'fact',
+                        p_category => 'general'
+                    )
+                    """,
+                    job_a_id,
+                    token_a_new,
                 )
-                """,
-                job_a_id,
-                token_a,
-            )
+                assert new_mem_id is not None
 
-        # Delayed thread from Worker A using OLD token_a attempts to fail job: REJECTED with Stale claim token
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
-            await conn.execute("SELECT public.fail_memory_extraction_job_rpc($1, 'worker-a', $2, 'Delayed failure')", job_a_id, token_a)
+                # Worker A completes its job with valid current token_a_new
+                comp_a = await worker_conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a_new)
+                assert comp_a is True
 
-        # Ingestion with valid current token_a_new succeeds
-        new_mem_id = await conn.fetchval(
-            """
-            SELECT public.insert_extracted_memory_rpc(
-                p_job_id => $1,
-                p_worker_id => 'worker-a',
-                p_claim_token => $2,
-                p_content => 'Valid extracted memory',
-                p_memory_type => 'fact',
-                p_category => 'general'
-            )
-            """,
-            job_a_id,
-            token_a_new,
-        )
-        assert new_mem_id is not None
+                # 6. Idempotency and Claim-Token Enforcement on Completed Job:
+                # - Repeated completion with matching current claim token succeeds idempotently (returns True)
+                repeat_comp = await worker_conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a_new)
+                assert repeat_comp is True
 
-        # Worker A completes its job with valid current token_a_new
-        comp_a = await conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a_new)
-        assert comp_a is True
+                # - Earlier/stale claim token completion attempt on already-completed job is strictly REJECTED
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
+                    await worker_conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a)
 
-        # Worker B completes its job normally
-        comp_b = await conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-b', $2)", job_b_id, token_b)
-        assert comp_b is True
+                # - Random/mismatched claim token completion attempt on already-completed job is strictly REJECTED
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
+                    await worker_conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, uuid.uuid4())
 
-        # 6. Exhausted job cannot be reclaimed indefinitely
-        await conn.execute("RESET ROLE")
-        await conn.execute(
-            """
-            UPDATE public.memory_extraction_jobs
-            SET status = 'processing', locked_by = 'flaky-worker', lease_expires_at = now() - INTERVAL '10 seconds', attempts = 3, max_attempts = 3
-            WHERE id = $1
-            """,
-            job_a_id,
-        )
-        await conn.execute("SET ROLE auren_worker")
-        await conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
+                # Worker B completes its job normally
+                comp_b = await worker_conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-b', $2)", job_b_id, token_b)
+                assert comp_b is True
 
-        dead_job = await conn.fetchrow("SELECT status FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
-        assert dead_job["status"] == "dead_letter"
+                # 7. Queue Error Sanitization in PostgreSQL:
+                # Enqueue sensitive failure test job
+                msg_sens = uuid.uuid4()
+                await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Task Sens')", msg_sens, conv_id, user_id)
+                job_sens = await conn.fetchval("SELECT public.enqueue_memory_extraction_job_rpc($1, $2)", conv_id, msg_sens)
+                claimed_sens = await worker_conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', 5, 30)")
+                token_sens = [r["claim_token"] for r in claimed_sens if r["id"] == job_sens][0]
 
-        # Calling reaper again does NOT revive dead-letter job
-        await conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
-        dead_job_after = await conn.fetchrow("SELECT status FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
-        assert dead_job_after["status"] == "dead_letter"
-        await conn.execute("RESET ROLE")
+                raw_sensitive_err = (
+                    "Provider failure: sk-ant-api03-secret1234567890_XYZ with "
+                    "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc "
+                    "and password=MyDatabasePassword123"
+                )
+                await worker_conn.execute("SELECT public.fail_memory_extraction_job_rpc($1, 'worker-a', $2, $3, false)", job_sens, token_sens, raw_sensitive_err)
+                sens_row = await conn.fetchrow("SELECT last_error FROM public.memory_extraction_jobs WHERE id = $1", job_sens)
+                assert sens_row is not None
+                assert "sk-ant-api03" not in sens_row["last_error"]
+                assert "eyJhbGci" not in sens_row["last_error"]
+                assert "MyDatabasePassword123" not in sens_row["last_error"]
+                assert "[REDACTED_API_KEY]" in sens_row["last_error"]
+                assert "password=[REDACTED]" in sens_row["last_error"]
+
+                # 8. Exhausted job cannot be reclaimed indefinitely
+                await conn.execute(
+                    """
+                    UPDATE public.memory_extraction_jobs
+                    SET status = 'processing', locked_by = 'flaky-worker', lease_expires_at = now() - INTERVAL '10 seconds', attempts = 3, max_attempts = 3
+                    WHERE id = $1
+                    """,
+                    job_a_id,
+                )
+                await worker_conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
+
+                dead_job = await conn.fetchrow("SELECT status FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
+                assert dead_job["status"] == "dead_letter"
+
+                # Calling reaper again does NOT revive dead-letter job
+                await worker_conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
+                dead_job_after = await conn.fetchrow("SELECT status FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
+                assert dead_job_after["status"] == "dead_letter"
+            finally:
+                await worker_conn.close()
+        finally:
+            await conn.execute(f"DROP USER IF EXISTS {worker_user}")
 
 
 @pytest.mark.asyncio

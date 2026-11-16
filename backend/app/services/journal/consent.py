@@ -20,7 +20,7 @@ import json
 from typing import Optional, Set
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 ALLOWED_JOURNAL_SCOPES: Set[str] = {
     "journal.read",
@@ -104,6 +104,12 @@ class JournalConsentPayload(BaseModel):
     nonce: UUID
     expires_at: datetime
 
+    @model_validator(mode="after")
+    def validate_expires_at_timezone(self) -> "JournalConsentPayload":
+        if self.expires_at.tzinfo is None:
+            raise ValueError("expires_at must be a timezone-aware datetime (naive datetimes rejected)")
+        return self
+
 
 class JournalConsentToken(BaseModel):
     """Signed journal consent token containing payload and HMAC signature."""
@@ -115,11 +121,29 @@ class JournalConsentToken(BaseModel):
 
 
 def serialize_canonical_payload(payload: JournalConsentPayload) -> bytes:
-    """Serializes payload into canonical JSON bytes with deterministic key order,
-    fixed UTC datetime formatting (ISO 8601 ending in 'Z'), lowercase UUIDs, and no whitespace.
+    """Serializes payload into deterministic canonical JSON bytes conforming to RFC 8785 (JCS).
+
+    Deterministic canonicalization rules:
+    1. Lexicographical sorting of keys by Unicode code points.
+    2. Zero whitespace around separators (separators=(',', ':')).
+    3. UTF-8 encoded output without ASCII escaping (ensure_ascii=False).
+    4. Lowercase canonical 8-4-4-4-12 UUID strings.
+    5. Stripped, non-empty string fields (scope, date_range, idempotency_key).
+    6. Strict UTC ISO 8601 timestamp ending in 'Z':
+       - Naive datetimes are strictly rejected.
+       - Timezone offsets (e.g. +02:00, -05:00) are normalized to UTC.
+       - Complete sub-second microsecond precision is preserved:
+         - If microsecond > 0: YYYY-MM-DDTHH:MM:SS.ffffffZ
+         - If microsecond == 0: YYYY-MM-DDTHH:MM:SSZ
     """
+    if payload.expires_at.tzinfo is None:
+        raise ValueError("expires_at must be a timezone-aware datetime (naive datetimes rejected)")
+
     dt_utc = payload.expires_at.astimezone(timezone.utc)
-    iso_exp = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if dt_utc.microsecond > 0:
+        iso_exp = f"{dt_utc.strftime('%Y-%m-%dT%H:%M:%S')}.{dt_utc.microsecond:06d}Z"
+    else:
+        iso_exp = f"{dt_utc.strftime('%Y-%m-%dT%H:%M:%S')}Z"
 
     canonical_dict = {
         "conversation_id": str(payload.conversation_id).lower(),
