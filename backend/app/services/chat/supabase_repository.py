@@ -257,6 +257,70 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             )
         return results
 
+    async def update_conversation_title(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        title: str,
+    ) -> Optional[ConversationModel]:
+        """Update conversation title, strictly protected by Supabase RLS."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        res = await self._request(
+            method="PATCH",
+            path="/conversations",
+            params={
+                "id": f"eq.{conversation_id}",
+                "user_id": f"eq.{user_id}",
+                "select": "id,user_id,title,created_at,updated_at,messages(count)",
+            },
+            json_data={
+                "title": title,
+                "updated_at": now_iso,
+            },
+            prefer="return=representation",
+        )
+        rows = res.json()
+        if not rows:
+            return None
+        r = rows[0]
+        msg_count = 0
+        if "messages" in r:
+            msgs = r["messages"]
+            if isinstance(msgs, list) and len(msgs) > 0 and isinstance(msgs[0], dict) and "count" in msgs[0]:
+                msg_count = int(msgs[0]["count"])
+            elif isinstance(msgs, list):
+                msg_count = len(msgs)
+        elif "message_count" in r:
+            msg_count = int(r["message_count"])
+
+        return ConversationModel(
+            id=UUID(r["id"]),
+            user_id=UUID(r["user_id"]),
+            title=r["title"],
+            created_at=datetime.fromisoformat(r["created_at"]),
+            updated_at=datetime.fromisoformat(r["updated_at"]),
+            message_count=msg_count,
+        )
+
+    async def delete_conversation(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+    ) -> bool:
+        """Atomically delete conversation and associated messages, protected by Supabase RLS."""
+        res = await self._request(
+            method="DELETE",
+            path="/conversations",
+            params={
+                "id": f"eq.{conversation_id}",
+                "user_id": f"eq.{user_id}",
+                "select": "id",
+            },
+            prefer="return=representation",
+        )
+        rows = res.json()
+        return isinstance(rows, list) and len(rows) > 0
+
     async def get_messages(
         self,
         user_id: UUID,

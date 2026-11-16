@@ -42,6 +42,14 @@ export async function createConversation(title?: string): Promise<Conversation> 
   return apiClient.post<Conversation>('/chat/conversations', { title: title || 'New Conversation' });
 }
 
+export async function renameConversation(conversationId: string, title: string): Promise<Conversation> {
+  return apiClient.patch<Conversation>(`/chat/conversations/${conversationId}`, { title });
+}
+
+export async function deleteConversation(conversationId: string): Promise<void> {
+  return apiClient.delete<void>(`/chat/conversations/${conversationId}`);
+}
+
 export async function getConversationMessages(conversationId: string): Promise<ChatMessage[]> {
   return apiClient.get<ChatMessage[]>(`/chat/conversations/${conversationId}/messages`);
 }

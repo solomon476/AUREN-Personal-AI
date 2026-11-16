@@ -8,7 +8,7 @@ test.describe('AUREN Smoke Suite', () => {
   test('initializes application and redirects to /chat', async ({ page }) => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/chat/);
-    await expect(page.getByText('AUREN')).toBeVisible();
+    await expect(page.getByRole('link', { name: /auren/i }).first()).toBeVisible();
     await expect(page.getByText('Phase 3C.1')).toBeVisible();
   });
 

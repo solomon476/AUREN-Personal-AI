@@ -4,7 +4,13 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listConversations, createConversation, Conversation } from '../api/chat';
+import {
+  listConversations,
+  createConversation,
+  renameConversation,
+  deleteConversation,
+  Conversation,
+} from '../api/chat';
 
 export const conversationKeys = {
   all: ['conversations'] as const,
@@ -44,6 +50,57 @@ export function useCreateConversation(userId: string | undefined) {
         conversationKeys.list(userId),
         (old) => (old ? [newConv, ...old] : [newConv])
       );
+    },
+  });
+}
+
+export function useRenameConversation(userId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      title,
+    }: {
+      conversationId: string;
+      title: string;
+    }): Promise<Conversation> => {
+      return renameConversation(conversationId, title);
+    },
+    onSuccess: (updatedConv) => {
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.list(userId),
+      });
+
+      queryClient.setQueryData<Conversation[]>(
+        conversationKeys.list(userId),
+        (old) => (old ? old.map((c) => (c.id === updatedConv.id ? updatedConv : c)) : [updatedConv])
+      );
+    },
+  });
+}
+
+export function useDeleteConversation(userId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (conversationId: string): Promise<string> => {
+      await deleteConversation(conversationId);
+      return conversationId;
+    },
+    onSuccess: (deletedId) => {
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.list(userId),
+      });
+
+      queryClient.setQueryData<Conversation[]>(
+        conversationKeys.list(userId),
+        (old) => (old ? old.filter((c) => c.id !== deletedId) : [])
+      );
+
+      queryClient.removeQueries({
+        queryKey: ['messages', userId ?? 'anonymous', deletedId],
+      });
     },
   });
 }

@@ -1084,3 +1084,143 @@ async def test_list_conversations_database_aggregation_and_isolation():
     assert list_b_data[0]["message_count"] == 2
     # User B cannot see User A's threads
     assert list_b_data[0]["id"] not in map_a
+
+
+@pytest.mark.asyncio
+async def test_rename_conversation_lifecycle_and_validation():
+    """Verify conversation renaming enforces input validation, ownership, and response contract."""
+    user_a_id = str(uuid.uuid4())
+    user_b_id = str(uuid.uuid4())
+    token_a = create_token(user_a_id, "user_a@example.com")
+    token_b = create_token(user_b_id, "user_b@example.com")
+
+    # 1. Create a conversation for User A
+    create_res = client.post(
+        "/api/v1/chat/conversations",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"title": "Original Title"},
+    )
+    assert create_res.status_code == 201
+    conv_id = create_res.json()["id"]
+
+    # 2. Successfully rename conversation
+    rename_res = client.patch(
+        f"/api/v1/chat/conversations/{conv_id}",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"title": "Updated Brand New Title"},
+    )
+    assert rename_res.status_code == 200
+    rename_data = rename_res.json()
+    assert rename_data["id"] == conv_id
+    assert rename_data["title"] == "Updated Brand New Title"
+
+    # 3. Validation: Reject empty string
+    empty_res = client.patch(
+        f"/api/v1/chat/conversations/{conv_id}",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"title": ""},
+    )
+    assert empty_res.status_code == 422
+
+    # 4. Validation: Reject whitespace-only title
+    ws_res = client.patch(
+        f"/api/v1/chat/conversations/{conv_id}",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"title": "   \n\t   "},
+    )
+    assert ws_res.status_code == 422
+
+    # 5. Validation: Reject title exceeding 200 characters
+    long_res = client.patch(
+        f"/api/v1/chat/conversations/{conv_id}",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"title": "x" * 201},
+    )
+    assert long_res.status_code == 422
+
+    # 6. Ownership: User B cannot rename User A's conversation
+    unauth_rename = client.patch(
+        f"/api/v1/chat/conversations/{conv_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+        json={"title": "Hacked Title"},
+    )
+    assert unauth_rename.status_code == 404
+
+    # 7. Non-existent conversation ID returns 404
+    missing_uuid = str(uuid.uuid4())
+    missing_res = client.patch(
+        f"/api/v1/chat/conversations/{missing_uuid}",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"title": "Title for Ghost"},
+    )
+    assert missing_res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_conversation_lifecycle_isolation_and_cascading():
+    """Verify conversation deletion enforces ownership, cascades to messages, and leaves no orphans."""
+    user_a_id = str(uuid.uuid4())
+    user_b_id = str(uuid.uuid4())
+    token_a = create_token(user_a_id, "user_a@example.com")
+    token_b = create_token(user_b_id, "user_b@example.com")
+
+    # 1. User A creates conversation with messages
+    comp_res = client.post(
+        "/api/v1/chat/completions",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"message": "Message to be deleted"},
+    )
+    assert comp_res.status_code == 200
+
+    convs = await chat_repository.list_conversations(uuid.UUID(user_a_id))
+    assert len(convs) >= 1
+    conv_id = str(convs[0].id)
+
+    # Verify messages exist
+    msgs_before = await chat_repository.get_messages(uuid.UUID(user_a_id), uuid.UUID(conv_id))
+    assert len(msgs_before) >= 2
+
+    # 2. Ownership: User B cannot delete User A's conversation
+    unauth_del = client.delete(
+        f"/api/v1/chat/conversations/{conv_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert unauth_del.status_code == 404
+
+    # Verify conversation still exists for User A
+    conv_check = await chat_repository.get_conversation(uuid.UUID(user_a_id), uuid.UUID(conv_id))
+    assert conv_check is not None
+
+    # 3. User A deletes their own conversation
+    del_res = client.delete(
+        f"/api/v1/chat/conversations/{conv_id}",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert del_res.status_code == 204
+
+    # 4. Verify conversation is no longer returned in GET /conversations
+    list_res = client.get(
+        "/api/v1/chat/conversations",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert list_res.status_code == 200
+    remaining_ids = [c["id"] for c in list_res.json()]
+    assert conv_id not in remaining_ids
+
+    # 5. Verify GET /conversations/{id}/messages returns 404
+    msgs_res = client.get(
+        f"/api/v1/chat/conversations/{conv_id}/messages",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert msgs_res.status_code == 404
+
+    # 6. Verify messages and requests were cascaded
+    msgs_after = await chat_repository.get_messages(uuid.UUID(user_a_id), uuid.UUID(conv_id))
+    assert len(msgs_after) == 0
+
+    # 7. Repeated delete returns 404
+    repeat_del = client.delete(
+        f"/api/v1/chat/conversations/{conv_id}",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert repeat_del.status_code == 404

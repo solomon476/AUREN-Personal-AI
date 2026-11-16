@@ -53,6 +53,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .eslintcache
+test-results/
+playwright-report/
+blob-report/
 
 # Operating System & IDEs
 .DS_Store

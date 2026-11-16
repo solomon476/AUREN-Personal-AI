@@ -249,7 +249,14 @@ class SQLiteChatRepository(BaseChatRepository):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM conversations WHERE id = ? AND user_id = ?",
+                """
+                SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at,
+                       COUNT(m.id) AS message_count
+                FROM conversations c
+                LEFT JOIN messages m ON m.conversation_id = c.id AND m.user_id = c.user_id
+                WHERE c.id = ? AND c.user_id = ?
+                GROUP BY c.id, c.user_id, c.title, c.created_at, c.updated_at
+                """,
                 (str(conversation_id), str(user_id)),
             )
             row = cursor.fetchone()
@@ -261,6 +268,7 @@ class SQLiteChatRepository(BaseChatRepository):
                 title=row["title"],
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
+                message_count=int(row["message_count"]) if "message_count" in row.keys() else 0,
             )
 
     def _sync_create_conversation(
@@ -350,6 +358,75 @@ class SQLiteChatRepository(BaseChatRepository):
             )
             for r in rows
         ]
+
+    def _sync_update_conversation_title(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        title: str,
+    ) -> Optional[ConversationModel]:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE conversations
+                SET title = ?, updated_at = ?
+                WHERE id = ? AND user_id = ?
+                """,
+                (title, now_iso, str(conversation_id), str(user_id)),
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                return None
+        return self._sync_get_conversation(user_id, conversation_id)
+
+    async def update_conversation_title(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        title: str,
+    ) -> Optional[ConversationModel]:
+        """Update conversation title, strictly enforcing ownership."""
+        return await asyncio.to_thread(
+            self._sync_update_conversation_title,
+            user_id,
+            conversation_id,
+            title,
+        )
+
+    def _sync_delete_conversation(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+    ) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
+                (str(conversation_id), str(user_id)),
+            )
+            if not cursor.fetchone():
+                return False
+
+            cursor.execute(
+                "DELETE FROM conversations WHERE id = ? AND user_id = ?",
+                (str(conversation_id), str(user_id)),
+            )
+            conn.commit()
+            return True
+
+    async def delete_conversation(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+    ) -> bool:
+        """Atomically delete conversation and associated messages, enforcing ownership."""
+        return await asyncio.to_thread(
+            self._sync_delete_conversation,
+            user_id,
+            conversation_id,
+        )
 
     def _sync_get_chat_request(self, user_id: UUID, idempotency_key: str) -> Optional[ChatRequestModel]:
         with self._get_connection() as conn:

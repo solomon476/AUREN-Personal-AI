@@ -53,6 +53,25 @@ class BaseChatRepository(ABC):
         pass
 
     @abstractmethod
+    async def update_conversation_title(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+        title: str,
+    ) -> Optional[ConversationModel]:
+        """Update conversation title, enforcing caller ownership. Returns None if not found or unauthorized."""
+        pass
+
+    @abstractmethod
+    async def delete_conversation(
+        self,
+        user_id: UUID,
+        conversation_id: UUID,
+    ) -> bool:
+        """Atomically delete conversation and associated messages, enforcing ownership. Returns True if deleted, False if not found."""
+        pass
+
+    @abstractmethod
     async def get_messages(
         self,
         user_id: UUID,

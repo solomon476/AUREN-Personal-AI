@@ -62,6 +62,10 @@ async function request<T>(
     throw new ApiError(response.status, errorDetail);
   }
 
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return undefined as unknown as T;
+  }
+
   return response.json() as Promise<T>;
 }
 
@@ -73,6 +77,13 @@ export const apiClient = {
     request<T>(endpoint, {
       ...options,
       method: 'POST',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+
+  patch: <T>(endpoint: string, body?: unknown, options?: RequestInit) =>
+    request<T>(endpoint, {
+      ...options,
+      method: 'PATCH',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
 

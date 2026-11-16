@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import hashlib
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def compute_request_fingerprint(
@@ -81,6 +81,25 @@ class ConversationCreateRequest(BaseModel):
     """Request payload to explicitly create a conversation thread."""
 
     title: Optional[str] = Field(default="New Conversation", max_length=200)
+
+
+class ConversationRenameRequest(BaseModel):
+    """Request payload to rename an existing conversation thread."""
+
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="New title for the conversation thread",
+    )
+
+    @field_validator("title")
+    @classmethod
+    def validate_title_not_empty(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("Conversation title cannot be empty or whitespace only.")
+        return stripped
 
 
 class ConversationResponse(BaseModel):

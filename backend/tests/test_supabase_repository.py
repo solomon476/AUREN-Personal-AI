@@ -523,3 +523,82 @@ async def test_supabase_repo_list_conversations_with_aggregated_counts():
         assert convs[0].message_count == 7
         assert convs[1].id == c2_id
         assert convs[1].message_count == 0
+
+
+@pytest.mark.asyncio
+async def test_supabase_repo_update_conversation_title():
+    """Verify update_conversation_title sends PATCH with Prefer: return=representation and parses updated row."""
+    conv_id = uuid4()
+    mock_row = {
+        "id": str(conv_id),
+        "user_id": str(USER_ID),
+        "title": "Renamed Title via PostgREST",
+        "created_at": "2026-11-16T00:00:00+00:00",
+        "updated_at": "2026-11-16T00:10:00+00:00",
+        "messages": [{"count": 3}],
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        assert "/conversations" in str(request.url)
+        assert f"id=eq.{conv_id}" in str(request.url)
+        assert f"user_id=eq.{USER_ID}" in str(request.url)
+        assert request.headers.get("Prefer") == "return=representation"
+        payload = json.loads(request.content)
+        assert payload["title"] == "Renamed Title via PostgREST"
+        return httpx.Response(200, json=[mock_row])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token=TEST_USER_TOKEN,
+            http_client=mock_client,
+        )
+
+        res = await repo.update_conversation_title(USER_ID, conv_id, "Renamed Title via PostgREST")
+        assert res is not None
+        assert res.id == conv_id
+        assert res.title == "Renamed Title via PostgREST"
+        assert res.message_count == 3
+
+
+@pytest.mark.asyncio
+async def test_supabase_repo_delete_conversation():
+    """Verify delete_conversation sends DELETE with Prefer: return=representation and handles success and not-found."""
+    conv_id = uuid4()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "DELETE"
+        assert "/conversations" in str(request.url)
+        assert f"id=eq.{conv_id}" in str(request.url)
+        assert f"user_id=eq.{USER_ID}" in str(request.url)
+        assert request.headers.get("Prefer") == "return=representation"
+        return httpx.Response(200, json=[{"id": str(conv_id)}])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token=TEST_USER_TOKEN,
+            http_client=mock_client,
+        )
+
+        # Existing conversation deleted
+        success = await repo.delete_conversation(USER_ID, conv_id)
+        assert success is True
+
+    # Not found case (empty list returned)
+    async def not_found_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(not_found_handler)) as mock_client:
+        repo = SupabasePostgresChatRepository(
+            supabase_url=TEST_SUPABASE_URL,
+            supabase_anon_key=TEST_ANON_KEY,
+            user_token=TEST_USER_TOKEN,
+            http_client=mock_client,
+        )
+
+        missing_success = await repo.delete_conversation(USER_ID, conv_id)
+        assert missing_success is False

@@ -4,7 +4,7 @@ import logging
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 
 from app.core.exceptions import (
@@ -18,6 +18,7 @@ from app.core.security import get_current_user
 from app.models.chat import (
     ChatCompletionRequest,
     ConversationCreateRequest,
+    ConversationRenameRequest,
     ConversationResponse,
     MessageResponse,
 )
@@ -153,6 +154,74 @@ async def create_conversation(
     except DatabaseError as exc:
         logger.error("Database error creating conversation: %s", getattr(exc, "technical_details", str(exc)))
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create conversation.")
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=ConversationResponse,
+    summary="Rename Conversation",
+    description="Update the title of an owned conversation thread.",
+)
+async def rename_conversation(
+    conversation_id: UUID,
+    payload: ConversationRenameRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    repo: BaseChatRepository = Depends(get_user_chat_repository),
+) -> ConversationResponse:
+    """Rename an owned conversation thread."""
+    try:
+        conv = await repo.update_conversation_title(
+            user_id=current_user.id,
+            conversation_id=conversation_id,
+            title=payload.title,
+        )
+        if not conv:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found or access denied.",
+            )
+        return ConversationResponse(
+            id=conv.id,
+            title=conv.title,
+            created_at=conv.created_at,
+            updated_at=conv.updated_at,
+            message_count=conv.message_count,
+        )
+    except HTTPException:
+        raise
+    except DatabaseError as exc:
+        logger.error("Database error renaming conversation: %s", getattr(exc, "technical_details", str(exc)))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to rename conversation.")
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete Conversation",
+    description="Atomically delete an owned conversation thread and all its messages.",
+)
+async def delete_conversation(
+    conversation_id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    repo: BaseChatRepository = Depends(get_user_chat_repository),
+):
+    """Delete an owned conversation thread and cascade delete its messages."""
+    try:
+        deleted = await repo.delete_conversation(
+            user_id=current_user.id,
+            conversation_id=conversation_id,
+        )
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found or access denied.",
+            )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except HTTPException:
+        raise
+    except DatabaseError as exc:
+        logger.error("Database error deleting conversation: %s", getattr(exc, "technical_details", str(exc)))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete conversation.")
 
 
 @router.get(

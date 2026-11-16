@@ -50,6 +50,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [session]);
 
   useEffect(() => {
+    // Support local test or preview sessions stored in localStorage
+    const testSessionRaw = window.localStorage.getItem('auren_test_session');
+    if (testSessionRaw) {
+      try {
+        const parsed = JSON.parse(testSessionRaw);
+        setUser(parsed.user ?? null);
+        setSession(parsed.session ?? null);
+        setProfile(parsed.profile ?? null);
+        setIsLoading(false);
+        return;
+      } catch {
+        // Invalid test session JSON, fallback to standard flow
+      }
+    }
+
     if (!supabase) {
       setIsLoading(false);
       return;
