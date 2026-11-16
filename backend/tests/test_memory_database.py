@@ -21,7 +21,7 @@ import uuid
 import asyncpg
 import pytest
 
-from app.core.config import settings
+from app.core.config import settings, get_journal_hmac_secret
 from app.services.journal.consent import (
     create_journal_consent_token,
     verify_and_consume_journal_consent,
@@ -32,6 +32,7 @@ from app.services.journal.consent import (
     ConsentUserMismatchError,
     ConsentConversationMismatchError,
     ConsentIdempotencyMismatchError,
+    DateRangeMismatchError,
     InvalidConsentScopeError,
     ReplayedConsentTokenError,
     JournalConsentToken,
@@ -92,7 +93,7 @@ async def isolated_postgres_db(server_info, prefix="auren_mem_test", apply_all_m
         await conn.execute(MOCK_AUTH_SQL)
         if apply_all_migrations:
             migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
-            assert len(migration_files) >= 13, f"Expected at least 13 migration files, found {len(migration_files)}"
+            assert len(migration_files) >= 14, f"Expected at least 14 migration files, found {len(migration_files)}"
             for mf in migration_files:
                 sql = Path(mf).read_text(encoding="utf-8")
                 await conn.execute(sql)
@@ -115,9 +116,10 @@ async def isolated_postgres_db(server_info, prefix="auren_mem_test", apply_all_m
 
 
 @pytest.mark.asyncio
-async def test_fresh_migration_001_through_013(postgresql_server):
-    """Execute complete migration sequence 001 through 013 and verify all memory tables,
-    indexes, schema columns, and NULL confidence support exist accurately.
+async def test_fresh_migration_001_through_014(postgresql_server):
+    """Execute complete migration sequence 001 through 014 and verify all memory tables,
+    indexes, schema columns, NULL confidence support, claim_token on extraction jobs,
+    and date_range on consumed consent tokens exist accurately.
     """
     async with isolated_postgres_db(postgresql_server, prefix="mem_fresh", apply_all_migrations=True) as (conn, db_name):
         tables = await conn.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
@@ -134,6 +136,20 @@ async def test_fresh_migration_001_through_013(postgresql_server):
         col_map = {c["column_name"]: c for c in cols}
         assert "confidence" in col_map
         assert col_map["confidence"]["is_nullable"] == "YES"
+
+        # Verify claim_token on memory_extraction_jobs
+        job_cols = await conn.fetch("SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'memory_extraction_jobs'")
+        job_col_map = {c["column_name"]: c for c in job_cols}
+        assert "claim_token" in job_col_map
+        assert job_col_map["claim_token"]["data_type"] == "uuid"
+        assert job_col_map["claim_token"]["is_nullable"] == "NO"
+
+        # Verify date_range on consumed_consent_tokens
+        consent_cols = await conn.fetch("SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'consumed_consent_tokens'")
+        consent_col_map = {c["column_name"]: c for c in consent_cols}
+        assert "date_range" in consent_col_map
+        assert consent_col_map["date_range"]["data_type"] == "text"
+        assert consent_col_map["date_range"]["is_nullable"] == "NO"
 
         # Verify HNSW indexes exist
         indexes = await conn.fetch("SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'memory_embeddings'")
@@ -157,7 +173,7 @@ async def test_legacy_memory_records_null_confidence_preservation(postgresql_ser
         # Apply 001 through 010 first
         migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
         for mf in migration_files:
-            if any(x in mf for x in ("011_", "012_", "013_")):
+            if any(x in mf for x in ("011_", "012_", "013_", "014_")):
                 continue
             sql = Path(mf).read_text(encoding="utf-8")
             await conn.execute(sql)
@@ -186,8 +202,8 @@ async def test_legacy_memory_records_null_confidence_preservation(postgresql_ser
             )
             legacy_ids.append((mid, cat, content, imp))
 
-        # Now execute Migration 011, 012, and 013 in order
-        for suffix in ("011_", "012_", "013_"):
+        # Now execute Migration 011, 012, 013, and 014 in order
+        for suffix in ("011_", "012_", "013_", "014_"):
             target_mf = [mf for mf in migration_files if suffix in mf][0]
             sql = Path(target_mf).read_text(encoding="utf-8")
             await conn.execute(sql)
@@ -459,7 +475,7 @@ async def test_journal_consent_hmac_and_database_verification(postgresql_server)
 
         await conn.execute(f"SET request.jwt.claim.sub = '{user_a}'")
 
-        secret = settings.JOURNAL_HMAC_SECRET
+        secret = get_journal_hmac_secret()
         idemp_key = "req-12345"
         scope = "journal.read"
         date_range = "2026-11-01:2026-11-16"
@@ -488,6 +504,7 @@ async def test_journal_consent_hmac_and_database_verification(postgresql_server)
                 expected_user_id=user_a,
                 expected_conversation_id=conv_a,
                 expected_idempotency_key=idemp_key,
+                expected_date_range=date_range,
                 now=now,
             )
 
@@ -499,6 +516,7 @@ async def test_journal_consent_hmac_and_database_verification(postgresql_server)
                 expected_user_id=user_b,
                 expected_conversation_id=conv_a,
                 expected_idempotency_key=idemp_key,
+                expected_date_range=date_range,
                 now=now,
             )
 
@@ -510,6 +528,7 @@ async def test_journal_consent_hmac_and_database_verification(postgresql_server)
                 expected_user_id=user_a,
                 expected_conversation_id=conv_b,
                 expected_idempotency_key=idemp_key,
+                expected_date_range=date_range,
                 now=now,
             )
 
@@ -521,10 +540,23 @@ async def test_journal_consent_hmac_and_database_verification(postgresql_server)
                 expected_user_id=user_a,
                 expected_conversation_id=conv_a,
                 expected_idempotency_key="different-key",
+                expected_date_range=date_range,
                 now=now,
             )
 
-        # 6. Expired token is rejected
+        # 6. Date range mismatch is rejected
+        with pytest.raises(DateRangeMismatchError, match="does not match requested"):
+            verify_journal_consent_token(
+                token=token,
+                secret=secret,
+                expected_user_id=user_a,
+                expected_conversation_id=conv_a,
+                expected_idempotency_key=idemp_key,
+                expected_date_range="2026-11-01:2026-11-20",
+                now=now,
+            )
+
+        # 7. Expired token is rejected
         past_time = now + timedelta(seconds=130)
         with pytest.raises(ExpiredConsentTokenError, match="has expired"):
             verify_journal_consent_token(
@@ -533,10 +565,11 @@ async def test_journal_consent_hmac_and_database_verification(postgresql_server)
                 expected_user_id=user_a,
                 expected_conversation_id=conv_a,
                 expected_idempotency_key=idemp_key,
+                expected_date_range=date_range,
                 now=past_time,
             )
 
-        # 7. Excessive lifetime (> 15 minutes) is rejected
+        # 8. Excessive lifetime (> 15 minutes) is rejected
         excessive_token = create_journal_consent_token(
             user_id=user_a,
             conversation_id=conv_a,
@@ -554,22 +587,57 @@ async def test_journal_consent_hmac_and_database_verification(postgresql_server)
                 expected_user_id=user_a,
                 expected_conversation_id=conv_a,
                 expected_idempotency_key=idemp_key,
+                expected_date_range=date_range,
                 now=now,
             )
 
-        # 8. Valid token is verified and atomically consumed in PostgreSQL
+        # 9. Date range mismatch during consume aborts BEFORE database execution and does NOT consume token
+        mismatch_nonce = uuid.uuid4()
+        mismatch_token = create_journal_consent_token(
+            user_id=user_a,
+            conversation_id=conv_a,
+            idempotency_key="req-mismatch",
+            scope=scope,
+            date_range="2026-11-01:2026-11-05",
+            nonce=mismatch_nonce,
+            expires_at=expires_at,
+            secret=secret,
+        )
+        with pytest.raises(DateRangeMismatchError, match="does not match requested"):
+            await verify_and_consume_journal_consent(
+                token=mismatch_token,
+                secret=secret,
+                expected_user_id=user_a,
+                expected_conversation_id=conv_a,
+                expected_idempotency_key="req-mismatch",
+                expected_date_range="2026-11-01:2026-11-20",
+                db_conn=conn,
+                now=now,
+            )
+        assert await conn.fetchrow("SELECT 1 FROM public.consumed_consent_tokens WHERE nonce = $1", mismatch_nonce) is None
+
+        # 10. Valid token is verified and atomically consumed in PostgreSQL
         consumed = await verify_and_consume_journal_consent(
             token=token,
             secret=secret,
             expected_user_id=user_a,
             expected_conversation_id=conv_a,
             expected_idempotency_key=idemp_key,
+            expected_date_range=date_range,
             db_conn=conn,
             now=now,
         )
         assert consumed is True
 
-        # 9. Replay attempt with same nonce is rejected by database ledger
+        # Verify date_range recorded in consumed_consent_tokens
+        consumed_row = await conn.fetchrow(
+            "SELECT * FROM public.consumed_consent_tokens WHERE nonce = $1",
+            nonce,
+        )
+        assert consumed_row is not None
+        assert consumed_row["date_range"] == date_range
+
+        # 11. Replay attempt with same nonce is rejected by database ledger
         with pytest.raises(ReplayedConsentTokenError, match="already been consumed"):
             await verify_and_consume_journal_consent(
                 token=token,
@@ -577,9 +645,39 @@ async def test_journal_consent_hmac_and_database_verification(postgresql_server)
                 expected_user_id=user_a,
                 expected_conversation_id=conv_a,
                 expected_idempotency_key=idemp_key,
+                expected_date_range=date_range,
                 db_conn=conn,
                 now=now,
             )
+
+        # 12. Delimiter resilience and Unicode canonical JSON serialization (RFC 8785)
+        complex_idemp = 'req|key:123,"quoted"\nnewline\t\u00e9'
+        complex_range = '2026-01-01:2026-12-31|üñïçódé 🍕'
+        complex_nonce = uuid.uuid4()
+        complex_token = create_journal_consent_token(
+            user_id=user_a,
+            conversation_id=conv_a,
+            idempotency_key=complex_idemp,
+            scope="journal.read",
+            date_range=complex_range,
+            nonce=complex_nonce,
+            expires_at=now + timedelta(seconds=60),
+            secret=secret,
+        )
+        complex_consumed = await verify_and_consume_journal_consent(
+            token=complex_token,
+            secret=secret,
+            expected_user_id=user_a,
+            expected_conversation_id=conv_a,
+            expected_idempotency_key=complex_idemp,
+            expected_date_range=complex_range,
+            db_conn=conn,
+            now=now,
+        )
+        assert complex_consumed is True
+        stored_complex = await conn.fetchrow("SELECT date_range, idempotency_key FROM public.consumed_consent_tokens WHERE nonce = $1", complex_nonce)
+        assert stored_complex["date_range"] == complex_range
+        assert stored_complex["idempotency_key"] == complex_idemp.strip()
 
 
 @pytest.mark.asyncio
@@ -717,12 +815,16 @@ async def test_worker_queue_concurrency_lease_and_stale_rejection(postgresql_ser
         claimed_a = await conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', 1, 30)")
         assert len(claimed_a) == 1
         job_a_id = claimed_a[0]["id"]
+        token_a = claimed_a[0]["claim_token"]
+        assert token_a is not None
 
         # Worker B concurrently claims 1 job; must receive the other job without collision
         claimed_b = await conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-b', 1, 30)")
         assert len(claimed_b) == 1
         job_b_id = claimed_b[0]["id"]
+        token_b = claimed_b[0]["claim_token"]
         assert job_a_id != job_b_id
+        assert token_b is not None
 
         # 3. Stale worker completion rejection: artificially expire Worker A's lease
         await conn.execute("RESET ROLE")
@@ -733,7 +835,7 @@ async def test_worker_queue_concurrency_lease_and_stale_rejection(postgresql_ser
 
         await conn.execute("SET ROLE auren_worker")
         with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
-            await conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a')", job_a_id)
+            await conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a)
 
         # Stale worker ingestion rejection on expired lease
         with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
@@ -742,24 +844,85 @@ async def test_worker_queue_concurrency_lease_and_stale_rejection(postgresql_ser
                 SELECT public.insert_extracted_memory_rpc(
                     p_job_id => $1,
                     p_worker_id => 'worker-a',
+                    p_claim_token => $2,
                     p_content => 'Stale ingestion attempt',
                     p_memory_type => 'fact',
                     p_category => 'general'
                 )
                 """,
                 job_a_id,
+                token_a,
             )
+
+        # Stale worker failure report rejection on expired lease
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
+            await conn.execute("SELECT public.fail_memory_extraction_job_rpc($1, 'worker-a', $2, 'Failed expired')", job_a_id, token_a)
 
         # 4. Reclamation by reaper
         reaped = await conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
         assert reaped >= 1
 
-        reaped_row = await conn.fetchrow("SELECT status, locked_by FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
+        reaped_row = await conn.fetchrow("SELECT status, locked_by, claim_token FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
         assert reaped_row["status"] == "pending"
         assert reaped_row["locked_by"] is None
+        assert reaped_row["claim_token"] != token_a  # New claim token generated on requeue
 
-        # 5. Worker B completes its job normally
-        comp_b = await conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-b')", job_b_id)
+        # 5. Same-worker lease generation protection test:
+        # Worker A re-claims job_a (new claim token issued)
+        reclaimed_a = await conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', 1, 30)")
+        assert len(reclaimed_a) == 1
+        assert reclaimed_a[0]["id"] == job_a_id
+        token_a_new = reclaimed_a[0]["claim_token"]
+        assert token_a_new != token_a
+
+        # Delayed thread from Worker A using OLD token_a attempts to complete job: REJECTED with Stale claim token
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
+            await conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a)
+
+        # Delayed thread from Worker A using OLD token_a attempts to insert extracted memory: REJECTED with Stale claim token
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
+            await conn.execute(
+                """
+                SELECT public.insert_extracted_memory_rpc(
+                    p_job_id => $1,
+                    p_worker_id => 'worker-a',
+                    p_claim_token => $2,
+                    p_content => 'Delayed thread attempt',
+                    p_memory_type => 'fact',
+                    p_category => 'general'
+                )
+                """,
+                job_a_id,
+                token_a,
+            )
+
+        # Delayed thread from Worker A using OLD token_a attempts to fail job: REJECTED with Stale claim token
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Stale claim token"):
+            await conn.execute("SELECT public.fail_memory_extraction_job_rpc($1, 'worker-a', $2, 'Delayed failure')", job_a_id, token_a)
+
+        # Ingestion with valid current token_a_new succeeds
+        new_mem_id = await conn.fetchval(
+            """
+            SELECT public.insert_extracted_memory_rpc(
+                p_job_id => $1,
+                p_worker_id => 'worker-a',
+                p_claim_token => $2,
+                p_content => 'Valid extracted memory',
+                p_memory_type => 'fact',
+                p_category => 'general'
+            )
+            """,
+            job_a_id,
+            token_a_new,
+        )
+        assert new_mem_id is not None
+
+        # Worker A completes its job with valid current token_a_new
+        comp_a = await conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a', $2)", job_a_id, token_a_new)
+        assert comp_a is True
+
+        # Worker B completes its job normally
+        comp_b = await conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-b', $2)", job_b_id, token_b)
         assert comp_b is True
 
         # 6. Exhausted job cannot be reclaimed indefinitely

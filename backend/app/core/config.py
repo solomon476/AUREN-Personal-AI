@@ -1,8 +1,18 @@
 """Application configuration module using Pydantic Settings."""
 
-from typing import List, Optional
-from pydantic import Field
+from typing import List, Optional, Set
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+KNOWN_INSECURE_SECRETS: Set[str] = {
+    "auren-journal-hmac-test-secret-change-in-prod",
+    "changeme",
+    "secret",
+    "password",
+    "default",
+    "test",
+    "1234567890",
+}
 
 
 class Settings(BaseSettings):
@@ -50,11 +60,51 @@ class Settings(BaseSettings):
     CHAT_HISTORY_LIMIT: int = 10
 
     # Journal Privacy & Consent Configuration
-    JOURNAL_HMAC_SECRET: str = Field(
-        default="auren-journal-hmac-test-secret-change-in-prod",
-        description="Backend HMAC secret for journal consent verification",
+    JOURNAL_HMAC_SECRET: Optional[SecretStr] = Field(
+        default=None,
+        description="Backend HMAC secret for journal consent verification (minimum 32 characters in staging/production)",
     )
+
+    @model_validator(mode="after")
+    def validate_journal_hmac_secret(self) -> "Settings":
+        env = (self.ENVIRONMENT or "development").lower()
+        secret_val = self.JOURNAL_HMAC_SECRET.get_secret_value() if self.JOURNAL_HMAC_SECRET else None
+
+        if env in ("production", "staging"):
+            if not secret_val:
+                raise ValueError(
+                    f"JOURNAL_HMAC_SECRET must be explicitly configured in {env} environment."
+                )
+            if secret_val.lower() in KNOWN_INSECURE_SECRETS:
+                raise ValueError(
+                    f"JOURNAL_HMAC_SECRET cannot be a known default or insecure test value in {env}."
+                )
+            if len(secret_val) < 32:
+                raise ValueError(
+                    f"JOURNAL_HMAC_SECRET must be at least 32 characters (256 bits) in {env}; got {len(secret_val)} characters."
+                )
+        elif env in ("development", "test"):
+            if not secret_val:
+                object.__setattr__(
+                    self,
+                    "JOURNAL_HMAC_SECRET",
+                    SecretStr("auren_dev_hmac_secret_32_chars_long_entropy_ok!"),
+                )
+            elif len(secret_val) < 16:
+                raise ValueError("JOURNAL_HMAC_SECRET must be at least 16 characters even in development/test.")
+        return self
+
+    def get_journal_hmac_secret(self) -> str:
+        """Returns the raw secret string for cryptographic operations. Never expose in logs or APIs."""
+        if not self.JOURNAL_HMAC_SECRET:
+            raise ValueError("JOURNAL_HMAC_SECRET is not configured.")
+        return self.JOURNAL_HMAC_SECRET.get_secret_value()
 
 
 settings = Settings()
+
+
+def get_journal_hmac_secret() -> str:
+    """Convenience helper returning the configured HMAC secret from central settings."""
+    return settings.get_journal_hmac_secret()
 

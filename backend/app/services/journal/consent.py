@@ -4,20 +4,23 @@ Ensures that access to private journal entries is strictly gated by an explicit,
 cryptographically signed HMAC token issued by the trusted backend.
 
 Enforces:
-1. Cryptographic signature integrity via HMAC-SHA256 (constant-time comparison).
-2. Binding to exact user_id, conversation_id, idempotency_key, scope, date_range, and nonce.
-3. Strict scope validation against permitted whitelist.
-4. Expiration enforcement and maximum 15-minute lifetime limit.
-5. Replay protection via atomic PostgreSQL nonce consumption.
+1. Canonical JSON deterministic serialization (RFC 8785 style, key-sorted, no whitespace).
+2. Cryptographic signature integrity via HMAC-SHA256 (constant-time comparison).
+3. Binding to exact user_id, conversation_id, idempotency_key, scope, date_range, and nonce.
+4. Strict scope validation against permitted whitelist.
+5. Strict expected date-range validation against the requested date range.
+6. Expiration enforcement and maximum 15-minute lifetime limit.
+7. Replay protection via atomic PostgreSQL nonce consumption.
 """
 
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
+import json
 from typing import Optional, Set
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 ALLOWED_JOURNAL_SCOPES: Set[str] = {
     "journal.read",
@@ -70,6 +73,12 @@ class ConsentIdempotencyMismatchError(ConsentVerificationError):
     pass
 
 
+class DateRangeMismatchError(ConsentVerificationError):
+    """Raised when the requested date range does not match the signed consent token."""
+
+    pass
+
+
 class InvalidConsentScopeError(ConsentVerificationError):
     """Raised when the consent token has an unrecognized or unauthorized scope."""
 
@@ -105,20 +114,31 @@ class JournalConsentToken(BaseModel):
     signature: str
 
 
+def serialize_canonical_payload(payload: JournalConsentPayload) -> bytes:
+    """Serializes payload into canonical JSON bytes with deterministic key order,
+    fixed UTC datetime formatting (ISO 8601 ending in 'Z'), lowercase UUIDs, and no whitespace.
+    """
+    dt_utc = payload.expires_at.astimezone(timezone.utc)
+    iso_exp = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    canonical_dict = {
+        "conversation_id": str(payload.conversation_id).lower(),
+        "date_range": payload.date_range.strip(),
+        "expires_at": iso_exp,
+        "idempotency_key": payload.idempotency_key.strip(),
+        "nonce": str(payload.nonce).lower(),
+        "scope": payload.scope.strip(),
+        "user_id": str(payload.user_id).lower(),
+    }
+    return json.dumps(canonical_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
 def compute_consent_signature(payload: JournalConsentPayload, secret: str) -> str:
-    """Computes deterministic HMAC-SHA256 signature over the canonical representation of the payload."""
-    canonical_string = (
-        f"user:{payload.user_id}|"
-        f"conv:{payload.conversation_id}|"
-        f"idemp:{payload.idempotency_key.strip()}|"
-        f"scope:{payload.scope.strip()}|"
-        f"range:{payload.date_range.strip()}|"
-        f"nonce:{payload.nonce}|"
-        f"exp:{int(payload.expires_at.timestamp())}"
-    )
+    """Computes deterministic HMAC-SHA256 signature over the canonical JSON bytes of the payload."""
+    canonical_bytes = serialize_canonical_payload(payload)
     return hmac.new(
         secret.encode("utf-8"),
-        canonical_string.encode("utf-8"),
+        canonical_bytes,
         hashlib.sha256,
     ).hexdigest()
 
@@ -157,9 +177,10 @@ def verify_journal_consent_token(
     expected_user_id: UUID,
     expected_conversation_id: UUID,
     expected_idempotency_key: str,
+    expected_date_range: str,
     now: Optional[datetime] = None,
 ) -> bool:
-    """Verifies HMAC signature, bound request fields, expiration, and lifetime.
+    """Verifies HMAC signature, bound request fields, expected date range, expiration, and lifetime.
 
     Does NOT consume the nonce in the database. Returns True if valid, or raises
     a specific ConsentVerificationError subclass on failure.
@@ -192,11 +213,17 @@ def verify_journal_consent_token(
     if token.payload.idempotency_key.strip() != expected_idempotency_key.strip():
         raise ConsentIdempotencyMismatchError("Consent idempotency_key mismatch.")
 
-    # 6. Expiration check
+    # 6. Date range binding validation
+    if token.payload.date_range.strip() != expected_date_range.strip():
+        raise DateRangeMismatchError(
+            f"Consent date_range '{token.payload.date_range}' does not match requested '{expected_date_range}'"
+        )
+
+    # 7. Expiration check
     if now > token.payload.expires_at:
         raise ExpiredConsentTokenError("Consent token has expired.")
 
-    # 7. Maximum lifetime check (15 minutes from now)
+    # 8. Maximum lifetime check (15 minutes from now)
     if token.payload.expires_at > now + timedelta(seconds=MAX_TOKEN_LIFETIME_SECONDS):
         raise ExcessiveLifetimeError(
             "Consent token lifetime exceeds maximum permitted window of 15 minutes."
@@ -211,20 +238,22 @@ async def verify_and_consume_journal_consent(
     expected_user_id: UUID,
     expected_conversation_id: UUID,
     expected_idempotency_key: str,
+    expected_date_range: str,
     db_conn,
     now: Optional[datetime] = None,
 ) -> bool:
     """Verifies HMAC signature and bounds in Python, then atomically consumes the nonce in PostgreSQL.
 
-    If verification fails, journal extraction MUST remain disabled.
+    If verification fails, journal extraction MUST remain disabled and the token is NOT consumed.
     """
-    # Verify cryptographic signature and bound fields first
+    # Verify cryptographic signature, bound fields, and date range first
     verify_journal_consent_token(
         token=token,
         secret=secret,
         expected_user_id=expected_user_id,
         expected_conversation_id=expected_conversation_id,
         expected_idempotency_key=expected_idempotency_key,
+        expected_date_range=expected_date_range,
         now=now,
     )
 
@@ -237,13 +266,15 @@ async def verify_and_consume_journal_consent(
                 p_conversation_id => $2,
                 p_idempotency_key => $3,
                 p_scope => $4,
-                p_expires_at => $5
+                p_date_range => $5,
+                p_expires_at => $6
             )
             """,
             token.payload.nonce,
             token.payload.conversation_id,
             token.payload.idempotency_key,
             token.payload.scope,
+            token.payload.date_range,
             token.payload.expires_at,
         )
         return bool(consumed)
@@ -252,4 +283,3 @@ async def verify_and_consume_journal_consent(
         if "already been consumed" in err_msg or "23505" in err_msg:
             raise ReplayedConsentTokenError("Consent token has already been consumed (replay rejected).") from exc
         raise
-
