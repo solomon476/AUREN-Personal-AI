@@ -346,6 +346,7 @@ class ChatService:
             ChatMessage(role="system", content=SYSTEM_PROMPT)
         ]
 
+        retrieved_memories_data: list[dict[str, Any]] = []
         if settings.MEMORY_RETRIEVAL_ENABLED:
             try:
                 from app.services.embeddings.factory import get_embedding_provider
@@ -360,7 +361,7 @@ class ChatService:
 
                 retriever = MemoryRetriever(repository=repo)
                 ctx_mgr = MemoryContextManager(retriever=retriever, embedding_provider=embedding_provider)
-                mem_context = await ctx_mgr.build_memory_context(
+                mem_context, selected_memories = await ctx_mgr.assemble_memory_context(
                     user_id=user.id,
                     query_text=request.message,
                     provider=provider,
@@ -368,6 +369,18 @@ class ChatService:
                 )
                 if mem_context:
                     llm_messages.append(ChatMessage(role="system", content=mem_context))
+                    retrieved_memories_data = [
+                        {
+                            "id": str(m.id),
+                            "content": m.content,
+                            "memory_type": m.memory_type,
+                            "category": m.category,
+                            "confirmation_status": m.confirmation_status,
+                            "importance": m.importance,
+                            "score": m.score,
+                        }
+                        for m in selected_memories
+                    ]
             except Exception as mem_err:
                 logger.warning("Failed injecting memory context (safe continue): %s", mem_err)
 
@@ -436,27 +449,25 @@ class ChatService:
                 logger.info("Stream interrupted due to client disconnect. Skipping completion persistence.")
             else:
                 full_response = "".join(accumulated_chunks)
+                assistant_metadata = {
+                    "model": provider.get_model_id(),
+                    "user_message_id": str(user_message.id),
+                    "idempotency_key": request.idempotency_key,
+                    "retrieved_memories": retrieved_memories_data,
+                }
                 if retry_assistant_msg_id:
                     assistant_msg = await repo.update_assistant_message(
                         user_id=user.id,
                         message_id=retry_assistant_msg_id,
                         content=full_response,
-                        metadata={
-                            "model": provider.get_model_id(),
-                            "user_message_id": str(user_message.id),
-                            "idempotency_key": request.idempotency_key,
-                        },
+                        metadata=assistant_metadata,
                     )
                 else:
                     assistant_msg = await repo.persist_assistant_message(
                         user_id=user.id,
                         conversation_id=conversation.id,
                         content=full_response,
-                        metadata={
-                            "model": provider.get_model_id(),
-                            "user_message_id": str(user_message.id),
-                            "idempotency_key": request.idempotency_key,
-                        },
+                        metadata=assistant_metadata,
                     )
                 is_completed = True
                 terminal_state = "completed"
@@ -473,6 +484,7 @@ class ChatService:
                     "message_id": str(assistant_msg.id),
                     "finish_reason": "stop",
                     "model": provider.get_model_id(),
+                    "retrieved_memories": retrieved_memories_data,
                 }
                 yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
 

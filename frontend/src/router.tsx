@@ -10,7 +10,6 @@ import {
   redirect,
 } from '@tanstack/react-router';
 import {
-  Brain,
   CheckSquare,
   FolderKanban,
   Target,
@@ -20,6 +19,7 @@ import {
 import { AppLayout } from './components/layout/AppLayout';
 import { ChatView } from './features/chat/ChatView';
 import { SystemView } from './features/system/SystemView';
+import { MemoryView } from './features/memory/MemoryView';
 import { SectionPlaceholder } from './components/placeholders/SectionPlaceholder';
 import { NotFound } from './components/common/NotFound';
 
@@ -59,26 +59,11 @@ export const systemRoute = createRoute({
   component: SystemView,
 });
 
-// Long-term Memory Placeholder (Phase 3C.3)
+// Long-term Memory Explorer & Epistemic Verification (Phase 3C.3)
 export const memoriesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/memories',
-  component: () => (
-    <SectionPlaceholder
-      title="Long-term Memory & Epistemic Verification"
-      icon={Brain}
-      badge="Phase 3B Backend Operational"
-      phase="Phase 3C.3"
-      description="AUREN's persistent long-term memory engine with hybrid vector-lexical retrieval, Gemini 768-dim embeddings, and HMAC consent is fully operational in PostgreSQL."
-      backendStatus="Active: vector(768) + hybrid search RPC + consent HMAC verification"
-      plannedFeatures={[
-        'Interactive Memory Explorer & Category Filter',
-        'Epistemic Verification Queue (Review & Confirm Inferred Facts)',
-        'In-Chat Memory Context Inspector',
-        'Forget / Right-to-be-Forgotten controls',
-      ]}
-    />
-  ),
+  component: MemoryView,
 });
 
 // Tasks & Timetable Placeholder (Phase 3C.4)

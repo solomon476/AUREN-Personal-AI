@@ -2,7 +2,7 @@
 
 import html
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from uuid import UUID
 
 from app.core.config import settings
@@ -53,15 +53,18 @@ class MemoryContextManager:
         lines.append("</user_memories>")
         return "\n".join(lines)
 
-    async def build_memory_context(
+    async def assemble_memory_context(
         self,
         user_id: UUID,
         query_text: str,
         provider: BaseLLMProvider,
         budget_tokens: Optional[int] = None,
         query_embedding: Optional[List[float]] = None,
-    ) -> str:
+    ) -> Tuple[str, List[MemorySearchResult]]:
         """Retrieves and formats memories into an XML context block strictly respecting the token budget.
+
+        Returns:
+            Tuple of (formatted_xml_string, list_of_selected_memories).
 
         Invariants:
         1. Uses provider's native token counting API across the exact serialized XML block.
@@ -107,9 +110,9 @@ class MemoryContextManager:
         )
 
         if not candidates:
-            return ""
+            return "", []
 
-        # 2. Verify provider native token counting availability
+        # 3. Verify provider native token counting availability
         probe_xml = self._format_memory_xml(candidates[:1])
         probe_count = await provider.count_tokens(probe_xml)
         if probe_count is None:
@@ -117,9 +120,9 @@ class MemoryContextManager:
                 "Native provider token counter unavailable for %s; omitting memory context to guarantee context budget.",
                 provider.get_model_id(),
             )
-            return ""
+            return "", []
 
-        # 3. Incrementally pack memories under strict provider token budget
+        # 4. Incrementally pack memories under strict provider token budget
         packed_memories: List[MemorySearchResult] = []
         for mem in candidates:
             test_batch = packed_memories + [mem]
@@ -137,7 +140,25 @@ class MemoryContextManager:
                 break
 
         if not packed_memories:
-            return ""
+            return "", []
 
-        return self._format_memory_xml(packed_memories)
+        return self._format_memory_xml(packed_memories), packed_memories
+
+    async def build_memory_context(
+        self,
+        user_id: UUID,
+        query_text: str,
+        provider: BaseLLMProvider,
+        budget_tokens: Optional[int] = None,
+        query_embedding: Optional[List[float]] = None,
+    ) -> str:
+        """Retrieves and formats memories into an XML context block strictly respecting the token budget."""
+        xml, _ = await self.assemble_memory_context(
+            user_id=user_id,
+            query_text=query_text,
+            provider=provider,
+            budget_tokens=budget_tokens,
+            query_embedding=query_embedding,
+        )
+        return xml
 

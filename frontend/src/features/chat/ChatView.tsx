@@ -17,7 +17,8 @@ import {
   Loader2,
   RotateCcw,
   Edit2,
-  Trash2
+  Trash2,
+  Brain,
 } from 'lucide-react';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { 
@@ -35,6 +36,7 @@ import { useConversationMessages, useInvalidateMessages } from '../../hooks/useC
 import { MessageContent } from '../../components/chat/MessageContent';
 import { RenameConversationModal } from '../../components/chat/RenameConversationModal';
 import { DeleteConversationModal } from '../../components/chat/DeleteConversationModal';
+import { ContextInspectorModal } from '../../components/chat/ContextInspectorModal';
 
 interface ChatViewProps {
   conversationId?: string;
@@ -73,9 +75,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
     idempotencyKey: string;
   } | null>(null);
 
-  // Modals for conversation lifecycle
+  // Modals for conversation lifecycle & context inspection
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [contextInspectorMessageId, setContextInspectorMessageId] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -397,9 +400,23 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                       }`}
                     >
                       <MessageContent content={msg.content} role={msg.role} />
-                      {!isUser && Boolean(msg.metadata?.interrupted) && (
-                        <div className="mt-1.5 text-[10px] text-amber-400/90 italic font-mono">
-                          (Stream interrupted)
+                      {!isUser && (
+                        <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-700/50 text-[11px] text-slate-400">
+                          <button
+                            type="button"
+                            onClick={() => setContextInspectorMessageId(msg.id)}
+                            className="inline-flex items-center space-x-1 text-slate-400 hover:text-cyan-400 transition"
+                            title="Inspect memory context used for this response"
+                            aria-label="Inspect context provenance"
+                          >
+                            <Brain className="w-3 h-3 text-cyan-400" />
+                            <span>Context Inspector</span>
+                          </button>
+                          {Boolean(msg.metadata?.interrupted) && (
+                            <span className="text-[10px] text-amber-400/90 italic font-mono">
+                              (Stream interrupted)
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -542,6 +559,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           />
         </>
       )}
+
+      {/* Context Inspector Modal */}
+      <ContextInspectorModal
+        isOpen={Boolean(contextInspectorMessageId)}
+        onClose={() => setContextInspectorMessageId(null)}
+        conversationId={activeConversationId || undefined}
+        messageId={contextInspectorMessageId || undefined}
+        userId={user?.id}
+      />
     </div>
   );
 };

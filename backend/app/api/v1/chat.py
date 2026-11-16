@@ -22,6 +22,7 @@ from app.models.chat import (
     ConversationResponse,
     MessageResponse,
 )
+from app.models.memory import MemoryContextItem, MessageContextResponse
 from app.models.user import AuthenticatedUser
 from app.services.chat.base_repository import BaseChatRepository
 from app.services.chat.chat_service import chat_service
@@ -261,3 +262,63 @@ async def get_conversation_messages(
     except DatabaseError as exc:
         logger.error("Database error fetching messages: %s", getattr(exc, "technical_details", str(exc)))
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch messages.")
+
+
+@router.get(
+    "/conversations/{conversation_id}/messages/{message_id}/context",
+    response_model=MessageContextResponse,
+    summary="Get Message Context Provenance",
+    description="Retrieve the exact memory items that were injected into context for an assistant message.",
+)
+async def get_message_context(
+    conversation_id: UUID,
+    message_id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    repo: BaseChatRepository = Depends(get_user_chat_repository),
+) -> MessageContextResponse:
+    """Retrieve context provenance for a message, strictly verifying ownership and conversational hierarchy."""
+    try:
+        conv = await repo.get_conversation(current_user.id, conversation_id)
+        if not conv:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found or access denied.",
+            )
+
+        msg = await repo.get_message_by_id(current_user.id, message_id)
+        if not msg or msg.conversation_id != conversation_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Message not found or access denied.",
+            )
+
+        raw_memories = (msg.metadata or {}).get("retrieved_memories", [])
+        items: List[MemoryContextItem] = []
+        for rm in raw_memories:
+            try:
+                items.append(
+                    MemoryContextItem(
+                        id=UUID(rm["id"]),
+                        content=rm["content"],
+                        memory_type=rm.get("memory_type", "fact"),
+                        category=rm.get("category", "general"),
+                        confirmation_status=rm.get("confirmation_status", "unconfirmed"),
+                        importance=rm.get("importance", 3),
+                        score=float(rm.get("score", 0.0)),
+                    )
+                )
+            except Exception as parse_err:
+                logger.warning("Error parsing retrieved memory context item: %s", parse_err)
+
+        return MessageContextResponse(
+            message_id=msg.id,
+            conversation_id=conversation_id,
+            model=(msg.metadata or {}).get("model"),
+            retrieved_memories=items,
+            memory_count=len(items),
+        )
+    except HTTPException:
+        raise
+    except DatabaseError as exc:
+        logger.error("Database error fetching message context: %s", getattr(exc, "technical_details", str(exc)))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch message context.")

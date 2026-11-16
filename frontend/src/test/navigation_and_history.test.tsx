@@ -47,15 +47,24 @@ describe('Navigation and Browser History', () => {
     const user = userEvent.setup();
     const { history } = await renderRouter('/chat');
 
-    // Click Long-term Memory
+    // Click Tasks & Timetable roadmap section
+    const tasksLink = screen.getByRole('link', { name: /tasks & timetable/i });
+    await user.click(tasksLink);
+
+    await waitFor(() => {
+      expect(history.location.pathname).toBe('/tasks');
+      expect(screen.getByRole('heading', { name: 'Tasks & Timetable' })).toBeInTheDocument();
+      expect(screen.getByText(/Schema Ready/i)).toBeInTheDocument();
+      expect(screen.getByText(/Task Board/i)).toBeInTheDocument();
+    });
+
+    // Click Long-term Memory active feature
     const memoryLink = screen.getByRole('link', { name: /long-term memory/i });
     await user.click(memoryLink);
 
     await waitFor(() => {
       expect(history.location.pathname).toBe('/memories');
-      expect(screen.getByText('Long-term Memory & Epistemic Verification')).toBeInTheDocument();
-      expect(screen.getByText(/Phase 3B Backend Operational/i)).toBeInTheDocument();
-      expect(screen.getByText(/Interactive Memory Explorer & Category Filter/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Long-term Memory Explorer' })).toBeInTheDocument();
     });
   });
 

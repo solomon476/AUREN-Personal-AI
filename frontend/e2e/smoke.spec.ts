@@ -19,10 +19,10 @@ test.describe('AUREN Smoke Suite', () => {
     await expect(page.getByText('FastAPI Backend & Streaming Health')).toBeVisible();
   });
 
-  test('navigates to long-term memory roadmap placeholder', async ({ page }) => {
+  test('navigates to long-term memory explorer', async ({ page }) => {
     await page.goto('/chat');
     await page.getByRole('link', { name: /long-term memory/i }).click();
     await expect(page).toHaveURL(/\/memories/);
-    await expect(page.getByText('Long-term Memory & Epistemic Verification')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /long-term memory explorer/i })).toBeVisible();
   });
 });

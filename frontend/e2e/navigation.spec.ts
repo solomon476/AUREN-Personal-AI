@@ -80,7 +80,7 @@ test.describe('Application Navigation & Routing', () => {
     // Forward to /memories
     await page.goForward();
     await expect(page).toHaveURL(/\/memories/);
-    await expect(page.getByText('Long-term Memory & Epistemic Verification')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /long-term memory explorer/i })).toBeVisible();
   });
 
   test('unknown routes display 404 Page Not Found with return action', async ({ page }) => {

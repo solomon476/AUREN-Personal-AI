@@ -42,6 +42,13 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       badgeColor: 'bg-indigo-950/80 text-indigo-300 border-indigo-800/40',
     },
     {
+      to: '/memories',
+      label: 'Long-term Memory',
+      icon: Brain,
+      badge: 'Explorer',
+      badgeColor: 'bg-cyan-950/80 text-cyan-300 border-cyan-800/40',
+    },
+    {
       to: '/system',
       label: 'System & Database',
       icon: LayoutDashboard,
@@ -51,12 +58,6 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   ];
 
   const roadmapNavItems = [
-    {
-      to: '/memories',
-      label: 'Long-term Memory',
-      icon: Brain,
-      badge: 'Phase 3C.3',
-    },
     {
       to: '/tasks',
       label: 'Tasks & Timetable',
