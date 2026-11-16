@@ -423,14 +423,17 @@ except ValidationError as exc:
     assert bad_secret not in err_str, f"Plaintext secret leaked in str(exc): {err_str}"
     assert bad_secret not in err_repr, f"Plaintext secret leaked in repr(exc): {err_repr}"
     assert 'cannot be a known default or insecure test value in production' in err_str
-    # Check structured validation error inputs
+    # Inspect exc.errors() and require structured secret masking
+    found_kwargs_secret = False
     for err in exc.errors():
         inp = err.get('input')
         if isinstance(inp, dict) and 'JOURNAL_HMAC_SECRET' in inp:
+            found_kwargs_secret = True
             masked = inp['JOURNAL_HMAC_SECRET']
-            assert isinstance(masked, SecretStr)
-            assert bad_secret not in str(masked)
-            assert bad_secret not in repr(masked)
+            assert isinstance(masked, SecretStr), f"Expected SecretStr in kwargs error input, got {type(masked)}"
+            assert bad_secret not in str(masked), "Plaintext secret leaked in str(masked)"
+            assert bad_secret not in repr(masked), "Plaintext secret leaked in repr(masked)"
+    assert found_kwargs_secret, "Expected JOURNAL_HMAC_SECRET to be present in structured kwargs validation error inputs"
     print('CHECK_3_KWARGS_REJECTION_SUCCESS')
 
 # 4. Reject an insecure production secret supplied through environment variables
@@ -445,14 +448,17 @@ except ValidationError as exc:
     assert bad_secret not in err_str, f"Plaintext secret leaked in str(exc): {err_str}"
     assert bad_secret not in err_repr, f"Plaintext secret leaked in repr(exc): {err_repr}"
     assert 'cannot be a known default or insecure test value in production' in err_str
-    # Check structured validation error inputs
+    # Inspect exc.errors() and require structured secret masking independently
+    found_env_secret = False
     for err in exc.errors():
         inp = err.get('input')
         if isinstance(inp, dict) and 'JOURNAL_HMAC_SECRET' in inp:
+            found_env_secret = True
             masked = inp['JOURNAL_HMAC_SECRET']
-            assert isinstance(masked, SecretStr)
-            assert bad_secret not in str(masked)
-            assert bad_secret not in repr(masked)
+            assert isinstance(masked, SecretStr), f"Expected SecretStr in env error input, got {type(masked)}"
+            assert bad_secret not in str(masked), "Plaintext secret leaked in str(masked)"
+            assert bad_secret not in repr(masked), "Plaintext secret leaked in repr(masked)"
+    assert found_env_secret, "Expected JOURNAL_HMAC_SECRET to be present in structured env validation error inputs"
     print('CHECK_4_ENV_REJECTION_SUCCESS')
 
 # 5. Confirm plaintext secrets do not appear in str(exc), repr(exc), or structured validation-error inputs
