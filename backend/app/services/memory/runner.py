@@ -33,6 +33,7 @@ class WorkerRunner:
         batch_size: Optional[int] = None,
         lease_seconds: Optional[int] = None,
         concurrency: Optional[int] = None,
+        cleanup_timeout: Optional[float] = None,
         settings: Settings = default_settings,
     ):
         self.settings = settings
@@ -48,6 +49,7 @@ class WorkerRunner:
         self.batch_size = batch_size if batch_size is not None else settings.MEMORY_WORKER_BATCH_SIZE
         self.lease_seconds = lease_seconds if lease_seconds is not None else settings.MEMORY_WORKER_LEASE_SECONDS
         self.concurrency = concurrency if concurrency is not None else settings.MEMORY_WORKER_CONCURRENCY
+        self.cleanup_timeout = cleanup_timeout if cleanup_timeout is not None else 5.0
 
         self._stop_event = asyncio.Event()
         self._is_running = False
@@ -161,18 +163,40 @@ class WorkerRunner:
                 else:
                     self.metrics["jobs_failed"] += 1
         except asyncio.CancelledError:
-            logger.warning("Task for job %s cancelled during shutdown; releasing job with retry", job_id)
+            logger.warning("Task for job %s cancelled during shutdown; attempting bounded claim release", job_id)
+            release_confirmed = False
             try:
-                async with self.db_pool.acquire() as cancel_conn:
-                    await self._worker.fail_job(
-                        cancel_conn,
-                        job_id,
-                        claim_token,
-                        RuntimeError("Worker shut down while job was in-flight"),
-                        retry=True,
-                    )
+                async def _attempt_release():
+                    async with self.db_pool.acquire() as cancel_conn:
+                        return await self._worker.fail_job(
+                            cancel_conn,
+                            job_id,
+                            claim_token,
+                            RuntimeError("Worker shut down while job was in-flight"),
+                            retry=True,
+                        )
+
+                # Bounded timeout for claim release so a stalled DB query cannot hang shutdown
+                release_confirmed = await asyncio.wait_for(
+                    _attempt_release(),
+                    timeout=self.cleanup_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Database release operation timed out (%.1fs) for cancelled job %s; "
+                    "claim was NOT confirmed released. Expired-lease recovery will reclaim after lease expiry.",
+                    self.cleanup_timeout,
+                    job_id,
+                )
             except Exception as cancel_err:
-                logger.error("Failed to release cancelled job %s: %s", job_id, cancel_err)
+                logger.error(
+                    "Failed to release cancelled job %s: %s; "
+                    "claim was NOT confirmed released. Expired-lease recovery will reclaim after lease expiry.",
+                    job_id,
+                    cancel_err,
+                )
+            if release_confirmed:
+                logger.info("Successfully released cancelled job %s for retry", job_id)
             raise
         except Exception as proc_err:
             logger.error("Unexpected error in _process_job_safe for job %s: %s", job_id, proc_err)
@@ -260,7 +284,19 @@ class WorkerRunner:
                     logger.warning("Cancelling %d remaining tasks after grace timeout...", len(pending))
                     for t in pending:
                         t.cancel()
-                    await asyncio.gather(*pending, return_exceptions=True)
+                    try:
+                        # Bounded gather so stalled cancellation cleanup cannot block shutdown indefinitely
+                        gather_timeout = self.cleanup_timeout + 2.0
+                        await asyncio.wait_for(
+                            asyncio.gather(*pending, return_exceptions=True),
+                            timeout=gather_timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.error(
+                            "Cleanup of cancelled tasks exceeded deadline (%.1fs); "
+                            "proceeding with shutdown. Any unreleased claims will be recovered via expired lease.",
+                            gather_timeout,
+                        )
 
             if self._owns_db_pool and self.db_pool is not None:
                 await self.db_pool.close()

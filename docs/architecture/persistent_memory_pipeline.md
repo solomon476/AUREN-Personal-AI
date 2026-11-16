@@ -70,6 +70,7 @@ The background extraction worker (`MemoryExtractionWorker`):
    - Sets `last_confirmed_at = NULL`.
    - Rejects any worker attempt to assert `system_asserted` status.
    - Deduplicates identical content against active memories.
+   - Validates the complete active retrieval embedding identity against `public.embedding_models` (`purpose = 'retrieval' AND is_active = TRUE`), rejecting inactive, non-retrieval, or retired models (`text-embedding-004`).
    - Atomically records the vector into `public.memory_embeddings`.
 6. **Completion:** Calls `complete_memory_extraction_job_rpc`:
    - Verifies claim token and active lease.
@@ -216,7 +217,7 @@ The standalone runner (`backend/app/services/memory/runner.py`) provides:
 - URL validation: rejects connection strings configured with `auren_worker` directly, enforcing the dedicated `auren_worker_service` login role.
 - **Bounded In-Flight Scheduling:** Calculates `available_capacity = max(0, concurrency - len(active_tasks))` before every claim cycle. Only claims jobs up to available capacity (`min(batch_size, available_capacity)`), preventing unassigned jobs from accumulating behind a semaphore while their database lease timers expire.
 - **Lease Expiration Checking:** Tracks task claim time (`monotonic`). If remaining lease time is exhausted prior to execution start, marks the job as failed with retry to prevent stale job conflicts.
-- **Graceful Shutdown:** On `SIGINT` or `SIGTERM`, ceases new claims immediately. Allows active in-flight tasks to complete within a bounded grace window; if tasks must be cancelled, catches `CancelledError` and explicitly releases the claim via `fail_job(..., retry=True)` to prevent abandoned locks.
+- **Graceful Shutdown:** On `SIGINT` or `SIGTERM`, ceases new claims immediately. Allows active in-flight tasks to complete within a bounded grace window; if tasks must be cancelled, catches `CancelledError` and explicitly attempts to release the claim via `fail_job(..., retry=True)` within a bounded `cleanup_timeout` (5.0s default) so stalled database operations cannot block process termination indefinitely. Abandoned or unconfirmed locks are recovered via lease expiry.
 - Operational metrics (poll cycles, jobs claimed, jobs succeeded, jobs failed).
 - Structured logging that redacts message content and credentials.
 

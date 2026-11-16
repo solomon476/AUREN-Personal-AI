@@ -201,6 +201,34 @@ BEGIN
         RETURN v_existing_id;
     END IF;
 
+    -- Validate embedding identity before memory insertion if vector embedding is provided
+    IF p_embedding_768 IS NOT NULL THEN
+        v_model := COALESCE(trim(p_model), 'gemini-embedding-2');
+        v_provider := COALESCE(trim(p_provider), 'gemini');
+        v_version := COALESCE(trim(p_version), 'v1');
+        v_dimension := COALESCE(p_dimension, 768);
+
+        -- Disallow new generation using retired model text-embedding-004
+        IF v_model = 'text-embedding-004' THEN
+            RAISE EXCEPTION 'Model text-embedding-004 is retired and cannot be used for new embeddings'
+                USING ERRCODE = 'P0003';
+        END IF;
+
+        -- Verify that the specified embedding model is registered, active, and configured for retrieval
+        IF NOT EXISTS (
+            SELECT 1 FROM public.embedding_models
+            WHERE provider = v_provider
+              AND model = v_model
+              AND version = v_version
+              AND dimension = v_dimension
+              AND purpose = 'retrieval'
+              AND is_active = TRUE
+        ) THEN
+            RAISE EXCEPTION 'Embedding model %/%/% (%-dim) is not an active registered retrieval model',
+                v_provider, v_model, v_version, v_dimension USING ERRCODE = 'P0002';
+        END IF;
+    END IF;
+
     -- Insert active unconfirmed memory with inferred dialogue provenance
     INSERT INTO public.memories (
         user_id,
@@ -240,29 +268,6 @@ BEGIN
 
     -- Attach vector embedding atomically if provided
     IF p_embedding_768 IS NOT NULL THEN
-        v_model := COALESCE(trim(p_model), 'gemini-embedding-2');
-        v_provider := COALESCE(trim(p_provider), 'gemini');
-        v_version := COALESCE(trim(p_version), 'v1');
-        v_dimension := COALESCE(p_dimension, 768);
-
-        -- Disallow new generation using retired model text-embedding-004
-        IF v_model = 'text-embedding-004' THEN
-            RAISE EXCEPTION 'Model text-embedding-004 is retired and cannot be used for new embeddings'
-                USING ERRCODE = 'P0003';
-        END IF;
-
-        -- Verify that the specified embedding model is registered in embedding_models
-        IF NOT EXISTS (
-            SELECT 1 FROM public.embedding_models
-            WHERE provider = v_provider
-              AND model = v_model
-              AND version = v_version
-              AND dimension = v_dimension
-        ) THEN
-            RAISE EXCEPTION 'Embedding model %/%/% (%-dim) is not registered in embedding_models',
-                v_provider, v_model, v_version, v_dimension USING ERRCODE = 'P0002';
-        END IF;
-
         INSERT INTO public.memory_embeddings (
             memory_id,
             user_id,

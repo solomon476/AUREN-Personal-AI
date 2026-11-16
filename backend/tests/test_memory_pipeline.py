@@ -2023,4 +2023,216 @@ async def test_explicit_embedding_provider_failure_modes_and_retired_model_rejec
         await worker_pool.close()
 
 
+@pytest.mark.asyncio
+async def test_embedding_ingestion_identity_enforcement_postgres(postgresql_server):
+    """33. Verify strict embedding identity enforcement at ingestion in PostgreSQL:
+    1. Active retrieval model (gemini-embedding-2, 768-dim, purpose='retrieval', is_active=TRUE) is ACCEPTED.
+    2. Inactive retrieval model is REJECTED (ERRCODE P0002).
+    3. Active non-retrieval model (purpose='classification') is REJECTED (ERRCODE P0002).
+    4. Unknown model (unregistered in embedding_models) is REJECTED (ERRCODE P0002).
+    5. Retired model (text-embedding-004) is REJECTED (ERRCODE P0003).
+    6. Rejected ingestions leave zero partial records in memories or memory_embeddings.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_id_enf") as (conn, db_name):
+        user_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "idenf@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+
+        conv_id = uuid.uuid4()
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'IdEnf Conv')", conv_id, user_id)
+
+        # Register custom inactive model
+        await conn.execute("""
+            INSERT INTO public.embedding_models (provider, model, version, dimension, vector_column, purpose, is_active)
+            VALUES ('test_prov', 'inactive_model', 'v1', 768, 'embedding_768', 'retrieval', FALSE)
+        """)
+
+        # Register custom non-retrieval model
+        await conn.execute("""
+            INSERT INTO public.embedding_models (provider, model, version, dimension, vector_column, purpose, is_active)
+            VALUES ('test_prov', 'classification_model', 'v1', 768, 'embedding_768', 'classification', TRUE)
+        """)
+
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'secret' IN ROLE auren_worker")
+
+        worker_conn = await asyncpg.connect(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name,
+            user=worker_user, password="secret",
+        )
+
+        dummy_vec = f"[{','.join(['0.01'] * 768)}]"
+
+        async def setup_test_job(tag: str):
+            u_id = uuid.uuid4()
+            a_id = uuid.uuid4()
+            await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', $4)", u_id, conv_id, user_id, f"Prompt {tag}")
+            await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', $4)", a_id, conv_id, user_id, f"Response {tag}")
+            fp = "a" * 64
+            await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", f"idemp-{tag}", conv_id, u_id, fp)
+            await conn.execute("SELECT public.complete_chat_request($1, $2)", f"idemp-{tag}", a_id)
+
+            claimed = await worker_conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-test', 5, 300)")
+            for job in claimed:
+                if job["source_message_id"] == a_id:
+                    return job["id"], job["claim_token"]
+            raise RuntimeError(f"Could not find claimed job for {tag}")
+
+        try:
+            # 1. Active retrieval model (gemini-embedding-2) -> ACCEPTED
+            j1_id, t1_tok = await setup_test_job("active")
+            mem_id1 = await worker_conn.fetchval(
+                """
+                SELECT public.insert_extracted_memory_rpc(
+                    p_job_id => $1,
+                    p_worker_id => 'worker-test',
+                    p_claim_token => $2,
+                    p_content => 'Memory from active gemini-embedding-2',
+                    p_memory_type => 'fact',
+                    p_category => 'general',
+                    p_importance => 3,
+                    p_confidence => 0.9,
+                    p_embedding_768 => $3::vector,
+                    p_model => 'gemini-embedding-2',
+                    p_provider => 'gemini',
+                    p_version => 'v1',
+                    p_dimension => 768
+                )
+                """,
+                j1_id, t1_tok, dummy_vec,
+            )
+            assert mem_id1 is not None
+
+            # Record baseline counts after successful insert
+            base_mem_count = await conn.fetchval("SELECT count(*) FROM public.memories")
+            base_emb_count = await conn.fetchval("SELECT count(*) FROM public.memory_embeddings")
+            assert base_mem_count == 1
+            assert base_emb_count == 1
+
+            # 2. Inactive retrieval model -> REJECTED with P0002
+            j2_id, t2_tok = await setup_test_job("inactive")
+            with pytest.raises(asyncpg.exceptions.PostgresError) as exc_info2:
+                await worker_conn.fetchval(
+                    """
+                    SELECT public.insert_extracted_memory_rpc(
+                        p_job_id => $1,
+                        p_worker_id => 'worker-test',
+                        p_claim_token => $2,
+                        p_content => 'Memory from inactive model',
+                        p_memory_type => 'fact',
+                        p_category => 'general',
+                        p_importance => 3,
+                        p_confidence => 0.9,
+                        p_embedding_768 => $3::vector,
+                        p_model => 'inactive_model',
+                        p_provider => 'test_prov',
+                        p_version => 'v1',
+                        p_dimension => 768
+                    )
+                    """,
+                    j2_id, t2_tok, dummy_vec,
+                )
+            assert exc_info2.value.sqlstate == "P0002"
+            assert "not an active registered retrieval model" in exc_info2.value.message
+
+            # Ensure zero partial writes
+            assert await conn.fetchval("SELECT count(*) FROM public.memories") == base_mem_count
+            assert await conn.fetchval("SELECT count(*) FROM public.memory_embeddings") == base_emb_count
+
+            # 3. Active non-retrieval model (purpose='classification') -> REJECTED with P0002
+            j3_id, t3_tok = await setup_test_job("classification")
+            with pytest.raises(asyncpg.exceptions.PostgresError) as exc_info3:
+                await worker_conn.fetchval(
+                    """
+                    SELECT public.insert_extracted_memory_rpc(
+                        p_job_id => $1,
+                        p_worker_id => 'worker-test',
+                        p_claim_token => $2,
+                        p_content => 'Memory from classification model',
+                        p_memory_type => 'fact',
+                        p_category => 'general',
+                        p_importance => 3,
+                        p_confidence => 0.9,
+                        p_embedding_768 => $3::vector,
+                        p_model => 'classification_model',
+                        p_provider => 'test_prov',
+                        p_version => 'v1',
+                        p_dimension => 768
+                    )
+                    """,
+                    j3_id, t3_tok, dummy_vec,
+                )
+            assert exc_info3.value.sqlstate == "P0002"
+            assert "not an active registered retrieval model" in exc_info3.value.message
+
+            # Ensure zero partial writes
+            assert await conn.fetchval("SELECT count(*) FROM public.memories") == base_mem_count
+            assert await conn.fetchval("SELECT count(*) FROM public.memory_embeddings") == base_emb_count
+
+            # 4. Unknown model -> REJECTED with P0002
+            j4_id, t4_tok = await setup_test_job("unknown")
+            with pytest.raises(asyncpg.exceptions.PostgresError) as exc_info4:
+                await worker_conn.fetchval(
+                    """
+                    SELECT public.insert_extracted_memory_rpc(
+                        p_job_id => $1,
+                        p_worker_id => 'worker-test',
+                        p_claim_token => $2,
+                        p_content => 'Memory from unknown model',
+                        p_memory_type => 'fact',
+                        p_category => 'general',
+                        p_importance => 3,
+                        p_confidence => 0.9,
+                        p_embedding_768 => $3::vector,
+                        p_model => 'completely-unknown-model',
+                        p_provider => 'unknown-prov',
+                        p_version => 'v1',
+                        p_dimension => 768
+                    )
+                    """,
+                    j4_id, t4_tok, dummy_vec,
+                )
+            assert exc_info4.value.sqlstate == "P0002"
+            assert "not an active registered retrieval model" in exc_info4.value.message
+
+            # Ensure zero partial writes
+            assert await conn.fetchval("SELECT count(*) FROM public.memories") == base_mem_count
+            assert await conn.fetchval("SELECT count(*) FROM public.memory_embeddings") == base_emb_count
+
+            # 5. Retired model (text-embedding-004) -> REJECTED with P0003
+            j5_id, t5_tok = await setup_test_job("retired")
+            with pytest.raises(asyncpg.exceptions.PostgresError) as exc_info5:
+                await worker_conn.fetchval(
+                    """
+                    SELECT public.insert_extracted_memory_rpc(
+                        p_job_id => $1,
+                        p_worker_id => 'worker-test',
+                        p_claim_token => $2,
+                        p_content => 'Memory from retired text-embedding-004',
+                        p_memory_type => 'fact',
+                        p_category => 'general',
+                        p_importance => 3,
+                        p_confidence => 0.9,
+                        p_embedding_768 => $3::vector,
+                        p_model => 'text-embedding-004',
+                        p_provider => 'gemini',
+                        p_version => 'v1',
+                        p_dimension => 768
+                    )
+                    """,
+                    j5_id, t5_tok, dummy_vec,
+                )
+            assert exc_info5.value.sqlstate == "P0003"
+            assert "retired" in exc_info5.value.message.lower()
+
+            # 6. Final verification: Zero unintended memory or embedding records remain
+            final_mem_count = await conn.fetchval("SELECT count(*) FROM public.memories")
+            final_emb_count = await conn.fetchval("SELECT count(*) FROM public.memory_embeddings")
+            assert final_mem_count == 1
+            assert final_emb_count == 1
+
+        finally:
+            await worker_conn.close()
+
+
 

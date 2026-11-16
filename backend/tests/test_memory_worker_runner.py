@@ -504,3 +504,149 @@ async def test_worker_runner_graceful_shutdown_with_in_flight_tasks(postgresql_s
         await worker_pool.close()
 
 
+@pytest.mark.asyncio
+async def test_worker_runner_cancellation_releases_claim_promptly(postgresql_server):
+    """Verify that cancelled in-flight tasks attempt to release database claim with retry."""
+    async with isolated_postgres_db(postgresql_server, prefix="run_rel") as (conn, db_name):
+        user_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "rel@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+
+        conv_id = uuid.uuid4()
+        user_msg_id = uuid.uuid4()
+        asst_msg_id = uuid.uuid4()
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Rel')", conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Prompt')", user_msg_id, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Response')", asst_msg_id, conv_id, user_id)
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", "idemp-rel", conv_id, user_msg_id, "a" * 64)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", "idemp-rel", asst_msg_id)
+        job_id = await conn.fetchval("SELECT id FROM public.memory_extraction_jobs WHERE source_message_id = $1", asst_msg_id)
+
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'secret' IN ROLE auren_worker")
+
+        worker_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=worker_user, password="secret",
+            min_size=1, max_size=3,
+        )
+
+        class HangingLLM(BaseLLMProvider):
+            def get_model_id(self) -> str:
+                return "hanging"
+
+            async def generate_response(self, messages, **kwargs) -> LLMResponse:
+                await asyncio.sleep(5.0)
+                return LLMResponse(content="[]", model="hanging")
+
+            async def stream_response(self, messages, **kwargs):
+                yield "[]"
+
+        runner = WorkerRunner(
+            worker_id="runner-cancel-rel-test",
+            db_pool=worker_pool,
+            llm_provider=HangingLLM(),
+            embedding_provider=MockEmbeddingProvider(model_id="gemini-embedding-2"),
+            poll_interval=0.05,
+            concurrency=2,
+            lease_seconds=60,
+            cleanup_timeout=2.0,
+        )
+
+        run_task = asyncio.create_task(runner.run())
+        for _ in range(20):
+            if runner.metrics["jobs_claimed"] > 0:
+                break
+            await asyncio.sleep(0.02)
+
+        runner.lease_seconds = 0
+        runner.stop()
+        await asyncio.wait_for(run_task, timeout=4.0)
+
+        job_db = await conn.fetchrow("SELECT status, locked_by FROM public.memory_extraction_jobs WHERE id = $1", job_id)
+        assert job_db["status"] == "pending"
+        assert job_db["locked_by"] is None
+        assert runner.metrics["jobs_succeeded"] == 0
+
+        await worker_pool.close()
+
+
+@pytest.mark.asyncio
+async def test_worker_runner_shutdown_with_stalled_db_cleanup(postgresql_server):
+    """Verify that a stalled DB operation during cancellation cleanup cannot hang shutdown indefinitely."""
+    async with isolated_postgres_db(postgresql_server, prefix="run_stall") as (conn, db_name):
+        user_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "stall@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+
+        conv_id = uuid.uuid4()
+        user_msg_id = uuid.uuid4()
+        asst_msg_id = uuid.uuid4()
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Stall')", conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Prompt')", user_msg_id, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Response')", asst_msg_id, conv_id, user_id)
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", "idemp-stall", conv_id, user_msg_id, "b" * 64)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", "idemp-stall", asst_msg_id)
+        job_id = await conn.fetchval("SELECT id FROM public.memory_extraction_jobs WHERE source_message_id = $1", asst_msg_id)
+
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'secret' IN ROLE auren_worker")
+
+        worker_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=worker_user, password="secret",
+            min_size=1, max_size=3,
+        )
+
+        class HangingLLM(BaseLLMProvider):
+            def get_model_id(self) -> str:
+                return "hanging"
+
+            async def generate_response(self, messages, **kwargs) -> LLMResponse:
+                await asyncio.sleep(10.0)
+                return LLMResponse(content="[]", model="hanging")
+
+            async def stream_response(self, messages, **kwargs):
+                yield "[]"
+
+        runner = WorkerRunner(
+            worker_id="runner-stall-test",
+            db_pool=worker_pool,
+            llm_provider=HangingLLM(),
+            embedding_provider=MockEmbeddingProvider(model_id="gemini-embedding-2"),
+            poll_interval=0.05,
+            concurrency=2,
+            lease_seconds=60,
+            cleanup_timeout=0.2,
+        )
+
+        original_init = runner.initialize
+        async def mock_init():
+            await original_init()
+            original_fail_job = runner._worker.fail_job
+            async def stalled_fail_job(*args, **kwargs):
+                await asyncio.sleep(5.0)
+                return await original_fail_job(*args, **kwargs)
+            runner._worker.fail_job = stalled_fail_job
+        runner.initialize = mock_init
+
+        run_task = asyncio.create_task(runner.run())
+        for _ in range(20):
+            if runner.metrics["jobs_claimed"] > 0:
+                break
+            await asyncio.sleep(0.02)
+
+        start_time = asyncio.get_running_loop().time()
+        runner.lease_seconds = 0
+        runner.stop()
+
+        await asyncio.wait_for(run_task, timeout=2.0)
+        elapsed = asyncio.get_running_loop().time() - start_time
+
+        assert elapsed < 1.5
+        assert runner.metrics["jobs_succeeded"] == 0
+
+        job_db = await conn.fetchrow("SELECT status, locked_by FROM public.memory_extraction_jobs WHERE id = $1", job_id)
+        assert job_db["status"] == "processing"
+
+        await worker_pool.close()
+
+
