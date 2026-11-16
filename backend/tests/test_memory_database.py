@@ -181,7 +181,7 @@ async def test_legacy_memory_records_null_confidence_preservation(postgresql_ser
         # Apply 001 through 010 first
         migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
         for mf in migration_files:
-            if any(x in mf for x in ("011_", "012_", "013_", "014_", "015_")):
+            if any(x in mf for x in ("011_", "012_", "013_", "014_", "015_", "016_")):
                 continue
             sql = Path(mf).read_text(encoding="utf-8")
             await conn.execute(sql)
@@ -210,8 +210,8 @@ async def test_legacy_memory_records_null_confidence_preservation(postgresql_ser
             )
             legacy_ids.append((mid, cat, content, imp))
 
-        # Now execute Migration 011, 012, 013, 014, and 015 in order
-        for suffix in ("011_", "012_", "013_", "014_", "015_"):
+        # Now execute Migration 011, 012, 013, 014, 015, and 016 in order
+        for suffix in ("011_", "012_", "013_", "014_", "015_", "016_"):
             target_mf = [mf for mf in migration_files if suffix in mf][0]
             sql = Path(target_mf).read_text(encoding="utf-8")
             await conn.execute(sql)

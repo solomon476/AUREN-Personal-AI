@@ -167,3 +167,15 @@ class BaseChatRepository(ABC):
     ) -> ChatRequestModel:
         """Reconcile an incomplete request to completed status with an existing assistant message."""
         pass
+
+    @abstractmethod
+    async def search_memories_hybrid(
+        self,
+        user_id: UUID,
+        query_text: str,
+        query_embedding: Optional[List[float]] = None,
+        limit: int = 5,
+        min_similarity: float = 0.0,
+    ) -> List[Any]:
+        """Execute hybrid search for active user memories."""
+        pass

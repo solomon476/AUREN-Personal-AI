@@ -154,3 +154,24 @@ class GeminiProvider(BaseLLMProvider):
                 raise LLMAuthenticationError(f"Gemini authentication failed: {error_str}")
             raise LLMProviderError(f"Gemini streaming error: {error_str}")
 
+    async def count_tokens(self, text: str) -> Optional[int]:
+        """Count tokens using Gemini's native API.
+
+        Returns None if client is unconfigured, offline, or request fails.
+        """
+        if not self.api_key or self._client is None:
+            return None
+
+        try:
+            response = await asyncio.wait_for(
+                self._client.aio.models.count_tokens(
+                    model=self.model_id,
+                    contents=text,
+                ),
+                timeout=10.0,
+            )
+            return response.total_tokens
+        except Exception as exc:
+            logger.warning("Gemini native count_tokens failed: %s", exc)
+            return None
+

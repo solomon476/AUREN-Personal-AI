@@ -177,6 +177,13 @@ class Settings(BaseSettings):
     CHAT_STREAM_HEARTBEAT_SECONDS: float = 15.0
     CHAT_HISTORY_LIMIT: int = 10
 
+    # Persistent Memory Pipeline & Hybrid Retrieval Configuration
+    MEMORY_EXTRACTION_ENABLED: bool = True
+    MEMORY_RETRIEVAL_ENABLED: bool = True
+    MEMORY_CONTEXT_BUDGET_TOKENS: int = 500
+    MEMORY_SEARCH_LIMIT: int = 5
+    MEMORY_SIMILARITY_THRESHOLD: float = 0.0
+
     # Journal Privacy & Consent Configuration
     JOURNAL_HMAC_SECRET: Optional[SecretStr] = Field(
         default=None,

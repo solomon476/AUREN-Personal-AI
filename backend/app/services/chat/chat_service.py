@@ -332,8 +332,10 @@ class ChatService:
         yield f"event: metadata\ndata: {json.dumps(init_event)}\n\n"
 
         # -------------------------------------------------------------------
-        # 4. Assemble Sliding Window Context
+        # 4. Assemble Sliding Window Context & Memory Context
         # -------------------------------------------------------------------
+        provider = self._get_provider()
+
         history = await repo.get_messages(
             user_id=user.id,
             conversation_id=conversation.id,
@@ -343,13 +345,31 @@ class ChatService:
         llm_messages: list[ChatMessage] = [
             ChatMessage(role="system", content=SYSTEM_PROMPT)
         ]
+
+        if settings.MEMORY_RETRIEVAL_ENABLED:
+            try:
+                from app.services.memory.context_manager import MemoryContextManager
+                from app.services.memory.retriever import MemoryRetriever
+
+                retriever = MemoryRetriever(repository=repo)
+                ctx_mgr = MemoryContextManager(retriever=retriever)
+                mem_context = await ctx_mgr.build_memory_context(
+                    user_id=user.id,
+                    query_text=request.message,
+                    provider=provider,
+                    budget_tokens=settings.MEMORY_CONTEXT_BUDGET_TOKENS,
+                )
+                if mem_context:
+                    llm_messages.append(ChatMessage(role="system", content=mem_context))
+            except Exception as mem_err:
+                logger.warning("Failed injecting memory context (safe continue): %s", mem_err)
+
         for msg in history:
             llm_messages.append(ChatMessage(role=msg.role, content=msg.content))
 
         # -------------------------------------------------------------------
         # 5. Stream Response with Decoupled Heartbeat & Timeout Enforcement
         # -------------------------------------------------------------------
-        provider = self._get_provider()
         accumulated_chunks: List[str] = []
         is_completed = False
         terminal_state: Optional[str] = None

@@ -76,3 +76,12 @@ class BaseLLMProvider(ABC):
     ) -> AsyncIterator[str]:
         """Stream response chunks for real-time text delivery."""
         pass
+
+    async def count_tokens(self, text: str) -> Optional[int]:
+        """Count tokens in text using provider native tokenizer.
+
+        Returns None if provider does not support native token counting or
+        if token counting fails/offline. Context manager uses this for strict
+        fail-safe budget enforcement.
+        """
+        return None

@@ -885,3 +885,14 @@ class SQLiteChatRepository(BaseChatRepository):
         limit: int = 50,
     ) -> List[MessageModel]:
         return await asyncio.to_thread(self._sync_get_messages, user_id, conversation_id, limit)
+
+    async def search_memories_hybrid(
+        self,
+        user_id: UUID,
+        query_text: str,
+        query_embedding: Optional[List[float]] = None,
+        limit: int = 5,
+        min_similarity: float = 0.0,
+    ) -> List[Any]:
+        """Local SQLite mock returns empty memory candidates."""
+        return []

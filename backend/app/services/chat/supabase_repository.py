@@ -717,3 +717,47 @@ class SupabasePostgresChatRepository(BaseChatRepository):
                     return bool(data["transitioned"])
 
         raise DatabaseOperationError(f"Unsupported conditional transition from {from_statuses} to '{to_status}'")
+
+    async def search_memories_hybrid(
+        self,
+        user_id: UUID,
+        query_text: str,
+        query_embedding: Optional[List[float]] = None,
+        limit: int = 5,
+        min_similarity: float = 0.0,
+    ) -> List[Any]:
+        """Invoke search_memories_hybrid_rpc via PostgREST."""
+        from app.services.memory.models import MemorySearchResult
+
+        payload: dict = {
+            "p_query_text": query_text,
+            "p_limit": limit,
+            "p_min_similarity": min_similarity,
+        }
+        if query_embedding is not None:
+            payload["p_query_embedding"] = f"[{','.join(str(x) for x in query_embedding)}]"
+
+        res = await self._request(
+            method="POST",
+            path="/rpc/search_memories_hybrid_rpc",
+            json_data=payload,
+            allowed_error_codes=(404, 400),
+        )
+        if res.status_code in (404, 400):
+            logger.warning("search_memories_hybrid_rpc failed: %s", res.text)
+            return []
+
+        rows = res.json()
+        return [
+            MemorySearchResult(
+                id=UUID(r["id"]),
+                content=r["content"],
+                memory_type=r["memory_type"],
+                category=r["category"],
+                importance=r["importance"],
+                confidence=r.get("confidence"),
+                confirmation_status=r["confirmation_status"],
+                score=float(r["score"]),
+            )
+            for r in rows
+        ]
