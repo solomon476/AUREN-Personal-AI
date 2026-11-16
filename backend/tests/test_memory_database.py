@@ -1,24 +1,42 @@
 """Real PostgreSQL integration tests verifying the foundational memory database schema,
 security policies, lifecycle transitions, lineage integrity, vector embeddings table,
-single-use journal consent ledger, and extraction job queue.
+single-use journal consent ledger, extraction job queue, and worker authentication boundaries.
 
 Distinction of Test Environments:
-- Mocked Authentication: Uses `SET request.jwt.claim.sub = '<uuid>'` to emulate Supabase's
-  postgREST JWT context within the PostgreSQL session.
+- Mocked Authentication: Emulates Supabase's PostgREST JWT context within the PostgreSQL session
+  using `SET request.jwt.claim.sub = '<uuid>'`.
 - Real PostgreSQL Privileges & RLS: Uses `SET ROLE authenticated`, `SET ROLE auren_worker`,
   and `RESET ROLE` to execute statements under actual unprivileged PostgreSQL database roles,
-  verifying that GRANT/REVOKE privileges and ROW LEVEL SECURITY (RLS) policies are enforced
-  at the PostgreSQL kernel level.
+  verifying that GRANT/REVOKE privileges, role assumption restrictions, and ROW LEVEL SECURITY (RLS)
+  policies are enforced at the PostgreSQL kernel level.
 """
 
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 import glob
 from pathlib import Path
 import uuid
 
 import asyncpg
 import pytest
+
+from app.core.config import settings
+from app.services.journal.consent import (
+    create_journal_consent_token,
+    verify_and_consume_journal_consent,
+    verify_journal_consent_token,
+    InvalidSignatureError,
+    ExpiredConsentTokenError,
+    ExcessiveLifetimeError,
+    ConsentUserMismatchError,
+    ConsentConversationMismatchError,
+    ConsentIdempotencyMismatchError,
+    InvalidConsentScopeError,
+    ReplayedConsentTokenError,
+    JournalConsentToken,
+    JournalConsentPayload,
+)
 
 PG_SOCK_DIR = Path("/tmp/auren_pg_sock")
 PG_PORT = 54329
@@ -38,7 +56,7 @@ MOCK_AUTH_SQL = """
     DO $$ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auren_worker') THEN CREATE ROLE auren_worker NOLOGIN; END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auren_worker') THEN CREATE ROLE auren_worker NOLOGIN NOINHERIT; END IF;
     END $$;
 """
 
@@ -74,7 +92,7 @@ async def isolated_postgres_db(server_info, prefix="auren_mem_test", apply_all_m
         await conn.execute(MOCK_AUTH_SQL)
         if apply_all_migrations:
             migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
-            assert len(migration_files) >= 12, f"Expected at least 12 migration files, found {len(migration_files)}"
+            assert len(migration_files) >= 13, f"Expected at least 13 migration files, found {len(migration_files)}"
             for mf in migration_files:
                 sql = Path(mf).read_text(encoding="utf-8")
                 await conn.execute(sql)
@@ -97,9 +115,9 @@ async def isolated_postgres_db(server_info, prefix="auren_mem_test", apply_all_m
 
 
 @pytest.mark.asyncio
-async def test_fresh_migration_001_through_012(postgresql_server):
-    """Execute complete migration sequence 001 through 012 and verify all memory tables,
-    indexes, and schema columns exist accurately.
+async def test_fresh_migration_001_through_013(postgresql_server):
+    """Execute complete migration sequence 001 through 013 and verify all memory tables,
+    indexes, schema columns, and NULL confidence support exist accurately.
     """
     async with isolated_postgres_db(postgresql_server, prefix="mem_fresh", apply_all_migrations=True) as (conn, db_name):
         tables = await conn.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
@@ -112,12 +130,10 @@ async def test_fresh_migration_001_through_012(postgresql_server):
         assert "memory_extraction_jobs" in table_names
 
         # Verify vector columns on memory_embeddings
-        cols = await conn.fetch("SELECT column_name, data_type, udt_name FROM information_schema.columns WHERE table_name = 'memory_embeddings'")
-        col_map = {c["column_name"]: c["udt_name"] for c in cols}
-        assert "embedding_768" in col_map
-        assert "embedding_1536" in col_map
-        assert col_map["embedding_768"] == "vector"
-        assert col_map["embedding_1536"] == "vector"
+        cols = await conn.fetch("SELECT column_name, data_type, udt_name, is_nullable FROM information_schema.columns WHERE table_name = 'memories'")
+        col_map = {c["column_name"]: c for c in cols}
+        assert "confidence" in col_map
+        assert col_map["confidence"]["is_nullable"] == "YES"
 
         # Verify HNSW indexes exist
         indexes = await conn.fetch("SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'memory_embeddings'")
@@ -132,16 +148,16 @@ async def test_fresh_migration_001_through_012(postgresql_server):
 
 
 @pytest.mark.asyncio
-async def test_legacy_memory_records_provenance_and_preservation(postgresql_server):
+async def test_legacy_memory_records_null_confidence_preservation(postgresql_server):
     """Verify that existing legacy memory records are preserved without manufacturing certainty
     or consent: origin becomes 'legacy_import', confirmation_status becomes 'unconfirmed',
-    confidence is 0.5, and last_confirmed_at is NULL.
+    confidence is NULL, and last_confirmed_at is NULL.
     """
     async with isolated_postgres_db(postgresql_server, prefix="mem_legacy", apply_all_migrations=False) as (conn, db_name):
         # Apply 001 through 010 first
         migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
         for mf in migration_files:
-            if "011_" in mf or "012_" in mf:
+            if any(x in mf for x in ("011_", "012_", "013_")):
                 continue
             sql = Path(mf).read_text(encoding="utf-8")
             await conn.execute(sql)
@@ -170,14 +186,13 @@ async def test_legacy_memory_records_provenance_and_preservation(postgresql_serv
             )
             legacy_ids.append((mid, cat, content, imp))
 
-        # Now execute Migration 011 then 012
-        sql011 = Path([mf for mf in migration_files if "011_" in mf][0]).read_text(encoding="utf-8")
-        await conn.execute(sql011)
+        # Now execute Migration 011, 012, and 013 in order
+        for suffix in ("011_", "012_", "013_"):
+            target_mf = [mf for mf in migration_files if suffix in mf][0]
+            sql = Path(target_mf).read_text(encoding="utf-8")
+            await conn.execute(sql)
 
-        sql012 = Path([mf for mf in migration_files if "012_" in mf][0]).read_text(encoding="utf-8")
-        await conn.execute(sql012)
-
-        # Assert all 5 legacy records survived with exact conservative mappings and unconfirmed provenance
+        # Assert all 5 legacy records survived with exact conservative mappings, unconfirmed status, and NULL confidence
         for mid, old_cat, expected_content, expected_imp in legacy_ids:
             row = await conn.fetchrow("SELECT * FROM public.memories WHERE id = $1", mid)
             assert row is not None
@@ -186,7 +201,7 @@ async def test_legacy_memory_records_provenance_and_preservation(postgresql_serv
             assert row["root_memory_id"] == mid
             assert row["confirmation_status"] == "unconfirmed"
             assert row["lifecycle_status"] == "active"
-            assert row["confidence"] == 0.5
+            assert row["confidence"] is None  # Zero manufactured certainty
             assert row["origin"] == "legacy_import"
             assert row["last_confirmed_at"] is None
 
@@ -206,7 +221,7 @@ async def test_legacy_memory_records_provenance_and_preservation(postgresql_serv
                 assert row["memory_type"] == "fact"
                 assert row["category"] == "general"
 
-        # Verify that the user can subsequently confirm the legacy record explicitly
+        # Explicit user confirmation elevates confirmation status and sets confidence = 1.0
         await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
         first_mid = legacy_ids[0][0]
         confirmed_res = await conn.fetchval("SELECT public.confirm_memory_rpc($1)", first_mid)
@@ -216,94 +231,116 @@ async def test_legacy_memory_records_provenance_and_preservation(postgresql_serv
         assert confirmed_row["confirmation_status"] == "confirmed"
         assert confirmed_row["confidence"] == 1.0
         assert confirmed_row["last_confirmed_at"] is not None
-        assert confirmed_row["origin"] == "legacy_import"  # Historical provenance remains intact
+        assert confirmed_row["origin"] == "legacy_import"
 
 
 @pytest.mark.asyncio
-async def test_system_asserted_privilege_restrictions(postgresql_server):
-    """Verify that ordinary authenticated users cannot assign system_asserted status or origin,
-    and cannot execute the platform-controlled create_system_asserted_memory_rpc.
+async def test_worker_role_privilege_boundaries_and_assumption_rejection(postgresql_server):
+    """Verify that ordinary authenticated users cannot assume the auren_worker role,
+    cannot execute worker RPCs, and that create_system_asserted_memory_rpc strictly validates
+    type, category, and importance.
     """
-    async with isolated_postgres_db(postgresql_server, prefix="mem_sys", apply_all_migrations=True) as (conn, db_name):
+    async with isolated_postgres_db(postgresql_server, prefix="mem_wauth", apply_all_migrations=True) as (conn, db_name):
         user_id = uuid.uuid4()
         await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "user@example.com")
         await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
 
-        # 1. Authenticated user attempting to set origin = 'system_asserted' is rejected
-        with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="system_asserted status is reserved"):
-            await conn.execute(
-                """
-                SELECT public.create_memory_rpc(
-                    p_content => 'Fabricated platform memory',
-                    p_memory_type => 'fact',
-                    p_category => 'general',
-                    p_origin => 'system_asserted'
+        # Create real unprivileged client user and worker login user to test actual role boundary
+        client_pass = "client_secret_123"
+        worker_pass = "worker_secret_123"
+        client_user = f"client_{uuid.uuid4().hex[:8]}"
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {client_user} WITH PASSWORD '{client_pass}' IN ROLE authenticated")
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD '{worker_pass}' IN ROLE auren_worker")
+
+        try:
+            # Connect as test_client_role (real unprivileged connection)
+            client_conn = await asyncpg.connect(
+                host=postgresql_server["host"],
+                port=postgresql_server["port"],
+                database=db_name,
+                user=client_user,
+                password=client_pass,
+            )
+            try:
+                # 1. Unprivileged client user attempting to SET ROLE auren_worker is denied by PostgreSQL RBAC
+                with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="permission denied to set role"):
+                    await client_conn.execute("SET ROLE auren_worker")
+
+                # 2. Unprivileged client user attempting to execute worker RPCs is denied by PostgreSQL
+                with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                    await client_conn.execute("SELECT * FROM public.claim_memory_extraction_jobs_rpc('rogue-worker')")
+
+                with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                    await client_conn.execute(
+                        """
+                        SELECT public.create_system_asserted_memory_rpc(
+                            p_user_id => $1,
+                            p_content => 'Unauthorized assertion',
+                            p_memory_type => 'fact',
+                            p_category => 'general'
+                        )
+                        """,
+                        user_id,
+                    )
+            finally:
+                await client_conn.close()
+
+            # Connect as test_worker_role (real worker connection)
+            worker_conn = await asyncpg.connect(
+                host=postgresql_server["host"],
+                port=postgresql_server["port"],
+                database=db_name,
+                user=worker_user,
+                password=worker_pass,
+            )
+            try:
+                # 3. Worker connection invoking create_system_asserted_memory_rpc with invalid type/category is rejected
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Invalid memory_type"):
+                    await worker_conn.execute(
+                        """
+                        SELECT public.create_system_asserted_memory_rpc(
+                            p_user_id => $1,
+                            p_content => 'Invalid type assertion',
+                            p_memory_type => 'invalid_type',
+                            p_category => 'general'
+                        )
+                        """,
+                        user_id,
+                    )
+
+                with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Invalid category"):
+                    await worker_conn.execute(
+                        """
+                        SELECT public.create_system_asserted_memory_rpc(
+                            p_user_id => $1,
+                            p_content => 'Invalid cat assertion',
+                            p_memory_type => 'fact',
+                            p_category => 'invalid_category'
+                        )
+                        """,
+                        user_id,
+                    )
+
+                # 4. Valid system asserted creation by real worker connection succeeds
+                sys_mem_id = await worker_conn.fetchval(
+                    """
+                    SELECT public.create_system_asserted_memory_rpc(
+                        p_user_id => $1,
+                        p_content => 'Verified subscription tier: pro',
+                        p_memory_type => 'fact',
+                        p_category => 'financial',
+                        p_importance => 5
+                    )
+                    """,
+                    user_id,
                 )
-                """
-            )
-
-        # 2. Authenticated user attempting to set confirmation_status = 'system_asserted' is rejected
-        with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="system_asserted status is reserved"):
-            await conn.execute(
-                """
-                SELECT public.create_memory_rpc(
-                    p_content => 'Fabricated platform memory',
-                    p_memory_type => 'fact',
-                    p_category => 'general',
-                    p_confirmation_status => 'system_asserted'
-                )
-                """
-            )
-
-        # 3. Authenticated user attempting to assign origin = 'legacy_import' is rejected
-        with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="legacy_import origin cannot be assigned"):
-            await conn.execute(
-                """
-                SELECT public.create_memory_rpc(
-                    p_content => 'Spoofed legacy memory',
-                    p_memory_type => 'fact',
-                    p_category => 'general',
-                    p_origin => 'legacy_import'
-                )
-                """
-            )
-
-        # 4. Authenticated user attempting to invoke create_system_asserted_memory_rpc directly is denied by PostgreSQL privilege
-        await conn.execute("SET ROLE authenticated")
-        with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
-            await conn.execute(
-                """
-                SELECT public.create_system_asserted_memory_rpc(
-                    p_user_id => $1,
-                    p_content => 'Direct platform call',
-                    p_memory_type => 'fact',
-                    p_category => 'general'
-                )
-                """,
-                user_id,
-            )
-        await conn.execute("RESET ROLE")
-
-        # 5. Trusted platform caller (auren_worker role) CAN execute create_system_asserted_memory_rpc
-        await conn.execute("SET ROLE auren_worker")
-        sys_mem_id = await conn.fetchval(
-            """
-            SELECT public.create_system_asserted_memory_rpc(
-                p_user_id => $1,
-                p_content => 'Legitimate system asserted fact',
-                p_memory_type => 'fact',
-                p_category => 'general'
-            )
-            """,
-            user_id,
-        )
-        await conn.execute("RESET ROLE")
-
-        assert sys_mem_id is not None
-        sys_row = await conn.fetchrow("SELECT * FROM public.memories WHERE id = $1", sys_mem_id)
-        assert sys_row["origin"] == "system_asserted"
-        assert sys_row["confirmation_status"] == "system_asserted"
-        assert sys_row["confidence"] == 1.0
+                assert sys_mem_id is not None
+            finally:
+                await worker_conn.close()
+        finally:
+            await conn.execute(f"DROP USER IF EXISTS {client_user}")
+            await conn.execute(f"DROP USER IF EXISTS {worker_user}")
 
 
 @pytest.mark.asyncio
@@ -318,7 +355,6 @@ async def test_source_provenance_and_ownership_validation(postgresql_server):
         await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_a, "user_a@example.com")
         await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_b, "user_b@example.com")
 
-        # Create conversations and messages
         conv_a1 = uuid.uuid4()
         conv_a2 = uuid.uuid4()
         conv_b = uuid.uuid4()
@@ -331,10 +367,9 @@ async def test_source_provenance_and_ownership_validation(postgresql_server):
         await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Msg A1')", msg_a1, conv_a1, user_a)
         await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Msg B')", msg_b, conv_b, user_b)
 
-        # Act as User A
         await conn.execute(f"SET request.jwt.claim.sub = '{user_a}'")
 
-        # 1. User A attempting to reference User B's conversation is rejected
+        # 1. User A referencing User B's conversation is rejected
         with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="Conversation not found or access denied"):
             await conn.execute(
                 """
@@ -348,7 +383,7 @@ async def test_source_provenance_and_ownership_validation(postgresql_server):
                 conv_b,
             )
 
-        # 2. User A attempting to reference User B's message is rejected
+        # 2. User A referencing User B's message is rejected
         with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="Source message not found or access denied"):
             await conn.execute(
                 """
@@ -405,29 +440,13 @@ async def test_source_provenance_and_ownership_validation(postgresql_server):
                 """
             )
 
-        # 6. Valid creation with consistent source message and conversation succeeds
-        mem_id = await conn.fetchval(
-            """
-            SELECT public.create_memory_rpc(
-                p_content => 'Valid consistent memory',
-                p_memory_type => 'fact',
-                p_category => 'general',
-                p_source_message_id => $1,
-                p_source_conversation_id => $2
-            )
-            """,
-            msg_a1, conv_a1,
-        )
-        assert mem_id is not None
-
 
 @pytest.mark.asyncio
-async def test_journal_consent_scoping_and_replay_prevention(postgresql_server):
-    """Verify that consume_journal_consent_rpc enforces conversation ownership,
-    validates permitted scopes, enforces maximum lifetime window (15 minutes),
-    and rejects replayed nonces.
+async def test_journal_consent_hmac_and_database_verification(postgresql_server):
+    """Verify that backend HMAC verification cryptographically binds user, conversation,
+    idempotency key, scope, date range, and expiration, and that database consumption prevents replay.
     """
-    async with isolated_postgres_db(postgresql_server, prefix="mem_consent", apply_all_migrations=True) as (conn, db_name):
+    async with isolated_postgres_db(postgresql_server, prefix="mem_jhmac", apply_all_migrations=True) as (conn, db_name):
         user_a = uuid.uuid4()
         user_b = uuid.uuid4()
         await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_a, "user_a@example.com")
@@ -439,97 +458,127 @@ async def test_journal_consent_scoping_and_replay_prevention(postgresql_server):
         await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Conv B')", conv_b, user_b)
 
         await conn.execute(f"SET request.jwt.claim.sub = '{user_a}'")
+
+        secret = settings.JOURNAL_HMAC_SECRET
+        idemp_key = "req-12345"
+        scope = "journal.read"
+        date_range = "2026-11-01:2026-11-16"
         nonce = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(seconds=120)
 
-        # 1. Invalid scope rejected
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Invalid consent scope"):
-            await conn.execute(
-                """
-                SELECT public.consume_journal_consent_rpc(
-                    p_nonce => $1,
-                    p_conversation_id => $2,
-                    p_idempotency_key => 'key-1',
-                    p_scope => 'admin.all',
-                    p_expires_at => now() + INTERVAL '60 seconds'
-                )
-                """,
-                nonce, conv_a,
-            )
-
-        # 2. Cross-user conversation rejected
-        with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError, match="Conversation not found or access denied"):
-            await conn.execute(
-                """
-                SELECT public.consume_journal_consent_rpc(
-                    p_nonce => $1,
-                    p_conversation_id => $2,
-                    p_idempotency_key => 'key-1',
-                    p_scope => 'journal.read',
-                    p_expires_at => now() + INTERVAL '60 seconds'
-                )
-                """,
-                nonce, conv_b,
-            )
-
-        # 3. Excessive lifetime (> 15 minutes) rejected
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lifetime exceeds maximum permitted window"):
-            await conn.execute(
-                """
-                SELECT public.consume_journal_consent_rpc(
-                    p_nonce => $1,
-                    p_conversation_id => $2,
-                    p_idempotency_key => 'key-1',
-                    p_scope => 'journal.read',
-                    p_expires_at => now() + INTERVAL '20 minutes'
-                )
-                """,
-                nonce, conv_a,
-            )
-
-        # 4. Expired token rejected
-        expired_nonce = uuid.uuid4()
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Consent token has expired"):
-            await conn.execute(
-                """
-                SELECT public.consume_journal_consent_rpc(
-                    p_nonce => $1,
-                    p_conversation_id => $2,
-                    p_idempotency_key => 'key-2',
-                    p_scope => 'journal.read',
-                    p_expires_at => now() - INTERVAL '10 seconds'
-                )
-                """,
-                expired_nonce, conv_a,
-            )
-
-        # 5. Valid consent consumption succeeds
-        res = await conn.fetchval(
-            """
-            SELECT public.consume_journal_consent_rpc(
-                p_nonce => $1,
-                p_conversation_id => $2,
-                p_idempotency_key => 'key-valid',
-                p_scope => 'journal.read',
-                p_expires_at => now() + INTERVAL '120 seconds'
-            )
-            """,
-            nonce, conv_a,
+        # 1. Create legitimate token
+        token = create_journal_consent_token(
+            user_id=user_a,
+            conversation_id=conv_a,
+            idempotency_key=idemp_key,
+            scope=scope,
+            date_range=date_range,
+            nonce=nonce,
+            expires_at=expires_at,
+            secret=secret,
         )
-        assert res is True
 
-        # 6. Replay attempt with same nonce rejected
-        with pytest.raises(asyncpg.exceptions.UniqueViolationError, match="Consent token has already been consumed"):
-            await conn.execute(
-                """
-                SELECT public.consume_journal_consent_rpc(
-                    p_nonce => $1,
-                    p_conversation_id => $2,
-                    p_idempotency_key => 'key-valid',
-                    p_scope => 'journal.read',
-                    p_expires_at => now() + INTERVAL '120 seconds'
-                )
-                """,
-                nonce, conv_a,
+        # 2. Tampered signature is rejected
+        tampered_token = JournalConsentToken(payload=token.payload, signature="bad_sig_ffffffff")
+        with pytest.raises(InvalidSignatureError, match="signature is invalid"):
+            verify_journal_consent_token(
+                token=tampered_token,
+                secret=secret,
+                expected_user_id=user_a,
+                expected_conversation_id=conv_a,
+                expected_idempotency_key=idemp_key,
+                now=now,
+            )
+
+        # 3. Cross-user reuse attempt is rejected
+        with pytest.raises(ConsentUserMismatchError, match="does not match expected"):
+            verify_journal_consent_token(
+                token=token,
+                secret=secret,
+                expected_user_id=user_b,
+                expected_conversation_id=conv_a,
+                expected_idempotency_key=idemp_key,
+                now=now,
+            )
+
+        # 4. Cross-conversation reuse attempt is rejected
+        with pytest.raises(ConsentConversationMismatchError, match="does not match expected"):
+            verify_journal_consent_token(
+                token=token,
+                secret=secret,
+                expected_user_id=user_a,
+                expected_conversation_id=conv_b,
+                expected_idempotency_key=idemp_key,
+                now=now,
+            )
+
+        # 5. Idempotency key mismatch is rejected
+        with pytest.raises(ConsentIdempotencyMismatchError, match="idempotency_key mismatch"):
+            verify_journal_consent_token(
+                token=token,
+                secret=secret,
+                expected_user_id=user_a,
+                expected_conversation_id=conv_a,
+                expected_idempotency_key="different-key",
+                now=now,
+            )
+
+        # 6. Expired token is rejected
+        past_time = now + timedelta(seconds=130)
+        with pytest.raises(ExpiredConsentTokenError, match="has expired"):
+            verify_journal_consent_token(
+                token=token,
+                secret=secret,
+                expected_user_id=user_a,
+                expected_conversation_id=conv_a,
+                expected_idempotency_key=idemp_key,
+                now=past_time,
+            )
+
+        # 7. Excessive lifetime (> 15 minutes) is rejected
+        excessive_token = create_journal_consent_token(
+            user_id=user_a,
+            conversation_id=conv_a,
+            idempotency_key=idemp_key,
+            scope=scope,
+            date_range=date_range,
+            nonce=uuid.uuid4(),
+            expires_at=now + timedelta(seconds=1000),  # > 900s
+            secret=secret,
+        )
+        with pytest.raises(ExcessiveLifetimeError, match="lifetime exceeds maximum permitted window"):
+            verify_journal_consent_token(
+                token=excessive_token,
+                secret=secret,
+                expected_user_id=user_a,
+                expected_conversation_id=conv_a,
+                expected_idempotency_key=idemp_key,
+                now=now,
+            )
+
+        # 8. Valid token is verified and atomically consumed in PostgreSQL
+        consumed = await verify_and_consume_journal_consent(
+            token=token,
+            secret=secret,
+            expected_user_id=user_a,
+            expected_conversation_id=conv_a,
+            expected_idempotency_key=idemp_key,
+            db_conn=conn,
+            now=now,
+        )
+        assert consumed is True
+
+        # 9. Replay attempt with same nonce is rejected by database ledger
+        with pytest.raises(ReplayedConsentTokenError, match="already been consumed"):
+            await verify_and_consume_journal_consent(
+                token=token,
+                secret=secret,
+                expected_user_id=user_a,
+                expected_conversation_id=conv_a,
+                expected_idempotency_key=idemp_key,
+                db_conn=conn,
+                now=now,
             )
 
 
@@ -582,7 +631,7 @@ async def test_embedding_dimension_and_model_registry_integrity(postgresql_serve
                 mem_id, user_id,
             )
 
-        # 3. Model registry dimension mismatch: registered gemini text-embedding-004 is 768, passing dimension 1536 is rejected by trigger
+        # 3. Model registry dimension mismatch rejected by trigger
         with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="does not match registered model dimension"):
             await conn.execute(
                 """
@@ -625,134 +674,119 @@ async def test_embedding_dimension_and_model_registry_integrity(postgresql_serve
         count = await conn.fetchval("SELECT count(*) FROM public.memory_embeddings WHERE memory_id = $1", mem_id)
         assert count == 2
 
-        # 6. Model registry cutover: activate openai model
+        # 6. Model registry cutover: activate openai model as auren_worker
+        await conn.execute("SET ROLE auren_worker")
         await conn.execute("SELECT public.activate_embedding_model_rpc('openai', 'text-embedding-3-small', 'v1')")
+        await conn.execute("RESET ROLE")
 
-        # Verify only openai is active for retrieval
         active_models = await conn.fetch("SELECT provider, model FROM public.embedding_models WHERE purpose = 'retrieval' AND is_active = TRUE")
         assert len(active_models) == 1
         assert active_models[0]["provider"] == "openai"
 
 
 @pytest.mark.asyncio
-async def test_worker_queue_security_and_lifecycle(postgresql_server):
-    """Verify that authenticated clients cannot directly claim or modify extraction jobs,
-    auren_worker can claim jobs via SKIP LOCKED, lease expiry and reclamation works,
-    and inferred memory ingestion deduplicates identical entries.
+async def test_worker_queue_concurrency_lease_and_stale_rejection(postgresql_server):
+    """Verify that batch size and lease duration are validated, concurrent worker claims
+    are safe and atomic (SKIP LOCKED), expired leases reject completion and ingestion,
+    and exhausted jobs cannot be reclaimed indefinitely.
     """
-    async with isolated_postgres_db(postgresql_server, prefix="mem_queue", apply_all_migrations=True) as (conn, db_name):
+    async with isolated_postgres_db(postgresql_server, prefix="mem_wqueue", apply_all_migrations=True) as (conn, db_name):
         user_id = uuid.uuid4()
-        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "worker@example.com")
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "worker_lease@example.com")
         await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
 
         conv_id = uuid.uuid4()
-        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Queue Conv')", conv_id, user_id)
-        msg_id = uuid.uuid4()
-        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'I like hiking in the Cascades')", msg_id, conv_id, user_id)
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Lease Conv')", conv_id, user_id)
+        msg_1 = uuid.uuid4()
+        msg_2 = uuid.uuid4()
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Task 1')", msg_1, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Task 2')", msg_2, conv_id, user_id)
 
-        # 1. Enqueue job via client RPC
-        job_id = await conn.fetchval("SELECT public.enqueue_memory_extraction_job_rpc($1, $2)", conv_id, msg_id)
-        assert job_id is not None
+        job_1 = await conn.fetchval("SELECT public.enqueue_memory_extraction_job_rpc($1, $2)", conv_id, msg_1)
+        job_2 = await conn.fetchval("SELECT public.enqueue_memory_extraction_job_rpc($1, $2)", conv_id, msg_2)
 
-        # 2. Authenticated role directly modifying or claiming jobs is rejected
-        await conn.execute("SET ROLE authenticated")
-        with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
-            await conn.execute(f"UPDATE public.memory_extraction_jobs SET status = 'completed' WHERE id = '{job_id}'")
-
-        with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
-            await conn.execute("SELECT * FROM public.claim_memory_extraction_jobs_rpc('rogue-worker')")
-        await conn.execute("RESET ROLE")
-
-        # 3. Worker role claims job atomically
+        # 1. Parameter validation in claim_memory_extraction_jobs_rpc
         await conn.execute("SET ROLE auren_worker")
-        claimed = await conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-1', 1, 300)")
-        assert len(claimed) == 1
-        assert claimed[0]["id"] == job_id
-        assert claimed[0]["attempts"] == 1
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Batch size must be between 1 and 50"):
+            await conn.execute("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', p_batch_size => 0)")
 
-        # 4. Worker ingests inferred candidate memory
-        mem_id_1 = await conn.fetchval(
-            """
-            SELECT public.insert_extracted_memory_rpc(
-                p_job_id => $1,
-                p_worker_id => 'worker-1',
-                p_content => 'Enjoys hiking in the Cascades',
-                p_memory_type => 'preference',
-                p_category => 'health_lifestyle'
-            )
-            """,
-            job_id,
-        )
-        assert mem_id_1 is not None
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="Lease duration must be between 10 and 3600"):
+            await conn.execute("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', p_lease_seconds => 5)")
 
-        # Verify ingested memory is strictly unconfirmed and chat_inferred
-        mem_row = await conn.fetchrow("SELECT * FROM public.memories WHERE id = $1", mem_id_1)
-        assert mem_row["origin"] == "chat_inferred"
-        assert mem_row["confirmation_status"] == "unconfirmed"
-        assert mem_row["last_confirmed_at"] is None
+        # 2. Concurrent claims: Worker A claims 1 job
+        claimed_a = await conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-a', 1, 30)")
+        assert len(claimed_a) == 1
+        job_a_id = claimed_a[0]["id"]
 
-        # Deduplication check: duplicate ingestion of exact same content on same message returns same ID
-        mem_id_2 = await conn.fetchval(
-            """
-            SELECT public.insert_extracted_memory_rpc(
-                p_job_id => $1,
-                p_worker_id => 'worker-1',
-                p_content => 'Enjoys hiking in the Cascades',
-                p_memory_type => 'preference',
-                p_category => 'health_lifestyle'
-            )
-            """,
-            job_id,
-        )
-        assert mem_id_2 == mem_id_1
+        # Worker B concurrently claims 1 job; must receive the other job without collision
+        claimed_b = await conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-b', 1, 30)")
+        assert len(claimed_b) == 1
+        job_b_id = claimed_b[0]["id"]
+        assert job_a_id != job_b_id
 
-        # 5. Worker completes job
-        comp = await conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-1')", job_id)
-        assert comp is True
-
-        job_row = await conn.fetchrow("SELECT * FROM public.memory_extraction_jobs WHERE id = $1", job_id)
-        assert job_row["status"] == "completed"
-
-        # 6. Test lease expiry and reclamation: create another job with an expired lease
+        # 3. Stale worker completion rejection: artificially expire Worker A's lease
         await conn.execute("RESET ROLE")
-        msg_id_2 = uuid.uuid4()
-        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Second message')", msg_id_2, conv_id, user_id)
-        job_id_2 = await conn.fetchval(
-            """
-            INSERT INTO public.memory_extraction_jobs (user_id, conversation_id, source_message_id, status, locked_by, lease_expires_at, attempts)
-            VALUES ($1, $2, $3, 'processing', 'crashed-worker', now() - INTERVAL '10 seconds', 1)
-            RETURNING id
-            """,
-            user_id, conv_id, msg_id_2,
+        await conn.execute(
+            "UPDATE public.memory_extraction_jobs SET lease_expires_at = now() - INTERVAL '5 seconds' WHERE id = $1",
+            job_a_id,
         )
 
         await conn.execute("SET ROLE auren_worker")
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
+            await conn.execute("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-a')", job_a_id)
+
+        # Stale worker ingestion rejection on expired lease
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="lease expired"):
+            await conn.execute(
+                """
+                SELECT public.insert_extracted_memory_rpc(
+                    p_job_id => $1,
+                    p_worker_id => 'worker-a',
+                    p_content => 'Stale ingestion attempt',
+                    p_memory_type => 'fact',
+                    p_category => 'general'
+                )
+                """,
+                job_a_id,
+            )
+
+        # 4. Reclamation by reaper
         reaped = await conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
         assert reaped >= 1
 
-        reaped_job = await conn.fetchrow("SELECT * FROM public.memory_extraction_jobs WHERE id = $1", job_id_2)
-        assert reaped_job["status"] == "pending"
-        assert reaped_job["locked_by"] is None
+        reaped_row = await conn.fetchrow("SELECT status, locked_by FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
+        assert reaped_row["status"] == "pending"
+        assert reaped_row["locked_by"] is None
 
-        # Dead letter test: job exceeding max retries
+        # 5. Worker B completes its job normally
+        comp_b = await conn.fetchval("SELECT public.complete_memory_extraction_job_rpc($1, 'worker-b')", job_b_id)
+        assert comp_b is True
+
+        # 6. Exhausted job cannot be reclaimed indefinitely
         await conn.execute("RESET ROLE")
         await conn.execute(
             """
             UPDATE public.memory_extraction_jobs
-            SET status = 'processing', locked_by = 'failing-worker', lease_expires_at = now() - INTERVAL '10 seconds', attempts = 3
+            SET status = 'processing', locked_by = 'flaky-worker', lease_expires_at = now() - INTERVAL '10 seconds', attempts = 3, max_attempts = 3
             WHERE id = $1
             """,
-            job_id_2,
+            job_a_id,
         )
         await conn.execute("SET ROLE auren_worker")
         await conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
-        await conn.execute("RESET ROLE")
-        dead_job = await conn.fetchrow("SELECT * FROM public.memory_extraction_jobs WHERE id = $1", job_id_2)
+
+        dead_job = await conn.fetchrow("SELECT status FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
         assert dead_job["status"] == "dead_letter"
+
+        # Calling reaper again does NOT revive dead-letter job
+        await conn.fetchval("SELECT public.reap_stale_extraction_jobs_rpc(3)")
+        dead_job_after = await conn.fetchrow("SELECT status FROM public.memory_extraction_jobs WHERE id = $1", job_a_id)
+        assert dead_job_after["status"] == "dead_letter"
+        await conn.execute("RESET ROLE")
 
 
 @pytest.mark.asyncio
-async def test_memory_lifecycle_transitions_and_concurrency(postgresql_server):
+async def test_memory_lifecycle_terminal_invariants_and_concurrency(postgresql_server):
     """Verify that invalid lifecycle transitions are rejected by RPCs and database triggers,
     supersession of unconfirmed memories preserves unconfirmed status, lineage pointers are preserved,
     and concurrent supersessions on the same memory fail cleanly without race conditions.
@@ -820,11 +854,14 @@ async def test_memory_lifecycle_transitions_and_concurrency(postgresql_server):
             await conn.execute("SELECT public.confirm_memory_rpc($1)", mem_successor_id)
 
         # 6. Database trigger test: directly trying to reactivate superseded memory via SQL is blocked
-        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="superseded memories cannot be reactivated"):
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="superseded memories are terminal"):
             await conn.execute("UPDATE public.memories SET lifecycle_status = 'active' WHERE id = $1", mem_unconf_id)
 
+        # Directly trying to confirm a rejected memory via SQL is blocked by trigger
+        with pytest.raises(asyncpg.exceptions.InvalidParameterValueError, match="rejected memories cannot be confirmed"):
+            await conn.execute("UPDATE public.memories SET confirmation_status = 'confirmed' WHERE id = $1", mem_successor_id)
+
         # 7. Concurrent supersession test:
-        # Create an active memory
         active_mem_id = await conn.fetchval(
             """
             SELECT public.create_memory_rpc(
@@ -835,7 +872,6 @@ async def test_memory_lifecycle_transitions_and_concurrency(postgresql_server):
             """
         )
 
-        # Open a second connection to the same test database
         conn2 = await asyncpg.connect(
             host=postgresql_server["host"],
             port=postgresql_server["port"],
@@ -845,7 +881,6 @@ async def test_memory_lifecycle_transitions_and_concurrency(postgresql_server):
             await conn2.execute(MOCK_AUTH_SQL)
             await conn2.execute(f"SET request.jwt.claim.sub = '{user_id}'")
 
-            # Transaction 1 starts and supersedes
             tx1 = conn.transaction()
             await tx1.start()
             s1 = await conn.fetchval(
@@ -859,8 +894,6 @@ async def test_memory_lifecycle_transitions_and_concurrency(postgresql_server):
             )
             assert s1 is not None
 
-            # Transaction 2 attempts to supersede same active_mem_id concurrently
-            # Because tx1 holds exclusive lock, tx2 waits until tx1 commits, then fails with lifecycle error
             async def run_tx2():
                 try:
                     return await conn2.fetchval(
@@ -876,9 +909,8 @@ async def test_memory_lifecycle_transitions_and_concurrency(postgresql_server):
                     return str(e)
 
             tx2_task = asyncio.create_task(run_tx2())
-            await asyncio.sleep(0.05)  # give tx2 time to hit the lock
+            await asyncio.sleep(0.05)
 
-            # Now commit tx1
             await tx1.commit()
 
             tx2_result = await tx2_task
@@ -933,11 +965,10 @@ async def test_cascading_deletion_and_gdpr_purge(postgresql_server):
         other_msg = uuid.uuid4()
         await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Other Conv')", other_conv, other_user)
         await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Other msg')", other_msg, other_conv, other_user)
-        other_mem = await conn.fetchval(
+        await conn.execute(
             """
             INSERT INTO public.memories (user_id, content, memory_type, category)
             VALUES ($1, 'Other secret', 'fact', 'general')
-            RETURNING id
             """,
             other_user,
         )

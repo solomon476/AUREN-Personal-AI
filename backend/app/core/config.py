@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     CHAT_STREAM_HEARTBEAT_SECONDS: float = 15.0
     CHAT_HISTORY_LIMIT: int = 10
 
+    # Journal Privacy & Consent Configuration
+    JOURNAL_HMAC_SECRET: str = Field(
+        default="auren-journal-hmac-test-secret-change-in-prod",
+        description="Backend HMAC secret for journal consent verification",
+    )
+
 
 settings = Settings()
 
