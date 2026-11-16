@@ -1,5 +1,6 @@
 """Tests for RFC 8785 (JCS) Canonical JSON implementation and Journal Consent verification."""
 
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 import json
 import math
@@ -540,3 +541,71 @@ def test_rfc8785_booleans_not_mistaken_for_integers():
 
     arr = [True, False, 1, 0]
     assert canonicalize_to_str(arr) == "[true,false,1,0]"
+
+
+def test_rfc8785_non_string_keys_rejected_with_type_error():
+    """Validates that non-string object keys raise TypeError, not AttributeError."""
+    cases = [
+        ({1: "val"}, int),
+        ({True: "val"}, bool),
+        ({False: "val"}, bool),
+        ({None: "val"}, type(None)),
+        ({("tuple", "key"): "val"}, tuple),
+        ({3.14: "val"}, float),
+    ]
+
+    for bad_dict, expected_type in cases:
+        # Verify canonicalize raises TypeError, not AttributeError
+        with pytest.raises(TypeError) as exc_info:
+            canonicalize(bad_dict)
+        assert "JSON object keys must be strings" in str(exc_info.value)
+        assert expected_type.__name__ in str(exc_info.value)
+
+        # Verify canonicalize_to_str also raises TypeError, not AttributeError
+        with pytest.raises(TypeError) as exc_info_str:
+            canonicalize_to_str(bad_dict)
+        assert "JSON object keys must be strings" in str(exc_info_str.value)
+        assert expected_type.__name__ in str(exc_info_str.value)
+
+    # Confirm valid string keys continue to serialize correctly
+    valid_obj = {"a": 1, "b": "hello", "c": None, "d": True}
+    assert canonicalize_to_str(valid_obj) == '{"a":1,"b":"hello","c":null,"d":true}'
+
+
+def test_rfc8785_duplicate_keys_in_custom_mapping_rejected():
+    """Validates that custom mappings exposing duplicate keys are rejected with ValueError."""
+
+    class DuplicateKeyMapping(Mapping):
+        def __init__(self, items):
+            self._items = items
+
+        def __getitem__(self, key):
+            for k, v in self._items:
+                if k == key:
+                    return v
+            raise KeyError(key)
+
+        def __iter__(self):
+            for k, _ in self._items:
+                yield k
+
+        def __len__(self):
+            return len(self._items)
+
+    # Custom mapping exposing the same key "duplicate" twice
+    dup_map = DuplicateKeyMapping([("duplicate", 1), ("duplicate", 2)])
+
+    with pytest.raises(ValueError, match="Duplicate object key found under RFC 8785"):
+        canonicalize(dup_map)
+
+    with pytest.raises(ValueError, match="Duplicate object key found under RFC 8785"):
+        canonicalize_to_str(dup_map)
+
+    # Custom mapping with multiple distinct keys succeeds
+    distinct_map = DuplicateKeyMapping([("beta", 2), ("alpha", 1)])
+    assert canonicalize_to_str(distinct_map) == '{"alpha":1,"beta":2}'
+
+    # Normal standard Python dict remains completely unaffected
+    std_dict = {"foo": "bar", "baz": 42}
+    assert canonicalize_to_str(std_dict) == '{"baz":42,"foo":"bar"}'
+

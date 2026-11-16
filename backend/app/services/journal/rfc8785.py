@@ -158,15 +158,26 @@ def canonicalize(val: Any) -> bytes:
     if isinstance(val, (list, tuple)):
         return b"[" + b",".join(canonicalize(item) for item in val) + b"]"
     if isinstance(val, Mapping):
-        # RFC 8785 Section 3.2.3: object properties must be sorted by UTF-16 code units
-        try:
-            sorted_keys = sorted(val.keys(), key=lambda k: k.encode("utf-16-be"))
-        except UnicodeEncodeError as exc:
-            raise ValueError(f"Invalid Unicode data in object key: {exc}") from exc
-        parts = []
-        for k in sorted_keys:
+        # RFC 8785 Section 3.1 & 3.2.3: object keys must be strings and sorted by UTF-16 code units.
+        raw_keys = list(val.keys())
+        for k in raw_keys:
             if not isinstance(k, str):
                 raise TypeError(f"JSON object keys must be strings, got {type(k).__name__}")
+
+        try:
+            sorted_keys = sorted(raw_keys, key=lambda k: k.encode("utf-16-be"))
+        except UnicodeEncodeError as exc:
+            raise ValueError(f"Invalid Unicode data in object key: {exc}") from exc
+
+        # RFC 8785 Section 3.1 & 3.2.3: JSON objects MUST NOT exhibit duplicate property names.
+        for i in range(len(sorted_keys) - 1):
+            if sorted_keys[i] == sorted_keys[i + 1]:
+                raise ValueError(
+                    f"Duplicate object key found under RFC 8785: {sorted_keys[i]!r}"
+                )
+
+        parts = []
+        for k in sorted_keys:
             k_bytes = escape_string(k).encode("utf-8")
             v_bytes = canonicalize(val[k])
             parts.append(k_bytes + b":" + v_bytes)
