@@ -254,7 +254,7 @@ def test_baseline_leakage_demonstration_without_masking():
 
 
 def test_compatibility_against_minimum_pydantic_settings_2_4_0():
-    """Verifies that Settings runs seamlessly under pydantic-settings 2.4.0 (declared minimum).
+    """Verifies that Settings runs seamlessly under pydantic-settings 2.4.0 with current runtime Pydantic.
 
     Uses the committed fixture wheel in backend/tests/fixtures/ and fails explicitly if absent.
     """
@@ -305,4 +305,139 @@ print('MINIMUM_VERSION_2_4_0_VERIFIED_SUCCESSFULLY')
     assert res.returncode == 0, f"pydantic-settings 2.4.0 compatibility check failed:\n{res.stderr}"
     assert "MINIMUM_VERSION_2_4_0_VERIFIED_SUCCESSFULLY" in res.stdout
     assert "VERIFYING_MINIMUM_VERSION=2.4.0" in res.stdout
+
+
+def test_compatibility_against_declared_minimum_dependencies_combination():
+    """Verifies that Settings and SecretMaskingSource function correctly under the declared
+    minimum dependency combination: Pydantic 2.8.0 and pydantic-settings 2.4.0 together.
+
+    Uses committed fixture wheels in backend/tests/fixtures/ and fails explicitly if either is missing.
+    """
+    fixture_dir = Path(__file__).parent / "fixtures"
+    pydantic_wheel = fixture_dir / "pydantic-2.8.0-py3-none-any.whl"
+    settings_wheel = fixture_dir / "pydantic_settings-2.4.0-py3-none-any.whl"
+
+    if not pydantic_wheel.exists():
+        pytest.fail(f"Required minimum pydantic 2.8.0 fixture wheel missing: {pydantic_wheel}")
+    if not settings_wheel.exists():
+        pytest.fail(f"Required minimum pydantic-settings 2.4.0 fixture wheel missing: {settings_wheel}")
+
+    code = f"""
+import sys, os
+from pathlib import Path
+
+# Set initial environment for safe import
+os.environ['ENVIRONMENT'] = 'development'
+os.environ['JOURNAL_HMAC_SECRET'] = 'init_secret_for_import_32_chars_length_ok!'
+
+import pydantic_core
+from pydantic_core import core_schema
+
+# Compatibility bridge for Python 3.14 runtime with pydantic 2.8.0
+if not hasattr(pydantic_core, 'validate_core_schema'):
+    pydantic_core.validate_core_schema = lambda s: s
+
+orig_union_schema = core_schema.union_schema
+def safe_union_schema(*args, **kwargs):
+    kwargs.pop('strict', None)
+    return orig_union_schema(*args, **kwargs)
+core_schema.union_schema = safe_union_schema
+
+sys.path.insert(0, 'backend')
+sys.path.insert(0, {str(settings_wheel)!r})
+sys.path.insert(0, {str(pydantic_wheel)!r})
+
+# Support Python 3.14 PEP 649 deferred annotations in Pydantic 2.8.0 inspect_namespace
+import pydantic._internal._model_construction as mc
+orig_inspect = mc.inspect_namespace
+def patched_inspect(namespace, ignored_types, class_vars, base_field_names):
+    if '__annotations__' not in namespace and '__annotate_func__' in namespace:
+        try:
+            namespace['__annotations__'] = namespace['__annotate_func__'](1)
+        except Exception:
+            pass
+    return orig_inspect(namespace, ignored_types, class_vars, base_field_names)
+mc.inspect_namespace = patched_inspect
+
+import pydantic
+import pydantic_settings
+from pydantic import ValidationError, SecretStr
+
+# Verify both exact minimum versions are imported from the test fixtures
+assert pydantic.__version__ == '2.8.0', f"Expected pydantic 2.8.0, got {{pydantic.__version__}}"
+assert pydantic_settings.__version__ == '2.4.0', f"Expected pydantic-settings 2.4.0, got {{pydantic_settings.__version__}}"
+assert {str(pydantic_wheel)!r} in pydantic.__file__, f"Unexpected pydantic source: {{pydantic.__file__}}"
+assert {str(settings_wheel)!r} in pydantic_settings.__file__, f"Unexpected pydantic_settings source: {{pydantic_settings.__file__}}"
+print(f"VERIFIED_COMBINATION: pydantic={{pydantic.__version__}} pydantic_settings={{pydantic_settings.__version__}}")
+
+from app.core.config import Settings, SecretMaskingSource
+print("IMPORT_SUCCESS")
+
+# 1. Valid construction with declared minimum versions
+valid_secret = 'valid_explicit_secret_32_characters_ok!'
+s = Settings(
+    _env_file=None,
+    ENVIRONMENT='development',
+    JOURNAL_HMAC_SECRET=valid_secret,
+)
+assert s.get_journal_hmac_secret() == valid_secret
+print("VALID_CONSTRUCTION_SUCCESS")
+
+# 2. Constructor kwargs rejection with no plaintext secret leakage
+bad_secret = 'changeme'
+try:
+    Settings(
+        _env_file=None,
+        ENVIRONMENT='production',
+        JOURNAL_HMAC_SECRET=bad_secret,
+    )
+    assert False, "Should have raised ValidationError for invalid production secret"
+except ValidationError as exc:
+    err_str = str(exc)
+    err_repr = repr(exc)
+    assert bad_secret not in err_str, f"Plaintext secret leaked in str(exc): {{err_str}}"
+    assert bad_secret not in err_repr, f"Plaintext secret leaked in repr(exc): {{err_repr}}"
+    assert "cannot be a known default or insecure test value in production" in err_str
+    print("KWARGS_REJECTION_SUCCESS")
+
+# 3. Environment rejection with no plaintext secret leakage
+os.environ['ENVIRONMENT'] = 'production'
+os.environ['JOURNAL_HMAC_SECRET'] = bad_secret
+try:
+    Settings(_env_file=None)
+    assert False, "Should have raised ValidationError for invalid production env secret"
+except ValidationError as exc:
+    err_str = str(exc)
+    err_repr = repr(exc)
+    assert bad_secret not in err_str, f"Plaintext secret leaked in str(exc): {{err_str}}"
+    assert bad_secret not in err_repr, f"Plaintext secret leaked in repr(exc): {{err_repr}}"
+    assert "cannot be a known default or insecure test value in production" in err_str
+    print("ENV_REJECTION_SUCCESS")
+
+# 4. Verify SecretMaskingSource works with this exact dependency combination
+sources = Settings.settings_customise_sources(
+    Settings,
+    lambda: {{'JOURNAL_HMAC_SECRET': 'raw_source_secret_string'}},
+    lambda: {{}},
+    lambda: {{}},
+    lambda: {{}},
+)
+assert all(isinstance(src, SecretMaskingSource) for src in sources)
+first_src = sources[0]
+val = first_src()
+assert isinstance(val.get('JOURNAL_HMAC_SECRET'), SecretStr)
+assert val['JOURNAL_HMAC_SECRET'].get_secret_value() == 'raw_source_secret_string'
+print("SECRET_MASKING_SOURCE_SUCCESS")
+
+print("DECLARED_MINIMUM_COMBINATION_VERIFIED_SUCCESSFULLY")
+"""
+    res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert res.returncode == 0, f"Combined minimum dependency compatibility check failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
+    assert "DECLARED_MINIMUM_COMBINATION_VERIFIED_SUCCESSFULLY" in res.stdout
+    assert "VERIFIED_COMBINATION: pydantic=2.8.0 pydantic_settings=2.4.0" in res.stdout
+    assert "IMPORT_SUCCESS" in res.stdout
+    assert "VALID_CONSTRUCTION_SUCCESS" in res.stdout
+    assert "KWARGS_REJECTION_SUCCESS" in res.stdout
+    assert "ENV_REJECTION_SUCCESS" in res.stdout
+    assert "SECRET_MASKING_SOURCE_SUCCESS" in res.stdout
 
