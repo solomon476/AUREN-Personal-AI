@@ -2,9 +2,9 @@
 
 from collections import Counter
 import math
-from typing import List, Optional, Set
+from typing import Any, List, Optional, Set, Tuple
 from pydantic import Field, SecretStr, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 ALLOWED_ENVIRONMENTS: Set[str] = {"development", "test", "staging", "production"}
 
@@ -87,6 +87,33 @@ def validate_cryptographic_secret_strength(secret_val: str, env: str) -> None:
             consecutive_run = 1
 
 
+class SecretMaskingSource(PydanticBaseSettingsSource):
+    """Public settings source wrapper ensuring JOURNAL_HMAC_SECRET is immediately wrapped in SecretStr.
+
+    This ensures that raw secret strings loaded from environment variables or .env files
+    never appear in Pydantic's ValidationError input_value representation across all supported
+    pydantic-settings versions.
+    """
+
+    def __init__(self, target: PydanticBaseSettingsSource):
+        self.target = target
+
+    def get_field_value(self, field: Any, field_name: str) -> Tuple[Any, str, bool]:
+        val, key, is_complex = self.target.get_field_value(field, field_name)
+        if key == "JOURNAL_HMAC_SECRET" and isinstance(val, str):
+            val = SecretStr(val)
+        return val, key, is_complex
+
+    def __call__(self) -> dict[str, Any]:
+        data = self.target()
+        if "JOURNAL_HMAC_SECRET" in data and isinstance(data["JOURNAL_HMAC_SECRET"], str):
+            data["JOURNAL_HMAC_SECRET"] = SecretStr(data["JOURNAL_HMAC_SECRET"])
+        return data
+
+    def __getattr__(self, item: str) -> Any:
+        return getattr(self.target, item)
+
+
 class Settings(BaseSettings):
     """Central configuration for the AUREN backend application."""
 
@@ -96,13 +123,24 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @classmethod
-    def _settings_build_values(cls, sources, init_kwargs):
-        """Immediately masks JOURNAL_HMAC_SECRET as SecretStr to prevent plaintext leakage in ValidationErrors."""
-        values = super()._settings_build_values(sources, init_kwargs)
+    def __init__(self, **values: Any):
         if "JOURNAL_HMAC_SECRET" in values and isinstance(values["JOURNAL_HMAC_SECRET"], str):
             values["JOURNAL_HMAC_SECRET"] = SecretStr(values["JOURNAL_HMAC_SECRET"])
-        return values
+        super().__init__(**values)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return tuple(
+            SecretMaskingSource(s)
+            for s in (init_settings, env_settings, dotenv_settings, file_secret_settings)
+        )
 
     # Application settings
     APP_NAME: str = "AUREN Personal AI API"

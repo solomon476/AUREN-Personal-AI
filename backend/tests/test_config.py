@@ -1,5 +1,8 @@
 """Tests for application configuration validation, specifically JOURNAL_HMAC_SECRET fail-closed security rules."""
 
+import os
+import subprocess
+import sys
 import pytest
 from pydantic import ValidationError
 
@@ -162,7 +165,7 @@ def test_production_valid_hmac_secret_accepted():
 
 
 def test_configuration_error_never_leaks_secret():
-    """Ensures secret values never leak into exception messages or stringified ValidationErrors."""
+    """Ensures secret values passed via kwargs never leak into exception messages or stringified ValidationErrors."""
     secret_attempt = "super_secret_forbidden_value_123456"
     try:
         Settings(
@@ -173,3 +176,50 @@ def test_configuration_error_never_leaks_secret():
     except ValidationError as exc:
         err_text = str(exc)
         assert secret_attempt not in err_text, f"Secret was leaked in ValidationError: {err_text}"
+
+
+def test_env_var_secret_never_leaks_in_validation_error(monkeypatch):
+    """Ensures secret values loaded from environment variables never leak into stringified ValidationErrors."""
+    secret_attempt = "env_var_forbidden_weak_secret_12345"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("JOURNAL_HMAC_SECRET", secret_attempt)
+    try:
+        Settings(_env_file=None)
+    except ValidationError as exc:
+        err_text = str(exc)
+        assert secret_attempt not in err_text, f"Env secret was leaked in ValidationError: {err_text}"
+
+
+def test_compatibility_against_minimum_pydantic_settings_2_4_0():
+    """Verifies that Settings runs seamlessly under pydantic-settings 2.4.0 (declared minimum)."""
+    wheel_path = "/tmp/check_ps/pydantic_settings-2.4.0-py3-none-any.whl"
+    if not os.path.exists(wheel_path):
+        pytest.skip("pydantic-settings 2.4.0 wheel not present in /tmp/check_ps")
+
+    code = """
+import sys, os
+sys.path.insert(0, '/tmp/check_ps/pydantic_settings-2.4.0-py3-none-any.whl')
+import pydantic_settings
+assert pydantic_settings.__version__ == '2.4.0'
+os.environ['ENVIRONMENT'] = 'test'
+os.environ['JOURNAL_HMAC_SECRET'] = 'test_secret_for_compat_validation_123456'
+sys.path.insert(0, 'backend')
+from app.core.config import Settings
+from pydantic import ValidationError
+
+# Valid settings construction
+s = Settings(ENVIRONMENT='development', JOURNAL_HMAC_SECRET='mysecret1234567890')
+assert s.get_journal_hmac_secret() == 'mysecret1234567890'
+
+# Rejection of bad secret without leaking
+try:
+    Settings(ENVIRONMENT='production', JOURNAL_HMAC_SECRET='changeme', _env_file=None)
+    assert False, 'Should fail'
+except ValidationError as e:
+    assert 'changeme' not in str(e)
+print('COMPATIBILITY OK')
+"""
+    res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert res.returncode == 0, f"pydantic-settings 2.4.0 compatibility check failed:\n{res.stderr}"
+    assert "COMPATIBILITY OK" in res.stdout
+
