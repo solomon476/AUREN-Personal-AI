@@ -84,9 +84,13 @@ export const TasksView: React.FC = () => {
     await changeStatusMutation.mutateAsync({ taskId: task.id, newStatus: nextStatus });
   };
 
-  const handleDelete = async (taskId: string) => {
-    if (window.confirm('Are you sure you want to delete this task?')) {
-      await deleteTaskMutation.mutateAsync(taskId);
+  const handleDelete = async (task: Task) => {
+    const message =
+      task.subtask_count && task.subtask_count > 0
+        ? `Are you sure you want to delete "${task.title}"? Its ${task.subtask_count} subtask(s) will be kept as independent tasks.`
+        : `Are you sure you want to delete this task?`;
+    if (window.confirm(message)) {
+      await deleteTaskMutation.mutateAsync(task.id);
     }
   };
 
@@ -337,7 +341,7 @@ export const TasksView: React.FC = () => {
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDelete(task.id)}
+                      onClick={() => handleDelete(task)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
                       title="Delete task"
                     >

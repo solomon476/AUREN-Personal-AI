@@ -104,7 +104,7 @@ class SQLiteProductivityRepository(BaseProductivityRepository):
                     user_id TEXT NOT NULL,
                     project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
                     goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
-                    parent_task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+                    parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
                     title TEXT NOT NULL,
                     description TEXT,
                     status TEXT DEFAULT 'todo' NOT NULL,
@@ -523,6 +523,12 @@ class SQLiteProductivityRepository(BaseProductivityRepository):
                 if not row:
                     conn.rollback()
                     return False
+
+                # Unlink subtasks (ON DELETE SET NULL semantics to preserve child tasks)
+                conn.execute(
+                    "UPDATE tasks SET parent_task_id = NULL WHERE parent_task_id = ? AND user_id = ?;",
+                    (t_id, u_id),
+                )
 
                 conn.execute(
                     "DELETE FROM tasks WHERE id = ? AND user_id = ?;",

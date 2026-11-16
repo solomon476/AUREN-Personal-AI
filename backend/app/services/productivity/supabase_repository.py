@@ -210,6 +210,7 @@ class SupabaseProductivityRepository(BaseProductivityRepository):
 
     async def create_task(self, user_id: UUID, task: TaskCreate) -> TaskModel:
         payload = {
+            "user_id": str(user_id),
             "title": task.title,
             "description": task.description,
             "status": task.status.value,
@@ -362,6 +363,7 @@ class SupabaseProductivityRepository(BaseProductivityRepository):
 
     async def create_project(self, user_id: UUID, project: ProjectCreate) -> ProjectModel:
         payload = {
+            "user_id": str(user_id),
             "name": project.name,
             "description": project.description,
             "color": project.color or "#4872bd",
@@ -512,6 +514,7 @@ class SupabaseProductivityRepository(BaseProductivityRepository):
 
     async def create_goal(self, user_id: UUID, goal: GoalCreate) -> GoalModel:
         payload = {
+            "user_id": str(user_id),
             "title": goal.title,
             "description": goal.description,
             "status": goal.status.value,

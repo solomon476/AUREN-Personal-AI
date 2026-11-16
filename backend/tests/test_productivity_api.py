@@ -257,3 +257,56 @@ def test_productivity_dashboard_and_context_endpoints(user_a):
     assert any("Kernel Tuning" in p for p in ctx["active_projects_summary"])
     assert any("Benchmark I/O throughput" in t for t in ctx["pending_tasks_summary"])
 
+
+def test_project_api_color_validation(user_a):
+    """Verify FINDING-08 resolution via API: project color validation."""
+    # Valid hex
+    valid_res = client.post(
+        "/api/v1/projects",
+        json={"name": "Valid Color Project", "color": "#10b981"},
+        headers=user_a["headers"],
+    )
+    assert valid_res.status_code == 201
+    assert valid_res.json()["color"] == "#10b981"
+
+    # Invalid color -> 422 Unprocessable Entity (Pydantic validation failure)
+    invalid_res = client.post(
+        "/api/v1/projects",
+        json={"name": "Invalid Color Project", "color": "not-a-color"},
+        headers=user_a["headers"],
+    )
+    assert invalid_res.status_code in (400, 422)
+
+
+def test_task_api_parent_deletion_preserves_subtasks(user_a):
+    """Verify FINDING-03 resolution via API: parent task deletion unlinks subtasks."""
+    p_res = client.post(
+        "/api/v1/tasks",
+        json={"title": "Master Task"},
+        headers=user_a["headers"],
+    )
+    assert p_res.status_code == 201
+    parent_id = p_res.json()["id"]
+
+    sub_res = client.post(
+        "/api/v1/tasks",
+        json={"title": "Independent Subtask", "parent_task_id": parent_id},
+        headers=user_a["headers"],
+    )
+    assert sub_res.status_code == 201
+    sub_id = sub_res.json()["id"]
+
+    # Delete parent
+    del_res = client.delete(f"/api/v1/tasks/{parent_id}", headers=user_a["headers"])
+    assert del_res.status_code == 204
+
+    # Parent is 404
+    get_p = client.get(f"/api/v1/tasks/{parent_id}", headers=user_a["headers"])
+    assert get_p.status_code == 404
+
+    # Subtask still exists with parent_task_id = None
+    get_sub = client.get(f"/api/v1/tasks/{sub_id}", headers=user_a["headers"])
+    assert get_sub.status_code == 200
+    assert get_sub.json()["parent_task_id"] is None
+
+

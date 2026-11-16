@@ -2,12 +2,16 @@
 Tasks, Projects, Goals, Relationships, and Dashboard Metrics.
 """
 
+import re
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+
+
+HEX_COLOR_REGEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 
 
 # ============================================================================
@@ -139,6 +143,18 @@ class ProjectBase(BaseModel):
             raise ValueError("Project name cannot be empty or whitespace only")
         return s
 
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        s = v.strip()
+        if not s:
+            return None
+        if not HEX_COLOR_REGEX.match(s):
+            raise ValueError("Project color must be a valid hex code (e.g. #4872bd or #10b981)")
+        return s.lower()
+
 
 class ProjectCreate(ProjectBase):
     pass
@@ -162,6 +178,18 @@ class ProjectUpdate(BaseModel):
                 raise ValueError("Project name cannot be empty or whitespace only")
             return s
         return v
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        s = v.strip()
+        if not s:
+            return None
+        if not HEX_COLOR_REGEX.match(s):
+            raise ValueError("Project color must be a valid hex code (e.g. #4872bd or #10b981)")
+        return s.lower()
 
 
 class ProjectModel(ProjectBase):

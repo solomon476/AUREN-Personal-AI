@@ -324,6 +324,91 @@ async def test_goal_deletion_unlinks_projects_and_tasks(temp_prod_repo):
     assert check_task.goal_id is None
 
 
+@pytest.mark.asyncio
+async def test_parent_task_deletion_preserves_subtasks(temp_prod_repo):
+    """Verify FINDING-03 resolution:
+    Deleting a parent task preserves subtasks by setting parent_task_id to NULL,
+    preventing unintended data loss.
+    """
+    user_id = uuid4()
+    parent = await temp_prod_repo.create_task(
+        user_id=user_id,
+        task=TaskCreate(title="Parent Mission Task", priority=TaskPriority.urgent),
+    )
+    sub1 = await temp_prod_repo.create_task(
+        user_id=user_id,
+        task=TaskCreate(title="Subtask 1", parent_task_id=parent.id),
+    )
+    sub2 = await temp_prod_repo.create_task(
+        user_id=user_id,
+        task=TaskCreate(title="Subtask 2", parent_task_id=parent.id),
+    )
+
+    # Subtasks initially linked
+    assert sub1.parent_task_id == parent.id
+    assert sub2.parent_task_id == parent.id
+
+    # Delete parent task
+    deleted = await temp_prod_repo.delete_task(user_id=user_id, task_id=parent.id)
+    assert deleted is True
+
+    # Parent is gone
+    check_parent = await temp_prod_repo.get_task(user_id=user_id, task_id=parent.id)
+    assert check_parent is None
+
+    # Subtasks still exist and their parent_task_id is now None (promoted to independent tasks)
+    check_sub1 = await temp_prod_repo.get_task(user_id=user_id, task_id=sub1.id)
+    assert check_sub1 is not None
+    assert check_sub1.parent_task_id is None
+    assert check_sub1.user_id == user_id
+
+    check_sub2 = await temp_prod_repo.get_task(user_id=user_id, task_id=sub2.id)
+    assert check_sub2 is not None
+    assert check_sub2.parent_task_id is None
+    assert check_sub2.user_id == user_id
+
+
+def test_project_color_validation():
+    """Verify FINDING-08 resolution:
+    Project color validates hexadecimal codes and rejects malformed values.
+    """
+    # Valid hex codes
+    p1 = ProjectCreate(name="Project 1", color="#4872bd")
+    assert p1.color == "#4872bd"
+
+    p2 = ProjectCreate(name="Project 2", color="#10B981")
+    assert p2.color == "#10b981"
+
+    p3 = ProjectCreate(name="Project 3", color="#fff")
+    assert p3.color == "#fff"
+
+    p4 = ProjectCreate(name="Project 4", color="#12345678")
+    assert p4.color == "#12345678"
+
+    p5 = ProjectCreate(name="Project 5", color=None)
+    assert p5.color is None
+
+    # Invalid values raise ValueError
+    with pytest.raises(ValueError):
+        ProjectCreate(name="Invalid Color", color="red")
+
+    with pytest.raises(ValueError):
+        ProjectCreate(name="Invalid CSS Injection", color="javascript:alert(1)")
+
+    with pytest.raises(ValueError):
+        ProjectCreate(name="Invalid Length", color="#12")
+
+    with pytest.raises(ValueError):
+        ProjectCreate(name="Invalid Non-hex", color="#xyz123")
+
+    # Update model validation
+    u_valid = ProjectUpdate(color="#8b5cf6")
+    assert u_valid.color == "#8b5cf6"
+
+    with pytest.raises(ValueError):
+        ProjectUpdate(color="invalid")
+
+
 # ============================================================================
 # 4. Productivity Dashboard Aggregation
 # ============================================================================
@@ -458,7 +543,7 @@ async def test_postgresql_migration_019_rls_and_cross_tenant_prevention(postgres
     try:
         await conn.execute(MOCK_AUTH_SQL)
         migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
-        assert len(migration_files) >= 19, f"Expected at least 19 migrations, got {len(migration_files)}"
+        assert len(migration_files) >= 20, f"Expected at least 20 migrations, got {len(migration_files)}"
         for mf in migration_files:
             sql = Path(mf).read_text(encoding="utf-8")
             await conn.execute(sql)
@@ -550,6 +635,29 @@ async def test_postgresql_migration_019_rls_and_cross_tenant_prevention(postgres
             assert "permission denied" in str(exc_anon.value).lower()
         finally:
             await conn.execute("RESET ROLE")
+
+        # 6. Verify Migration 020: Parent task deletion sets subtask parent_task_id to NULL (ON DELETE SET NULL)
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_a}'")
+        await conn.execute("SET ROLE authenticated")
+
+        parent_t_id = await conn.fetchval(
+            "INSERT INTO public.tasks (user_id, title, status) VALUES ($1, 'Postgres Parent Task', 'todo') RETURNING id;",
+            user_a,
+        )
+        sub_t_id = await conn.fetchval(
+            "INSERT INTO public.tasks (user_id, title, status, parent_task_id) VALUES ($1, 'Postgres Subtask', 'todo', $2) RETURNING id;",
+            user_a,
+            parent_t_id,
+        )
+        assert sub_t_id is not None
+
+        # Delete parent task
+        await conn.execute("DELETE FROM public.tasks WHERE id = $1 AND user_id = $2;", parent_t_id, user_a)
+
+        # Subtask still exists and parent_task_id is now NULL
+        sub_row = await conn.fetchrow("SELECT id, parent_task_id FROM public.tasks WHERE id = $1;", sub_t_id)
+        assert sub_row is not None
+        assert sub_row["parent_task_id"] is None
 
     finally:
         await conn.close()

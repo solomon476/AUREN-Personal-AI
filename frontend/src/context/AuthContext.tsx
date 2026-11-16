@@ -84,9 +84,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+      const prevUserId = user?.id;
+      const nextUserId = newSession?.user?.id;
       setSession(newSession);
       setUser(newSession?.user ?? null);
-      if (!newSession) {
+      if (!newSession || (prevUserId && nextUserId && prevUserId !== nextUserId)) {
         clearUserDataCache();
         setProfile(null);
       }

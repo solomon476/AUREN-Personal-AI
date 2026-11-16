@@ -288,3 +288,4 @@ export const ProductivityDashboardView: React.FC = () => {
     </div>
   );
 };
+
