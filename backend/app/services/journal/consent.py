@@ -22,6 +22,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from app.services.journal.rfc8785 import canonicalize
+
 ALLOWED_JOURNAL_SCOPES: Set[str] = {
     "journal.read",
     "journal.read_write",
@@ -121,12 +123,13 @@ class JournalConsentToken(BaseModel):
 
 
 def serialize_canonical_payload(payload: JournalConsentPayload) -> bytes:
-    """Serializes payload into deterministic canonical JSON bytes conforming to RFC 8785 (JCS).
+    """Serializes payload into deterministic canonical JSON bytes conforming strictly to RFC 8785 (JCS).
 
     Deterministic canonicalization rules:
-    1. Lexicographical sorting of keys by Unicode code points.
-    2. Zero whitespace around separators (separators=(',', ':')).
-    3. UTF-8 encoded output without ASCII escaping (ensure_ascii=False).
+    1. Lexicographical sorting of keys by UTF-16 code units (RFC 8785 Section 3.2.3).
+    2. Zero whitespace around separators (RFC 8785 Section 3.2.1).
+    3. UTF-8 encoded output with minimal escaping (quotes, backslashes, control characters U+0000..U+001F).
+       Solidus '/' is NOT escaped. Raw UTF-8 bytes for all printable characters.
     4. Lowercase canonical 8-4-4-4-12 UUID strings.
     5. Stripped, non-empty string fields (scope, date_range, idempotency_key).
     6. Strict UTC ISO 8601 timestamp ending in 'Z':
@@ -154,7 +157,7 @@ def serialize_canonical_payload(payload: JournalConsentPayload) -> bytes:
         "scope": payload.scope.strip(),
         "user_id": str(payload.user_id).lower(),
     }
-    return json.dumps(canonical_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return canonicalize(canonical_dict)
 
 
 def compute_consent_signature(payload: JournalConsentPayload, secret: str) -> str:
