@@ -70,6 +70,21 @@ class WorkerRunner:
         if self.db_pool is None:
             if not self.database_url:
                 raise ValueError("WORKER_DATABASE_URL or db_pool must be provided to run MemoryExtractionWorker")
+
+            # Verify that connection does not attempt to authenticate directly as the NOLOGIN role 'auren_worker'
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(self.database_url)
+                if parsed.username == "auren_worker":
+                    raise ValueError(
+                        "WORKER_DATABASE_URL cannot use 'auren_worker' directly (it is a NOLOGIN NOINHERIT role). "
+                        "Configure the dedicated login role 'auren_worker_service' instead."
+                    )
+            except ValueError:
+                raise
+            except Exception as parse_err:
+                logger.debug("Failed parsing worker database URL: %s", parse_err)
+
             logger.info("Connecting worker to database pool...")
             self.db_pool = await asyncpg.create_pool(
                 dsn=self.database_url,
@@ -215,3 +230,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

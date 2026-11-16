@@ -725,6 +725,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         query_embedding: Optional[List[float]] = None,
         limit: int = 5,
         min_similarity: float = 0.0,
+        model: Optional[str] = None,
     ) -> List[Any]:
         """Invoke search_memories_hybrid_rpc via PostgREST."""
         from app.services.memory.models import MemorySearchResult
@@ -736,6 +737,8 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         }
         if query_embedding is not None:
             payload["p_query_embedding"] = f"[{','.join(str(x) for x in query_embedding)}]"
+        if model is not None:
+            payload["p_model"] = model
 
         res = await self._request(
             method="POST",

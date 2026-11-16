@@ -25,7 +25,7 @@ class MockEmbeddingProvider(BaseEmbeddingProvider):
     def __init__(
         self,
         dimension: int = 768,
-        model_id: str = "mock-embedding-v1",
+        model_id: str = "gemini-embedding-2",
         canned_vector: Optional[List[float]] = None,
         simulate_timeout: bool = False,
         simulate_invalid_dimension: Optional[int] = None,
@@ -83,17 +83,17 @@ class MockEmbeddingProvider(BaseEmbeddingProvider):
 
         return validate_embedding_vector(vec, expected_dimension=self.dimension)
 
-    async def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str, task_type: Optional[str] = None) -> List[float]:
         if not text or not text.strip():
             raise EmbeddingProviderError("Cannot generate embedding for empty text")
         return self._generate_deterministic_vector(text.strip())
 
-    async def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    async def embed_batch(self, texts: List[str], task_type: Optional[str] = None) -> List[List[float]]:
         if not texts:
             return []
         vectors: List[List[float]] = []
         for t in texts:
-            vectors.append(await self.embed_text(t))
+            vectors.append(await self.embed_text(t, task_type=task_type))
         return vectors
 
 
@@ -112,3 +112,4 @@ def get_embedding_provider(settings: Settings = default_settings) -> BaseEmbeddi
         return MockEmbeddingProvider(dimension=768)
     else:
         raise EmbeddingProviderError(f"Unsupported EMBEDDING_PROVIDER: '{settings.EMBEDDING_PROVIDER}'")
+

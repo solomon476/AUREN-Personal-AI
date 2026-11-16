@@ -229,3 +229,56 @@ async def test_worker_runner_graceful_shutdown(postgresql_server):
         assert runner.metrics["poll_cycles"] > 0
 
         await worker_pool.close()
+
+
+@pytest.mark.asyncio
+async def test_worker_runner_rejects_nologin_role_in_database_url():
+    """Verify that WorkerRunner rejects WORKER_DATABASE_URL with auren_worker username."""
+    runner = WorkerRunner(
+        database_url="postgresql://auren_worker:secret@localhost:5432/postgres",
+        llm_provider=MockExtractionProvider(),
+    )
+    with pytest.raises(ValueError, match="cannot use 'auren_worker' directly"):
+        await runner.initialize()
+
+
+@pytest.mark.asyncio
+async def test_worker_runner_accepts_auren_worker_service_login(postgresql_server):
+    """Verify that auren_worker_service login can initialize WorkerRunner and execute worker operations."""
+    async with isolated_postgres_db(postgresql_server, prefix="mem_runner_svc") as (conn, db_name):
+        # Create auren_worker_service role in the test database
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auren_worker_service') THEN
+                    CREATE ROLE auren_worker_service WITH LOGIN PASSWORD 'svc_test_pw';
+                ELSE
+                    ALTER ROLE auren_worker_service WITH LOGIN PASSWORD 'svc_test_pw';
+                END IF;
+                GRANT auren_worker TO auren_worker_service;
+            END $$;
+        """)
+
+        if postgresql_server["host"].startswith("/"):
+            svc_url = f"postgresql://auren_worker_service:svc_test_pw@/{db_name}?host={postgresql_server['host']}&port={postgresql_server['port']}"
+        else:
+            svc_url = f"postgresql://auren_worker_service:svc_test_pw@{postgresql_server['host']}:{postgresql_server['port']}/{db_name}"
+
+        runner = WorkerRunner(
+            database_url=svc_url,
+            llm_provider=MockExtractionProvider(),
+            embedding_provider=MockEmbeddingProvider(model_id="gemini-embedding-2"),
+            poll_interval=0.1,
+        )
+        await runner.initialize()
+        assert runner._worker is not None
+        assert runner.db_pool is not None
+
+        # Verify executing claim via the worker runner connection pool succeeds
+        async with runner.db_pool.acquire() as claim_conn:
+            jobs = await runner._worker.claim_jobs(claim_conn)
+            assert isinstance(jobs, list)
+
+        await runner.db_pool.close()
+
+

@@ -817,7 +817,7 @@ async def test_hybrid_retrieval_component_bounds(postgresql_server):
             """
             INSERT INTO public.memory_embeddings (
                 memory_id, user_id, provider, model, version, dimension, embedding_768, is_active
-            ) VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)
+            ) VALUES ($1, $2, 'gemini', 'gemini-embedding-2', 'v1', 768, $3::vector, TRUE)
             """,
             mem_max_id, user_id, vec_str,
         )
@@ -1014,7 +1014,7 @@ async def test_hybrid_retrieval_scoring_weights_regression(postgresql_server):
         await conn.execute(
             """
             INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active)
-            VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)
+            VALUES ($1, $2, 'gemini', 'gemini-embedding-2', 'v1', 768, $3::vector, TRUE)
             """,
             mem_sem_id, user_id, query_vec_str,
         )
@@ -1241,7 +1241,7 @@ async def test_query_embedding_semantic_ranking_and_lexical_fallback(postgresql_
         await conn.execute(
             """
             INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active)
-            VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)
+            VALUES ($1, $2, 'gemini', 'gemini-embedding-2', 'v1', 768, $3::vector, TRUE)
             """,
             mem_sem_id, user_id, sem_vec_str,
         )
@@ -1257,7 +1257,7 @@ async def test_query_embedding_semantic_ranking_and_lexical_fallback(postgresql_
         await conn.execute(
             """
             INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active)
-            VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)
+            VALUES ($1, $2, 'gemini', 'gemini-embedding-2', 'v1', 768, $3::vector, TRUE)
             """,
             mem_unrelated_id, user_id, unrelated_vec_str,
         )
@@ -1428,5 +1428,204 @@ async def test_end_to_end_memory_pipeline_integration(postgresql_server):
 
         await worker_pool.close()
         await user_pool.close()
+
+
+@pytest.mark.asyncio
+async def test_incompatible_model_spaces_cannot_be_silently_mixed(postgresql_server):
+    """27. Verify that vectors from incompatible embedding spaces are never compared in hybrid search.
+    A memory embedded under 'text-embedding-004' must not match a query vector for 'gemini-embedding-2',
+    evaluating semantic similarity to 0.0 while preserving lexical retrieval.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_p27") as (conn, db_name):
+        user_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "u27@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+
+        target_vec = [0.03] * 768
+        target_vec_str = f"[{','.join(str(x) for x in target_vec)}]"
+
+        # Insert memory with an embedding stored under retired 'text-embedding-004'
+        mem_old_id = uuid.uuid4()
+        await conn.execute(
+            """
+            INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence)
+            VALUES ($1, $2, 'Specialized quantum compilation technique', 'fact', 'technical', 4, 0.9)
+            """,
+            mem_old_id, user_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active)
+            VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)
+            """,
+            mem_old_id, user_id, target_vec_str,
+        )
+
+        # Query using the active model 'gemini-embedding-2' with identical vector
+        # Because the model space is incompatible, the old embedding must NOT match
+        results_active = await conn.fetch(
+            """
+            SELECT id, score FROM public.search_memories_hybrid_rpc(
+                p_query_text => 'completely unrelated search keywords',
+                p_query_embedding => $1::vector,
+                p_limit => 5,
+                p_min_similarity => 0.0,
+                p_model => 'gemini-embedding-2'
+            )
+            """,
+            target_vec_str,
+        )
+        scores_active = {r["id"]: r["score"] for r in results_active}
+        assert mem_old_id in scores_active
+        # Without semantic match: score is s_imp (0.15 * 4/5 = 0.12) + s_decay (0.10) + s_conf (0.10 * 0.9 = 0.09) = 0.310
+        # If model spaces were mistakenly mixed, s_sem would be 1.0 (adding 0.40 -> 0.710)
+        assert abs(scores_active[mem_old_id] - 0.310) < 0.005, (
+            f"Expected ~0.310 (zero semantic match due to model isolation), got {scores_active[mem_old_id]}"
+        )
+
+        # Now query targeting 'text-embedding-004' explicitly: semantic similarity should match!
+        results_old_space = await conn.fetch(
+            """
+            SELECT id, score FROM public.search_memories_hybrid_rpc(
+                p_query_text => 'completely unrelated search keywords',
+                p_query_embedding => $1::vector,
+                p_limit => 5,
+                p_min_similarity => 0.0,
+                p_model => 'text-embedding-004'
+            )
+            """,
+            target_vec_str,
+        )
+        scores_old = {r["id"]: r["score"] for r in results_old_space}
+        assert mem_old_id in scores_old
+        # With semantic match in text-embedding-004 space: 0.40 * 1.0 + 0.310 = 0.710
+        assert abs(scores_old[mem_old_id] - 0.710) < 0.005
+
+
+@pytest.mark.asyncio
+async def test_worker_service_role_permissions_and_direct_access_denial(postgresql_server):
+    """28. Verify worker database identity: auren_worker is NOLOGIN NOINHERIT;
+    auren_worker_service connects, has valid is_authorized_worker_session(),
+    can execute worker RPCs, but is strictly DENIED direct SELECT/DML on all data tables.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_p28") as (conn, db_name):
+        # 1. Verify auren_worker itself is NOLOGIN NOINHERIT
+        nologin_row = await conn.fetchrow(
+            "SELECT rolcanlogin, rolinherit FROM pg_roles WHERE rolname = 'auren_worker'"
+        )
+        assert nologin_row is not None
+        assert nologin_row["rolcanlogin"] is False
+        assert nologin_row["rolinherit"] is False
+
+        # 2. Setup auren_worker_service with password in test DB
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auren_worker_service') THEN
+                    CREATE ROLE auren_worker_service WITH LOGIN PASSWORD 'test_svc_pw';
+                ELSE
+                    ALTER ROLE auren_worker_service WITH LOGIN PASSWORD 'test_svc_pw';
+                END IF;
+                GRANT auren_worker TO auren_worker_service;
+            END $$;
+        """)
+
+        # Connect as auren_worker_service
+        worker_conn = await asyncpg.connect(
+            host=postgresql_server["host"],
+            port=postgresql_server["port"],
+            database=db_name,
+            user="auren_worker_service",
+            password="test_svc_pw",
+        )
+
+        try:
+            # 3. Verify session identity and authorized worker session check
+            auth_worker = await worker_conn.fetchval("SELECT public.is_authorized_worker_session()")
+            assert auth_worker is True
+
+            # 4. Verify worker RPC execution is permitted
+            jobs = await worker_conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-test-svc', 5, 300)")
+            assert isinstance(jobs, list)
+
+            # 5. Verify direct table SELECT is strictly DENIED on sensitive tables
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                await worker_conn.fetch("SELECT * FROM public.messages LIMIT 1")
+
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                await worker_conn.fetch("SELECT * FROM public.journal_entries LIMIT 1")
+
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                await worker_conn.fetch("SELECT * FROM public.memories LIMIT 1")
+
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                await worker_conn.fetch("SELECT * FROM public.memory_extraction_jobs LIMIT 1")
+
+        finally:
+            await worker_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_prevents_fake_embeddings_and_completion(postgresql_server):
+    """29. Verify that an embedding provider failure during extraction does not fabricate fake embeddings
+    and prevents false job completion (job remains pending with incremented attempts).
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_p29") as (conn, db_name):
+        user_id = uuid.uuid4()
+        conv_id = uuid.uuid4()
+        idemp_key = "turn-emb-fail-check"
+
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "u29@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Conv 29')", conv_id, user_id)
+
+        user_msg_id = uuid.uuid4()
+        asst_msg_id = uuid.uuid4()
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'My pet is a dog named Max')", user_msg_id, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Dogs make great pets!')", asst_msg_id, conv_id, user_id)
+
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", idemp_key, conv_id, user_msg_id, "e" * 64)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", idemp_key, asst_msg_id)
+
+        # Worker setup
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'pw' IN ROLE auren_worker")
+        worker_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=worker_user, password="pw"
+        )
+
+        canned = '[{"content": "User owns a dog named Max", "memory_type": "fact", "category": "personal", "importance": 3, "confidence": 0.9}]'
+        llm = MockExtractionProvider(response_json=canned)
+        failing_emb = MockEmbeddingProvider(simulate_timeout=True, dimension=768)
+
+        worker = MemoryExtractionWorker(
+            worker_id="worker-emb-fail",
+            db_pool=worker_pool,
+            llm_provider=llm,
+            embedding_provider=failing_emb,
+        )
+
+        async with worker_pool.acquire() as claim_conn:
+            jobs = await worker.claim_jobs(claim_conn)
+            assert len(jobs) == 1
+            async with worker_pool.acquire() as proc_conn:
+                success = await worker.process_job(proc_conn, jobs[0])
+                assert success is False
+
+        # Job must NOT be marked completed
+        job_status = await conn.fetchrow("SELECT status, attempts, last_error FROM public.memory_extraction_jobs WHERE id = $1", jobs[0]["id"])
+        assert job_status["status"] == "pending"
+        assert job_status["attempts"] == 1
+        assert "timeout" in job_status["last_error"].lower()
+
+        # Zero memories or embeddings must be created
+        mem_count = await conn.fetchval("SELECT count(*) FROM public.memories WHERE user_id = $1", user_id)
+        assert mem_count == 0
+
+        emb_count = await conn.fetchval("SELECT count(*) FROM public.memory_embeddings WHERE user_id = $1", user_id)
+        assert emb_count == 0
+
+        await worker_pool.close()
+
 
 

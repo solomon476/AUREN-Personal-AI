@@ -176,6 +176,7 @@ class BaseChatRepository(ABC):
         query_embedding: Optional[List[float]] = None,
         limit: int = 5,
         min_similarity: float = 0.0,
+        model: Optional[str] = None,
     ) -> List[Any]:
         """Execute hybrid search for active user memories."""
         pass

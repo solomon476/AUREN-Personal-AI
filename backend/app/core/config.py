@@ -168,7 +168,7 @@ class Settings(BaseSettings):
     # Replaceable Embedding Provider Configuration
     EMBEDDING_PROVIDER: str = "gemini"
     EMBEDDING_API_KEY: Optional[str] = None
-    EMBEDDING_MODEL: str = "text-embedding-004"
+    EMBEDDING_MODEL: str = "gemini-embedding-2"
 
     # Chat & Stream Configuration
     CHAT_REPOSITORY_TYPE: str = Field(default="auto", description="'auto', 'supabase', or 'sqlite'")

@@ -147,6 +147,7 @@ class MemoryExtractionWorker:
     ) -> UUID:
         """Persists extracted memory via insert_extracted_memory_rpc, enforcing epistemic constraints."""
         embedding_str = f"[{','.join(str(x) for x in embedding)}]" if embedding else None
+        model_id = self.embedding_provider.get_model_id() if self.embedding_provider else "gemini-embedding-2"
         return await conn.fetchval(
             """
             SELECT public.insert_extracted_memory_rpc(
@@ -159,7 +160,8 @@ class MemoryExtractionWorker:
                 p_importance => $7,
                 p_confidence => $8,
                 p_metadata => $9::jsonb,
-                p_embedding_768 => $10::vector
+                p_embedding_768 => $10::vector,
+                p_model => $11
             )
             """,
             job_id,
@@ -172,6 +174,7 @@ class MemoryExtractionWorker:
             item.confidence,
             json.dumps(item.metadata),
             embedding_str,
+            model_id,
         )
 
     async def complete_job(self, conn, job_id: UUID, claim_token: UUID) -> bool:

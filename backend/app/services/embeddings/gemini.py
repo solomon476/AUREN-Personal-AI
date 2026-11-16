@@ -16,7 +16,8 @@ from app.services.embeddings.base import (
 logger = logging.getLogger(__name__)
 
 SUPPORTED_GEMINI_EMBEDDING_MODELS = {
-    "text-embedding-004": 768,
+    "gemini-embedding-2": 768,
+    "text-embedding-004": 768,  # retired on 14 Jan 2026; retained for backward compatibility / validation
 }
 
 
@@ -26,7 +27,7 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_id: str = "text-embedding-004",
+        model_id: str = "gemini-embedding-2",
         dimension: int = 768,
         timeout_seconds: float = 30.0,
     ):
@@ -72,7 +73,7 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
         if self._client is None:
             raise EmbeddingAuthenticationError("Gemini client initialization failed")
 
-    async def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str, task_type: Optional[str] = None) -> List[float]:
         """Generate a 768-dimensional vector embedding for a single text input."""
         if not text or not text.strip():
             raise EmbeddingProviderError("Cannot generate embedding for empty or whitespace-only text")
@@ -81,7 +82,10 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
 
         from google.genai import types
 
-        config = types.EmbedContentConfig(output_dimensionality=self.dimension)
+        config = types.EmbedContentConfig(
+            output_dimensionality=self.dimension,
+            task_type=task_type,
+        )
         try:
             response = await asyncio.wait_for(
                 self._client.aio.models.embed_content(
@@ -114,7 +118,7 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
                 raise EmbeddingAuthenticationError(f"Gemini embedding authentication failed: {err_msg}")
             raise EmbeddingProviderError(f"Gemini embedding error: {err_msg}")
 
-    async def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    async def embed_batch(self, texts: List[str], task_type: Optional[str] = None) -> List[List[float]]:
         """Generate 768-dimensional vector embeddings for a batch of text inputs."""
         if not texts:
             return []
@@ -129,7 +133,10 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
 
         from google.genai import types
 
-        config = types.EmbedContentConfig(output_dimensionality=self.dimension)
+        config = types.EmbedContentConfig(
+            output_dimensionality=self.dimension,
+            task_type=task_type,
+        )
         try:
             response = await asyncio.wait_for(
                 self._client.aio.models.embed_content(
@@ -166,3 +173,4 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
             if any(term in err_lower for term in ("unauthenticated", "invalid api key", "permission_denied", "401", "403")):
                 raise EmbeddingAuthenticationError(f"Gemini embedding authentication failed: {err_msg}")
             raise EmbeddingProviderError(f"Gemini batch embedding error: {err_msg}")
+

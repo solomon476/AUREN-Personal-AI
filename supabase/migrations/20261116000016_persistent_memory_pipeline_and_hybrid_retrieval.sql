@@ -608,8 +608,11 @@ GRANT EXECUTE ON FUNCTION public.fail_memory_extraction_job_rpc(UUID, TEXT, UUID
 -- 6. EPISTEMIC PROVENANCE & MEMORY INGESTION RPC
 -- ============================================================================
 
--- Drop 9-argument version to prevent parameter ambiguity
+-- Drop prior versions to prevent parameter ambiguity
 DROP FUNCTION IF EXISTS public.insert_extracted_memory_rpc(UUID, TEXT, UUID, TEXT, TEXT, TEXT, INT, REAL, JSONB);
+DROP FUNCTION IF EXISTS public.insert_extracted_memory_rpc(UUID, TEXT, UUID, TEXT, TEXT, TEXT, INT, DOUBLE PRECISION, JSONB, vector);
+DROP FUNCTION IF EXISTS public.insert_extracted_memory_rpc(UUID, TEXT, UUID, TEXT, TEXT, TEXT, INT, DOUBLE PRECISION, JSONB, vector, TEXT);
+DROP FUNCTION IF EXISTS public.insert_extracted_memory_rpc(UUID, TEXT, UUID, TEXT, TEXT, TEXT, INT, DOUBLE PRECISION, JSONB, vector, TEXT, TEXT, TEXT);
 
 -- Function: insert_extracted_memory_rpc
 -- Enforces:
@@ -618,7 +621,7 @@ DROP FUNCTION IF EXISTS public.insert_extracted_memory_rpc(UUID, TEXT, UUID, TEX
 -- 3. Inferred dialogue provenance: origin='chat_inferred', confirmation_status='unconfirmed'.
 -- 4. Rejection of worker-created 'system_asserted' memories.
 -- 5. Deduplication against existing active memories from same source turn.
--- 6. Atomic embedding persistence if provided.
+-- 6. Atomic embedding persistence if provided, verifying model compatibility.
 CREATE OR REPLACE FUNCTION public.insert_extracted_memory_rpc(
     p_job_id UUID,
     p_worker_id TEXT,
@@ -629,7 +632,10 @@ CREATE OR REPLACE FUNCTION public.insert_extracted_memory_rpc(
     p_importance INT DEFAULT 3,
     p_confidence DOUBLE PRECISION DEFAULT NULL,
     p_metadata JSONB DEFAULT '{}'::jsonb,
-    p_embedding_768 vector(768) DEFAULT NULL
+    p_embedding_768 vector(768) DEFAULT NULL,
+    p_model TEXT DEFAULT 'gemini-embedding-2',
+    p_provider TEXT DEFAULT 'gemini',
+    p_version TEXT DEFAULT 'v1'
 )
 RETURNS UUID
 LANGUAGE plpgsql
@@ -640,6 +646,9 @@ DECLARE
     v_job public.memory_extraction_jobs%ROWTYPE;
     v_memory_id UUID;
     v_existing_id UUID;
+    v_model TEXT;
+    v_provider TEXT;
+    v_version TEXT;
 BEGIN
     IF NOT public.is_authorized_worker_session() THEN
         RAISE EXCEPTION 'Unauthorized: session user (%) does not possess the auren_worker role', SESSION_USER
@@ -759,6 +768,22 @@ BEGIN
 
     -- Attach vector embedding atomically if provided
     IF p_embedding_768 IS NOT NULL THEN
+        v_model := COALESCE(trim(p_model), 'gemini-embedding-2');
+        v_provider := COALESCE(trim(p_provider), 'gemini');
+        v_version := COALESCE(trim(p_version), 'v1');
+
+        -- Verify that the specified embedding model is registered with dimension 768
+        IF NOT EXISTS (
+            SELECT 1 FROM public.embedding_models
+            WHERE provider = v_provider
+              AND model = v_model
+              AND version = v_version
+              AND dimension = 768
+        ) THEN
+            RAISE EXCEPTION 'Embedding model %/%/% (768-dim) is not registered in embedding_models',
+                v_provider, v_model, v_version USING ERRCODE = 'P0002';
+        END IF;
+
         INSERT INTO public.memory_embeddings (
             memory_id,
             user_id,
@@ -771,22 +796,25 @@ BEGIN
         ) VALUES (
             v_memory_id,
             v_job.user_id,
-            'gemini',
-            'text-embedding-004',
-            'v1',
+            v_provider,
+            v_model,
+            v_version,
             768,
             p_embedding_768,
             TRUE
         )
-        ON CONFLICT (memory_id, provider, model, version) DO NOTHING;
+        ON CONFLICT (memory_id, provider, model, version) DO UPDATE
+        SET embedding_768 = EXCLUDED.embedding_768,
+            dimension = EXCLUDED.dimension,
+            is_active = TRUE;
     END IF;
 
     RETURN v_memory_id;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.insert_extracted_memory_rpc(UUID, TEXT, UUID, TEXT, TEXT, TEXT, INT, DOUBLE PRECISION, JSONB, vector) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.insert_extracted_memory_rpc(UUID, TEXT, UUID, TEXT, TEXT, TEXT, INT, DOUBLE PRECISION, JSONB, vector) TO auren_worker;
+REVOKE ALL ON FUNCTION public.insert_extracted_memory_rpc(UUID, TEXT, UUID, TEXT, TEXT, TEXT, INT, DOUBLE PRECISION, JSONB, vector, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.insert_extracted_memory_rpc(UUID, TEXT, UUID, TEXT, TEXT, TEXT, INT, DOUBLE PRECISION, JSONB, vector, TEXT, TEXT, TEXT) TO auren_worker;
 
 -- ============================================================================
 -- 7. HYBRID MEMORY RETRIEVAL RPC
@@ -801,11 +829,15 @@ GRANT EXECUTE ON FUNCTION public.insert_extracted_memory_rpc(UUID, TEXT, UUID, T
 -- - D(m) in (0.00, 0.10]
 -- - conf(m) in [0.00, 0.10] (neutral 0.50 fallback for NULL)
 -- Total Score: Infimum > 0.03, Supremum < 1.00, Legacy Interval [0.18, 0.95).
+DROP FUNCTION IF EXISTS public.search_memories_hybrid_rpc(TEXT, vector, INT, REAL);
+DROP FUNCTION IF EXISTS public.search_memories_hybrid_rpc(TEXT, vector, INT, REAL, TEXT);
+
 CREATE OR REPLACE FUNCTION public.search_memories_hybrid_rpc(
     p_query_text TEXT,
     p_query_embedding vector(768) DEFAULT NULL,
     p_limit INT DEFAULT 5,
-    p_min_similarity REAL DEFAULT 0.0
+    p_min_similarity REAL DEFAULT 0.0,
+    p_model TEXT DEFAULT NULL
 )
 RETURNS TABLE (
     id UUID,
@@ -827,6 +859,7 @@ DECLARE
     v_tsquery tsquery;
     v_has_text BOOLEAN;
     v_has_embedding BOOLEAN;
+    v_target_model TEXT;
 BEGIN
     v_user_id := auth.uid();
     IF v_user_id IS NULL THEN
@@ -846,6 +879,17 @@ BEGIN
         v_tsquery := NULL;
     END IF;
 
+    -- Establish target embedding model space: prevent mixing incompatible vector spaces
+    IF p_model IS NOT NULL AND length(trim(p_model)) > 0 THEN
+        v_target_model := trim(p_model);
+    ELSE
+        SELECT model INTO v_target_model
+        FROM public.embedding_models
+        WHERE purpose = 'retrieval' AND is_active = TRUE
+        LIMIT 1;
+        v_target_model := COALESCE(v_target_model, 'gemini-embedding-2');
+    END IF;
+
     RETURN QUERY
     WITH scored AS (
         SELECT
@@ -856,7 +900,7 @@ BEGIN
             m.importance,
             m.confidence,
             m.confirmation_status,
-            -- Component 1: Semantic similarity S_sem in [0, 1]
+            -- Component 1: Semantic similarity S_sem in [0, 1] (isolated strictly to target model space)
             (CASE
                 WHEN v_has_embedding AND emb.embedding_768 IS NOT NULL THEN
                     GREATEST(0.0::real, LEAST(1.0::real, (1.0 - (emb.embedding_768 <=> p_query_embedding))::real))
@@ -890,7 +934,9 @@ BEGIN
             WHERE me.memory_id = m.id
               AND me.user_id = v_user_id
               AND me.is_active = TRUE
+              AND me.model = v_target_model
               AND me.embedding_768 IS NOT NULL
+            ORDER BY me.created_at DESC
             LIMIT 1
         ) emb ON TRUE
         WHERE m.user_id = v_user_id
@@ -914,18 +960,53 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.search_memories_hybrid_rpc(TEXT, vector, INT, REAL) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.search_memories_hybrid_rpc(TEXT, vector, INT, REAL) TO authenticated;
+REVOKE ALL ON FUNCTION public.search_memories_hybrid_rpc(TEXT, vector, INT, REAL, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.search_memories_hybrid_rpc(TEXT, vector, INT, REAL, TEXT) TO authenticated;
 
 -- ============================================================================
--- 8. WORKER PRIVILEGE BOUNDARY ENFORCEMENT
+-- 8. EMBEDDING REGISTRY UPDATE & WORKER ROLE RECONCILIATION
 -- ============================================================================
+
+-- Deactivate existing active models for retrieval to respect single-active partial index
+UPDATE public.embedding_models
+SET is_active = FALSE
+WHERE purpose = 'retrieval';
+
+-- Register and activate Google gemini-embedding-2 (768 dimensions)
+INSERT INTO public.embedding_models (provider, model, version, dimension, vector_column, purpose, is_active)
+VALUES 
+    ('gemini', 'gemini-embedding-2', 'v1', 768, 'embedding_768', 'retrieval', TRUE),
+    ('gemini', 'text-embedding-004', 'v1', 768, 'embedding_768', 'retrieval', FALSE),
+    ('openai', 'text-embedding-3-small', 'v1', 1536, 'embedding_1536', 'retrieval', FALSE)
+ON CONFLICT (provider, model, version) DO UPDATE 
+SET is_active = EXCLUDED.is_active,
+    dimension = EXCLUDED.dimension,
+    vector_column = EXCLUDED.vector_column,
+    purpose = EXCLUDED.purpose;
+
+-- Reconcile worker role definitions:
+-- auren_worker is NOLOGIN NOINHERIT
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auren_worker') THEN
+        ALTER ROLE auren_worker NOLOGIN NOINHERIT;
+    ELSE
+        CREATE ROLE auren_worker NOLOGIN NOINHERIT;
+    END IF;
+
+    -- auren_worker_service is the dedicated login role possessing membership in auren_worker
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auren_worker_service') THEN
+        CREATE ROLE auren_worker_service WITH LOGIN;
+    END IF;
+    GRANT auren_worker TO auren_worker_service;
+END $$;
 
 -- Revoke direct table SELECT on memory_extraction_jobs from auren_worker
 -- All worker queue interactions must use SECURITY DEFINER RPCs exclusively.
 REVOKE SELECT ON TABLE public.memory_extraction_jobs FROM auren_worker;
 DROP POLICY IF EXISTS "extraction_jobs_worker_select" ON public.memory_extraction_jobs;
 
--- Ensure auren_worker possesses NO direct access to messages or journal_entries
+-- Ensure auren_worker possesses NO direct access to messages, journal_entries, or memories
 REVOKE ALL ON TABLE public.messages FROM auren_worker;
 REVOKE ALL ON TABLE public.journal_entries FROM auren_worker;
+REVOKE ALL ON TABLE public.memories FROM auren_worker;

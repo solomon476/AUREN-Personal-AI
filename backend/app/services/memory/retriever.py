@@ -23,6 +23,7 @@ class MemoryRetriever:
         query_embedding: Optional[List[float]] = None,
         limit: int = 5,
         min_similarity: float = 0.0,
+        model: Optional[str] = None,
     ) -> List[MemorySearchResult]:
         """Execute hybrid search using the available repository or asyncpg connection."""
         if self._repository is not None and hasattr(self._repository, "search_memories_hybrid"):
@@ -32,6 +33,7 @@ class MemoryRetriever:
                 query_embedding=query_embedding,
                 limit=limit,
                 min_similarity=min_similarity,
+                model=model,
             )
 
         if self._db_pool is not None:
@@ -45,13 +47,15 @@ class MemoryRetriever:
                         p_query_text => $1,
                         p_query_embedding => $2::vector,
                         p_limit => $3,
-                        p_min_similarity => $4
+                        p_min_similarity => $4,
+                        p_model => $5
                     )
                     """,
                     query_text,
                     embedding_str,
                     limit,
                     min_similarity,
+                    model,
                 )
                 return [
                     MemorySearchResult(
