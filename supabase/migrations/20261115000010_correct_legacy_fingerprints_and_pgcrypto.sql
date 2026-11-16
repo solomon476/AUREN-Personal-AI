@@ -2,7 +2,8 @@
 -- Description: Correct legacy fingerprint backfill matching application normalization semantics,
 --              preserve original request conversation-ID semantics (conv:none vs conv:<uuid>),
 --              safely resolve pgcrypto without static schema qualifications, enforce user-message
---              immutability, and apply strict compatibility policies for unreconstructable records.
+--              immutability, safely resolve migration 009/010 trigger conflict transactionally,
+--              and apply strict compatibility policies for unreconstructable records.
 
 -- ============================================================================
 -- 1. VERIFY PGCRYPTO EXTENSION DEPENDENCY & DYNAMIC SCHEMA RESOLUTION
@@ -183,39 +184,132 @@ EXECUTE FUNCTION public.handle_messages_immutability();
 
 -- Step 4a: Compatibility Policy for unreconstructable legacy records:
 -- If a legacy record's user_message_id does not exist in public.messages, OR if the message's
--- provenance is broken (e.g. edited/altered content), original content cannot be proved.
+-- provenance is broken (e.g. edited/altered content, original_content preserved), original content
+-- cannot be proved. Robustly check JSONB metadata without fragile type casting.
 -- To avoid fabricating false fingerprints that cause permanent HTTP 409 collisions on retry,
 -- unreconstructable records are purged from chat_requests.
 DELETE FROM public.chat_requests cr
 WHERE NOT EXISTS (
     SELECT 1 FROM public.messages m
     WHERE m.id = cr.user_message_id
-      AND COALESCE((m.metadata->>'edited')::boolean, FALSE) IS FALSE
-      AND COALESCE((m.metadata->>'content_changed')::boolean, FALSE) IS FALSE
+      AND COALESCE(m.metadata->>'edited' = 'true', FALSE) IS FALSE
+      AND COALESCE(m.metadata->>'content_changed' = 'true', FALSE) IS FALSE
+      AND NOT (m.metadata ? 'original_content')
 );
 
--- Step 4b: Reconstruct fingerprints for all pristine legacy records:
--- Determine whether the original request supplied a conversation ID:
---   - If cr.conversation_id == deterministic_conv_id: request supplied NO conversation ID -> conv:none (NULL)
---   - If cr.conversation_id != deterministic_conv_id: request supplied explicit conversation ID -> conv:<uuid>
-UPDATE public.chat_requests cr
-SET request_fingerprint = public.compute_request_fingerprint_sql(
-    cr.user_id,
-    CASE 
-        WHEN cr.conversation_id = public.compute_deterministic_conversation_id_sql(cr.user_id, cr.idempotency_key)
-        THEN NULL
-        ELSE cr.conversation_id
-    END,
-    m.content
-)
-FROM public.messages m
-WHERE cr.user_message_id = m.id
-  AND (
-      cr.request_fingerprint IS NULL
-      OR cr.request_fingerprint !~ '^[0-9a-fA-F]{64}$'
-      -- Also recompute if it was the temporary synthetic digest from migration 009
-      OR cr.request_fingerprint = encode(digest(convert_to('legacy:' || cr.user_id::text || ':' || cr.idempotency_key, 'UTF8'), 'sha256'), 'hex')
-  );
+-- Step 4b: Safe, Transactional Migration-Only Trigger Update
+-- Migration 009 created trg_chat_requests_immutability which prevents updating request_fingerprint.
+-- We temporarily grant authorization strictly for replacing the known synthetic hash or NULL,
+-- guarded by a session configuration flag.
+CREATE OR REPLACE FUNCTION public.handle_chat_requests_immutability()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.request_fingerprint IS DISTINCT FROM OLD.request_fingerprint THEN
+        IF current_setting('auren.allow_legacy_fingerprint_reconstruction', true) = 'on'
+           AND (
+               OLD.request_fingerprint IS NULL
+               OR OLD.request_fingerprint = encode(digest(convert_to('legacy:' || OLD.user_id::text || ':' || OLD.idempotency_key, 'UTF8'), 'sha256'), 'hex')
+           ) THEN
+            -- Permitted: strictly authorized replacement of legacy synthetic or NULL hash
+            NULL;
+        ELSE
+            RAISE EXCEPTION 'request_fingerprint is immutable and cannot be modified' USING ERRCODE = '22023';
+        END IF;
+    END IF;
+
+    IF NEW.user_id IS DISTINCT FROM OLD.user_id THEN
+        RAISE EXCEPTION 'user_id is immutable and cannot be transferred' USING ERRCODE = '42501';
+    END IF;
+
+    IF NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key THEN
+        RAISE EXCEPTION 'idempotency_key is immutable and cannot be modified' USING ERRCODE = '22023';
+    END IF;
+
+    IF NEW.conversation_id IS DISTINCT FROM OLD.conversation_id THEN
+        RAISE EXCEPTION 'conversation_id is immutable and cannot be modified' USING ERRCODE = '22023';
+    END IF;
+
+    IF NEW.user_message_id IS DISTINCT FROM OLD.user_message_id THEN
+        RAISE EXCEPTION 'user_message_id is immutable and cannot be modified' USING ERRCODE = '22023';
+    END IF;
+
+    IF NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+        RAISE EXCEPTION 'created_at is immutable and cannot be modified' USING ERRCODE = '22023';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Step 4c: Execute transactional backfill with temporary migration-only session flag
+DO $$
+BEGIN
+    PERFORM set_config('auren.allow_legacy_fingerprint_reconstruction', 'on', true);
+
+    -- Reconstruct fingerprints for all pristine legacy records:
+    -- Determine whether original request supplied conversation ID:
+    --   - cr.conversation_id == deterministic_conv_id: request supplied NO conversation ID -> conv:none (NULL)
+    --   - cr.conversation_id != deterministic_conv_id: request supplied explicit conversation ID -> conv:<uuid>
+    UPDATE public.chat_requests cr
+    SET request_fingerprint = public.compute_request_fingerprint_sql(
+        cr.user_id,
+        CASE 
+            WHEN cr.conversation_id = public.compute_deterministic_conversation_id_sql(cr.user_id, cr.idempotency_key)
+            THEN NULL
+            ELSE cr.conversation_id
+        END,
+        m.content
+    )
+    FROM public.messages m
+    WHERE cr.user_message_id = m.id
+      AND (
+          cr.request_fingerprint IS NULL
+          OR cr.request_fingerprint !~ '^[0-9a-fA-F]{64}$'
+          OR cr.request_fingerprint = encode(digest(convert_to('legacy:' || cr.user_id::text || ':' || cr.idempotency_key, 'UTF8'), 'sha256'), 'hex')
+      );
+
+    PERFORM set_config('auren.allow_legacy_fingerprint_reconstruction', 'off', true);
+END;
+$$;
+
+-- Step 4d: Restore Permanent Strict Immutability Trigger Function
+CREATE OR REPLACE FUNCTION public.handle_chat_requests_immutability()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Strict permanent immutability: request_fingerprint can NEVER be modified once assigned
+    IF NEW.request_fingerprint IS DISTINCT FROM OLD.request_fingerprint THEN
+        RAISE EXCEPTION 'request_fingerprint is immutable and cannot be modified' USING ERRCODE = '22023';
+    END IF;
+
+    IF NEW.user_id IS DISTINCT FROM OLD.user_id THEN
+        RAISE EXCEPTION 'user_id is immutable and cannot be transferred' USING ERRCODE = '42501';
+    END IF;
+
+    IF NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key THEN
+        RAISE EXCEPTION 'idempotency_key is immutable and cannot be modified' USING ERRCODE = '22023';
+    END IF;
+
+    IF NEW.conversation_id IS DISTINCT FROM OLD.conversation_id THEN
+        RAISE EXCEPTION 'conversation_id is immutable and cannot be modified' USING ERRCODE = '22023';
+    END IF;
+
+    IF NEW.user_message_id IS DISTINCT FROM OLD.user_message_id THEN
+        RAISE EXCEPTION 'user_message_id is immutable and cannot be modified' USING ERRCODE = '22023';
+    END IF;
+
+    IF NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+        RAISE EXCEPTION 'created_at is immutable and cannot be modified' USING ERRCODE = '22023';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_chat_requests_immutability ON public.chat_requests;
+CREATE TRIGGER trg_chat_requests_immutability
+    BEFORE UPDATE ON public.chat_requests
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_chat_requests_immutability();
 
 -- Any remaining records with NULL fingerprint cannot be reconstructed: purge per compatibility policy
 DELETE FROM public.chat_requests

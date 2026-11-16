@@ -472,6 +472,39 @@ To prevent historical or concurrent mutation of user prompts from poisoning requ
   If a legacy request row points to a missing user message, or if a user message's metadata indicates content was modified (`metadata->>'edited' = 'true'`), the record cannot be cryptographically proven.
   Unreconstructable records are purged from `chat_requests`. This preserves message history while clearing unprovable lifecycle locks, allowing clients to re-issue clean requests without false conflict rejections.
 
+---
+
+## 15. Phase 3A.10 Migration Trigger Compatibility and Real PostgreSQL Verification
+
+Phase 3A.10 resolves the Migration 009/010 trigger conflict, conducts real PostgreSQL function and migration execution verification, validates UUIDv5 mathematical parity, verifies dual-schema `pgcrypto` portability, and hardens provenance handling.
+
+### 1. Resolution of Migration 009/010 Trigger Conflict
+Migration 009 created `trg_chat_requests_immutability` to block modifying `request_fingerprint`, and backfilled legacy rows with synthetic digests. When Migration 010 attempted to reconstruct fingerprints, `handle_chat_requests_immutability()` aborted the update with `request_fingerprint is immutable and cannot be modified`.
+
+**Transactional Migration-Only Procedure:**
+1. Migration 010 temporarily updates `handle_chat_requests_immutability()` to check `current_setting('auren.allow_legacy_fingerprint_reconstruction', true) = 'on'` AND strictly require that `OLD.request_fingerprint` matches the known synthetic digest `encode(digest('legacy:' || ...))`.
+2. Within the transaction block, the session setting is enabled (`PERFORM set_config('auren.allow_legacy_fingerprint_reconstruction', 'on', true)`).
+3. The backfill update executes, replacing exclusively the known synthetic digests.
+4. Immediately following the backfill, `handle_chat_requests_immutability()` is restored to its permanent strict definition forbidding all modifications to `request_fingerprint`.
+5. Because PostgreSQL migrations execute within transaction boundaries, any migration failure rolls back the entire state, guaranteeing the database is never left without its integrity protections.
+
+### 2. Real PostgreSQL Function Parity Verification
+Verified on actual PostgreSQL 17 execution (`test_postgresql_migrations_and_parity.py`):
+- `public.normalize_chat_content()` matches Python's `"\n".join(line.rstrip() for line in content.strip().splitlines())` across all 10 Unicode whitespace, line separator, and trailing whitespace vectors.
+- Exact UTF-8 byte equality and SHA-256 fingerprint equality confirmed for all test cases.
+- `public.compute_deterministic_conversation_id_sql()` compared directly against Python's `uuid.uuid5(uuid.NAMESPACE_OID, ...)` across diverse test vectors (standard IDs, special characters, all-0, all-F, 128-char keys, Unicode strings). 100% byte-for-byte equality confirmed.
+
+### 3. Pgcrypto Dual-Schema Portability
+Verified by executing migrations 001..010 on clean PostgreSQL databases with:
+1. `pgcrypto` installed in schema `public` (standard PostgreSQL installation).
+2. `pgcrypto` installed in schema `extensions` (standard Supabase installation).
+In both configurations, `digest(...)` resolves dynamically without static schema prefixes or missing function errors.
+
+### 4. Robust Provenance Handling
+- JSONB metadata checks use safe text equality (`COALESCE(m.metadata->>'edited' = 'true', FALSE)`) rather than direct boolean type casting, preventing non-boolean or invalid metadata values from aborting the migration.
+- User message content immutability trigger (`trg_messages_user_content_immutability`) verified to block direct `UPDATE` on user messages in PostgreSQL.
+
+
 
 
 

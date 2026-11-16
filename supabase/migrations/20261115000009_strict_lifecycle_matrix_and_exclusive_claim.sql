@@ -6,9 +6,27 @@
 -- 1. BACKFILL AND ENFORCE 64-CHARACTER HEXADECIMAL REQUEST FINGERPRINT
 -- ============================================================================
 
+-- Dynamically configure session search_path to locate digest regardless of whether
+-- pgcrypto was installed in public or extensions.
+DO $$
+DECLARE
+    v_schema TEXT;
+BEGIN
+    SELECT n.nspname INTO v_schema
+    FROM pg_proc p
+    JOIN pg_namespace n ON p.pronamespace = n.oid
+    WHERE p.proname = 'digest'
+    LIMIT 1;
+
+    IF v_schema IS NOT NULL AND v_schema NOT IN ('public', 'pg_catalog') THEN
+        EXECUTE 'SET search_path TO ' || current_setting('search_path') || ', ' || quote_ident(v_schema);
+    END IF;
+END;
+$$;
+
 -- Backfill any legacy NULL request_fingerprint with deterministic 64-hex SHA-256 hash
 UPDATE public.chat_requests
-SET request_fingerprint = encode(digest('legacy:' || user_id::text || ':' || idempotency_key, 'sha256'), 'hex')
+SET request_fingerprint = encode(digest(convert_to('legacy:' || user_id::text || ':' || idempotency_key, 'UTF8'), 'sha256'), 'hex')
 WHERE request_fingerprint IS NULL;
 
 -- Enforce NOT NULL on request_fingerprint
