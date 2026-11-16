@@ -106,3 +106,4 @@ class BaseMemoryRepository(ABC):
     async def outdate_memory(self, user_id: UUID, memory_id: UUID) -> Optional[MemoryModel]:
         """Mark an active memory as expired/outdated."""
         pass
+

@@ -142,3 +142,4 @@ export async function outdateMemory(memoryId: string): Promise<Memory> {
 export async function getMessageContext(conversationId: string, messageId: string): Promise<MessageContextResponse> {
   return apiClient.get<MessageContextResponse>(`/chat/conversations/${conversationId}/messages/${messageId}/context`);
 }
+

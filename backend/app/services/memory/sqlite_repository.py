@@ -291,30 +291,31 @@ class SQLiteMemoryRepository(BaseMemoryRepository):
         importance: Optional[int] = None,
     ) -> Optional[MemoryModel]:
         with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM memories WHERE id = ? AND user_id = ?;",
-                (str(memory_id), str(user_id)),
-            ).fetchone()
-            if not row:
-                return None
-
-            old_mem = self._row_to_model(row)
-            if old_mem.lifecycle_status != "active":
-                raise ValueError(f"Cannot correct memory with lifecycle status: {old_mem.lifecycle_status}")
-            if old_mem.confirmation_status == "rejected":
-                raise ValueError("Cannot correct rejected memory")
-
-            new_id = str(uuid4())
-            root_id = str(old_mem.root_memory_id or old_mem.id)
-            now_iso = datetime.now(timezone.utc).isoformat()
-
-            new_type = memory_type or old_mem.memory_type
-            new_cat = category or old_mem.category
-            new_imp = importance if importance is not None else old_mem.importance
-
-            # Atomic transaction: insert successor & supersede predecessor
+            # Immediate write lock: eliminates TOCTOU race by holding lock across read & write
             conn.execute("BEGIN IMMEDIATE;")
             try:
+                row = conn.execute(
+                    "SELECT * FROM memories WHERE id = ? AND user_id = ?;",
+                    (str(memory_id), str(user_id)),
+                ).fetchone()
+                if not row:
+                    conn.rollback()
+                    return None
+
+                old_mem = self._row_to_model(row)
+                if old_mem.lifecycle_status != "active":
+                    raise ValueError(f"Cannot correct memory with lifecycle status: {old_mem.lifecycle_status}")
+                if old_mem.confirmation_status == "rejected":
+                    raise ValueError("Cannot correct rejected memory")
+
+                new_id = str(uuid4())
+                root_id = str(old_mem.root_memory_id or old_mem.id)
+                now_iso = datetime.now(timezone.utc).isoformat()
+
+                new_type = memory_type or old_mem.memory_type
+                new_cat = category or old_mem.category
+                new_imp = importance if importance is not None else old_mem.importance
+
                 conn.execute(
                     """
                     INSERT INTO memories (
@@ -358,88 +359,106 @@ class SQLiteMemoryRepository(BaseMemoryRepository):
 
     def _sync_archive_memory(self, user_id: UUID, memory_id: UUID) -> Optional[MemoryModel]:
         with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM memories WHERE id = ? AND user_id = ?;",
-                (str(memory_id), str(user_id)),
-            ).fetchone()
-            if not row:
-                return None
+            conn.execute("BEGIN IMMEDIATE;")
+            try:
+                row = conn.execute(
+                    "SELECT * FROM memories WHERE id = ? AND user_id = ?;",
+                    (str(memory_id), str(user_id)),
+                ).fetchone()
+                if not row:
+                    conn.rollback()
+                    return None
 
-            mem = self._row_to_model(row)
-            if mem.lifecycle_status != "active":
-                raise ValueError(f"Cannot archive memory with lifecycle status: {mem.lifecycle_status}")
-            if mem.confirmation_status == "rejected":
-                raise ValueError("Cannot archive rejected memory")
+                mem = self._row_to_model(row)
+                if mem.lifecycle_status != "active":
+                    raise ValueError(f"Cannot archive memory with lifecycle status: {mem.lifecycle_status}")
+                if mem.confirmation_status == "rejected":
+                    raise ValueError("Cannot archive rejected memory")
 
-            now_iso = datetime.now(timezone.utc).isoformat()
-            conn.execute(
-                """
-                UPDATE memories
-                SET lifecycle_status = 'archived',
-                    updated_at = ?
-                WHERE id = ? AND user_id = ?;
-                """,
-                (now_iso, str(memory_id), str(user_id)),
-            )
-            conn.commit()
+                now_iso = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    """
+                    UPDATE memories
+                    SET lifecycle_status = 'archived',
+                        updated_at = ?
+                    WHERE id = ? AND user_id = ?;
+                    """,
+                    (now_iso, str(memory_id), str(user_id)),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
         return self._sync_get_memory(user_id, memory_id)
 
     def _sync_restore_memory(self, user_id: UUID, memory_id: UUID) -> Optional[MemoryModel]:
         with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM memories WHERE id = ? AND user_id = ?;",
-                (str(memory_id), str(user_id)),
-            ).fetchone()
-            if not row:
-                return None
+            conn.execute("BEGIN IMMEDIATE;")
+            try:
+                row = conn.execute(
+                    "SELECT * FROM memories WHERE id = ? AND user_id = ?;",
+                    (str(memory_id), str(user_id)),
+                ).fetchone()
+                if not row:
+                    conn.rollback()
+                    return None
 
-            mem = self._row_to_model(row)
-            if mem.lifecycle_status not in ("archived", "expired"):
-                raise ValueError(f"Cannot restore memory with lifecycle status: {mem.lifecycle_status}")
-            if mem.confirmation_status == "rejected":
-                raise ValueError("Cannot restore rejected memory")
+                mem = self._row_to_model(row)
+                if mem.lifecycle_status not in ("archived", "expired"):
+                    raise ValueError(f"Cannot restore memory with lifecycle status: {mem.lifecycle_status}")
+                if mem.confirmation_status == "rejected":
+                    raise ValueError("Cannot restore rejected memory")
 
-            now_iso = datetime.now(timezone.utc).isoformat()
-            conn.execute(
-                """
-                UPDATE memories
-                SET lifecycle_status = 'active',
-                    updated_at = ?
-                WHERE id = ? AND user_id = ?;
-                """,
-                (now_iso, str(memory_id), str(user_id)),
-            )
-            conn.commit()
+                now_iso = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    """
+                    UPDATE memories
+                    SET lifecycle_status = 'active',
+                        updated_at = ?
+                    WHERE id = ? AND user_id = ?;
+                    """,
+                    (now_iso, str(memory_id), str(user_id)),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
         return self._sync_get_memory(user_id, memory_id)
 
     def _sync_outdate_memory(self, user_id: UUID, memory_id: UUID) -> Optional[MemoryModel]:
         with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM memories WHERE id = ? AND user_id = ?;",
-                (str(memory_id), str(user_id)),
-            ).fetchone()
-            if not row:
-                return None
+            conn.execute("BEGIN IMMEDIATE;")
+            try:
+                row = conn.execute(
+                    "SELECT * FROM memories WHERE id = ? AND user_id = ?;",
+                    (str(memory_id), str(user_id)),
+                ).fetchone()
+                if not row:
+                    conn.rollback()
+                    return None
 
-            mem = self._row_to_model(row)
-            if mem.lifecycle_status != "active":
-                raise ValueError(f"Cannot outdate memory with lifecycle status: {mem.lifecycle_status}")
-            if mem.confirmation_status == "rejected":
-                raise ValueError("Cannot outdate rejected memory")
+                mem = self._row_to_model(row)
+                if mem.lifecycle_status != "active":
+                    raise ValueError(f"Cannot outdate memory with lifecycle status: {mem.lifecycle_status}")
+                if mem.confirmation_status == "rejected":
+                    raise ValueError("Cannot outdate rejected memory")
 
-            now_iso = datetime.now(timezone.utc).isoformat()
-            conn.execute(
-                """
-                UPDATE memories
-                SET lifecycle_status = 'expired',
-                    updated_at = ?
-                WHERE id = ? AND user_id = ?;
-                """,
-                (now_iso, str(memory_id), str(user_id)),
-            )
-            conn.commit()
+                now_iso = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    """
+                    UPDATE memories
+                    SET lifecycle_status = 'expired',
+                        updated_at = ?
+                    WHERE id = ? AND user_id = ?;
+                    """,
+                    (now_iso, str(memory_id), str(user_id)),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
         return self._sync_get_memory(user_id, memory_id)
 
@@ -525,3 +544,4 @@ class SQLiteMemoryRepository(BaseMemoryRepository):
 
     async def outdate_memory(self, user_id: UUID, memory_id: UUID) -> Optional[MemoryModel]:
         return await asyncio.to_thread(self._sync_outdate_memory, user_id, memory_id)
+

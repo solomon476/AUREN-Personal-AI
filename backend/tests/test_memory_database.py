@@ -1427,7 +1427,7 @@ async def test_upgrade_database_016_to_017_migration_safety(postgresql_server):
     async with isolated_postgres_db(postgresql_server, prefix="mem_upg_17", apply_all_migrations=False) as (conn, db_name):
         # Step A: Apply migrations 001 through 016 (representing existing database prior to upgrade)
         migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
-        mf_001_to_016 = [mf for mf in migration_files if "017_" not in mf]
+        mf_001_to_016 = [mf for mf in migration_files if not any(x in mf for x in ("017_", "018_"))]
         assert len(mf_001_to_016) == 16, f"Expected 16 baseline migrations, got {len(mf_001_to_016)}"
         for mf in mf_001_to_016:
             sql = Path(mf).read_text(encoding="utf-8")

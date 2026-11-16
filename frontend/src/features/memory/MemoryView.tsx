@@ -4,7 +4,7 @@
  * and managing long-term persistent memories and their epistemic status.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Brain,
   Search,
@@ -44,12 +44,21 @@ export const MemoryView: React.FC = () => {
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedConfirmation, setSelectedConfirmation] = useState<string>('');
   const [selectedLifecycle, setSelectedLifecycle] = useState<string>('active');
   const [page, setPage] = useState<number>(1);
   const pageSize = 12;
+
+  // Debounce search query to prevent flooding queries on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Selected Memory for Detail Modal
   const [activeMemory, setActiveMemory] = useState<Memory | null>(null);
@@ -71,7 +80,7 @@ export const MemoryView: React.FC = () => {
     error,
     refetch,
   } = useMemories(user?.id, {
-    query: searchQuery || undefined,
+    query: debouncedSearchQuery || undefined,
     memory_type: selectedType || undefined,
     category: selectedCategory || undefined,
     confirmation_status: selectedConfirmation || undefined,

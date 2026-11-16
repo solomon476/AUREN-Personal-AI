@@ -176,3 +176,4 @@ class MessageContextResponse(BaseModel):
     model: Optional[str] = None
     retrieved_memories: List[MemoryContextItem] = Field(default_factory=list)
     memory_count: int = 0
+

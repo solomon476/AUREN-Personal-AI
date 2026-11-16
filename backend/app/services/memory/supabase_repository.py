@@ -276,18 +276,30 @@ class SupabaseMemoryRepository(BaseMemoryRepository):
         return await self.get_memory(user_id, memory_id)
 
     async def restore_memory(self, user_id: UUID, memory_id: UUID) -> Optional[MemoryModel]:
-        # Epistemic guard: in PostgREST, direct update or status change
-        params = {"id": f"eq.{memory_id}", "user_id": f"eq.{user_id}"}
-        payload = {"lifecycle_status": "active", "updated_at": datetime.now(timezone.utc).isoformat()}
-        resp = await self._request("PATCH", "/memories", params=params, json_data=payload)
+        payload = {"p_memory_id": str(memory_id)}
+        resp = await self._request("POST", "/rpc/restore_memory_rpc", json_data=payload)
         if resp.status_code == 404:
             return None
+        if resp.status_code == 400:
+            err_detail = resp.text
+            try:
+                err_detail = resp.json().get("message", err_detail)
+            except Exception:
+                pass
+            raise ValueError(f"Invalid state transition: {err_detail}")
         return await self.get_memory(user_id, memory_id)
 
     async def outdate_memory(self, user_id: UUID, memory_id: UUID) -> Optional[MemoryModel]:
-        params = {"id": f"eq.{memory_id}", "user_id": f"eq.{user_id}"}
-        payload = {"lifecycle_status": "expired", "updated_at": datetime.now(timezone.utc).isoformat()}
-        resp = await self._request("PATCH", "/memories", params=params, json_data=payload)
+        payload = {"p_memory_id": str(memory_id)}
+        resp = await self._request("POST", "/rpc/outdate_memory_rpc", json_data=payload)
         if resp.status_code == 404:
             return None
+        if resp.status_code == 400:
+            err_detail = resp.text
+            try:
+                err_detail = resp.json().get("message", err_detail)
+            except Exception:
+                pass
+            raise ValueError(f"Invalid state transition: {err_detail}")
         return await self.get_memory(user_id, memory_id)
+

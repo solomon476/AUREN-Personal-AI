@@ -116,3 +116,4 @@ describe('Context Inspector Modal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+

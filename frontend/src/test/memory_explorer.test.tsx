@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryView } from '../features/memory/MemoryView';
 import { MemoryDetailModal } from '../components/memory/MemoryDetailModal';
@@ -188,6 +188,8 @@ describe('Memory Detail Modal & Epistemic Verification', () => {
     expect(screen.getByText(/Unconfirmed Inference/i)).toBeInTheDocument();
     expect(screen.getByText(/Not yet confirmed by you/i)).toBeInTheDocument();
     expect(screen.getByText(/chat_inferred/i)).toBeInTheDocument();
+    expect(screen.getByText('Extraction score')).toBeInTheDocument();
+    expect(screen.getByText(/Pipeline extraction score, not factual probability/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /confirm inference/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /reject inference/i })).toBeInTheDocument();
   });

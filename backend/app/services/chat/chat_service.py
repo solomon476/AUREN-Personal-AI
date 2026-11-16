@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncIterator, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, Request, status
@@ -547,6 +547,7 @@ class ChatService:
                                 "model": provider.get_model_id(),
                                 "user_message_id": str(user_message.id),
                                 "idempotency_key": request.idempotency_key,
+                                "retrieved_memories": retrieved_memories_data,
                             },
                         )
                     else:
@@ -560,6 +561,7 @@ class ChatService:
                                 "model": provider.get_model_id(),
                                 "user_message_id": str(user_message.id),
                                 "idempotency_key": request.idempotency_key,
+                                "retrieved_memories": retrieved_memories_data,
                             },
                         )
                     if request.idempotency_key:

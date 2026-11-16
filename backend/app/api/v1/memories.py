@@ -392,3 +392,4 @@ async def outdate_memory(
     except DatabaseError as exc:
         logger.error("Database error marking memory outdated %s: %s", memory_id, exc)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to mark memory outdated.")
+

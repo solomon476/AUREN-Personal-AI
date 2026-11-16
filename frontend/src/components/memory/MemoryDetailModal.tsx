@@ -336,9 +336,14 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             </div>
           </div>
           <div className="p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
-            <span className="text-slate-500 block mb-0.5">Confidence</span>
+            <span className="text-slate-500 block mb-0.5" title="Model processing score; does not denote factual truth probability">
+              Extraction score
+            </span>
             <span className="font-semibold text-slate-200">
               {memory.confidence != null ? `${Math.round(memory.confidence * 100)}%` : 'Explicit'}
+            </span>
+            <span className="text-[10px] text-slate-500 block mt-0.5 leading-tight">
+              Pipeline extraction score, not factual probability
             </span>
           </div>
         </div>

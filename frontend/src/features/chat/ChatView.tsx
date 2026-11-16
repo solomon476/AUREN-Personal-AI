@@ -95,11 +95,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   useEffect(() => {
     if (fetchedMessages) {
       setMessages(fetchedMessages);
-      setErrorMessage(null);
     } else if (!activeConversationId) {
       setMessages([]);
     }
   }, [fetchedMessages, activeConversationId]);
+
+  // Clear transient error message when switching conversations
+  useEffect(() => {
+    setErrorMessage(null);
+  }, [activeConversationId]);
 
   // Handle invalid conversation ID or fetch failure safely
   useEffect(() => {
