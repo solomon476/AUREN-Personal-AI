@@ -3,7 +3,9 @@
 from datetime import datetime, timedelta, timezone
 import json
 import math
+import shutil
 import struct
+import subprocess
 from uuid import UUID, uuid4
 import pytest
 
@@ -12,6 +14,7 @@ from app.services.journal.rfc8785 import (
     canonicalize_to_str,
     escape_string,
     float_to_ecma,
+    int_to_ecma,
 )
 from app.services.journal.consent import (
     ALLOWED_JOURNAL_SCOPES,
@@ -415,3 +418,125 @@ def test_tampered_payload_rejected(valid_hmac_secret):
             expected_date_range="2026-11-01..2026-11-15",
             now=now,
         )
+
+
+def test_rfc8785_integer_serialization_safe_and_boundary_integers():
+    """Validates that safe integers and boundaries (-2**53 through 2**53) serialize exactly."""
+    cases = [
+        (0, "0"),
+        (42, "42"),
+        (-42, "-42"),
+        (1000000, "1000000"),
+        (9007199254740991, "9007199254740991"),      # 2**53 - 1 (MAX_SAFE_INTEGER)
+        (-9007199254740991, "-9007199254740991"),    # -(2**53 - 1) (MIN_SAFE_INTEGER)
+        (9007199254740992, "9007199254740992"),      # 2**53 (exact double)
+        (-9007199254740992, "-9007199254740992"),    # -2**53 (exact double)
+    ]
+    node_bin = shutil.which("node")
+    for val, expected in cases:
+        actual = canonicalize_to_str(val)
+        assert actual == expected, f"Mismatch for {val}: got {actual!r}, expected {expected!r}"
+        assert int_to_ecma(val) == expected
+
+        # Compare directly against native ECMAScript JSON.stringify if node is available
+        if node_bin:
+            res = subprocess.run([node_bin, "-e", f"console.log(JSON.stringify({val}))"], capture_output=True, text=True)
+            assert res.stdout.strip() == expected
+
+
+def test_rfc8785_integer_serialization_unrepresentable_integers_rejected():
+    """Validates that integers outside the safe range that cannot be represented exactly in binary64 are rejected."""
+    unrepresentable_cases = [
+        2**53 + 1,        # 9007199254740993 (rounds to 9007199254740992 in IEEE 754)
+        -(2**53 + 1),     # -9007199254740993
+        2**53 + 3,
+        -(2**53 + 3),
+        2**54 + 1,
+        -(2**54 + 1),
+    ]
+    for val in unrepresentable_cases:
+        with pytest.raises(ValueError, match="cannot be represented exactly as an IEEE-754 binary64 float"):
+            canonicalize(val)
+        with pytest.raises(ValueError, match="cannot be represented exactly as an IEEE-754 binary64 float"):
+            int_to_ecma(val)
+
+
+def test_rfc8785_integer_serialization_exact_integers_outside_safe_range():
+    """Validates that exactly representable binary64 integers outside the safe-integer range serialize correctly.
+
+    In particular:
+    - 10**21 formats as '1e+21' (scientific notation required for n > 21)
+    - 2**68 formats as '295147905179352830000' (RFC 8785 Appendix B Table 1 entry 9)
+    """
+    cases = [
+        (10**21, "1e+21"),
+        (-(10**21), "-1e+21"),
+        (2**68, "295147905179352830000"),
+        (-(2**68), "-295147905179352830000"),
+    ]
+    node_bin = shutil.which("node")
+    for val, expected in cases:
+        actual = canonicalize_to_str(val)
+        assert actual == expected, f"Mismatch for {val}: got {actual!r}, expected {expected!r}"
+        assert int_to_ecma(val) == expected
+
+        if node_bin:
+            res = subprocess.run([node_bin, "-e", f"console.log(JSON.stringify({val}))"], capture_output=True, text=True)
+            assert res.stdout.strip() == expected
+
+
+def test_rfc8785_integer_serialization_overflow_rejected():
+    """Validates that integers exceeding the maximum finite range of IEEE-754 binary64 are rejected."""
+    huge_integers = [
+        10**309,
+        -(10**309),
+        2**1024,
+        -(2**1024),
+    ]
+    for val in huge_integers:
+        with pytest.raises(ValueError, match="not representable in IEEE-754 double precision"):
+            canonicalize(val)
+        with pytest.raises(ValueError, match="not representable in IEEE-754 double precision"):
+            int_to_ecma(val)
+
+
+def test_rfc8785_integer_nested_in_arrays_and_objects():
+    """Validates integer serialization within arrays and complex nested objects, including error propagation."""
+    obj = {
+        "count": 42,
+        "boundary": 2**53,
+        "exp": 10**21,
+        "power": 2**68,
+        "neg_power": -(2**68),
+        "items": [1, 2, 3],
+    }
+    expected = (
+        '{"boundary":9007199254740992,"count":42,"exp":1e+21,"items":[1,2,3],'
+        '"neg_power":-295147905179352830000,"power":295147905179352830000}'
+    )
+    assert canonicalize_to_str(obj) == expected
+
+    arr = [42, 2**53, 10**21, 2**68]
+    assert canonicalize_to_str(arr) == "[42,9007199254740992,1e+21,295147905179352830000]"
+
+    # Unrepresentable integers inside nested structures must raise ValueError
+    with pytest.raises(ValueError, match="cannot be represented exactly"):
+        canonicalize([1, 2**53 + 1, 3])
+
+    with pytest.raises(ValueError, match="cannot be represented exactly"):
+        canonicalize({"outer": {"inner": 2**53 + 1}})
+
+
+def test_rfc8785_booleans_not_mistaken_for_integers():
+    """Verifies that booleans (subclass of int in Python) are serialized strictly as true/false, never 1/0."""
+    obj = {
+        "b_true": True,
+        "b_false": False,
+        "i_one": 1,
+        "i_zero": 0,
+    }
+    expected = '{"b_false":false,"b_true":true,"i_one":1,"i_zero":0}'
+    assert canonicalize_to_str(obj) == expected
+
+    arr = [True, False, 1, 0]
+    assert canonicalize_to_str(arr) == "[true,false,1,0]"

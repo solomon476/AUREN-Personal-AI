@@ -19,6 +19,32 @@ import math
 from typing import Any
 
 
+def int_to_ecma(val: int) -> str:
+    """Converts a Python integer to an ECMAScript-compatible string under RFC 8785.
+
+    Under RFC 8785 Section 3.2.2.3, JSON numbers are IEEE-754 double precision (binary64).
+    An integer is accepted only if it can be represented as a finite, exact binary64 float.
+    Integers that cannot be represented exactly in binary64 without precision loss,
+    or that overflow binary64, are rejected with a ValueError.
+    """
+    try:
+        fval = float(val)
+    except OverflowError:
+        raise ValueError(
+            f"Integer with {val.bit_length()} bits is not representable in IEEE-754 double "
+            "precision (RFC 8785 Section 3.2.2.3). Use a JSON string to represent arbitrary precision integers."
+        ) from None
+
+    if not math.isfinite(fval) or int(fval) != val:
+        raise ValueError(
+            f"Integer {val} cannot be represented exactly as an IEEE-754 binary64 float "
+            "without loss of precision (RFC 8785 Section 3.2.2.3). "
+            "Under RFC 8785 (Appendix D), large integers must be represented as JSON strings."
+        )
+
+    return float_to_ecma(fval)
+
+
 def float_to_ecma(val: float) -> str:
     """Serializes an IEEE 754 double precision float to ECMAScript string format (ECMA-262 7.1.12.1).
 
@@ -124,7 +150,7 @@ def canonicalize(val: Any) -> bytes:
     if isinstance(val, bool):
         return b"true" if val else b"false"
     if isinstance(val, int):
-        return str(val).encode("utf-8")
+        return int_to_ecma(val).encode("utf-8")
     if isinstance(val, float):
         return float_to_ecma(val).encode("utf-8")
     if isinstance(val, str):
