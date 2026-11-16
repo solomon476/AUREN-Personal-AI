@@ -906,7 +906,7 @@ BEGIN
         s.importance,
         s.confidence,
         s.confirmation_status,
-        (0.35::real * s.s_sem + 0.30::real * s.s_lex + s.s_imp + s.s_decay + s.s_conf)::real AS score
+        (0.40::real * s.s_sem + 0.25::real * s.s_lex + s.s_imp + s.s_decay + s.s_conf)::real AS score
     FROM scored s
     WHERE (v_has_embedding IS FALSE OR s.s_sem >= p_min_similarity)
     ORDER BY score DESC

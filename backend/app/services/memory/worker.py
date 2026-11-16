@@ -237,3 +237,4 @@ class MemoryExtractionWorker:
                 await self.process_job(conn, job)
 
             return len(jobs)
+

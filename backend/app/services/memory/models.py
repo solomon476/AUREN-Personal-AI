@@ -27,3 +27,4 @@ class ExtractedMemoryItem(BaseModel):
     importance: int = Field(default=3, ge=1, le=5)
     confidence: float = Field(default=0.7, ge=0.0, le=1.0)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+

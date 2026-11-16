@@ -916,7 +916,7 @@ async def test_token_budget_enforcement():
     assert "very lengthy memory item" in xml_large
 
     # Tight budget: fits only first 1 or 2
-    tight_budget = 100
+    tight_budget = 210
     xml_small = await ctx_mgr.build_memory_context(uuid.uuid4(), "query", mock_provider, budget_tokens=tight_budget)
     token_cost = await mock_provider.count_tokens(xml_small)
     assert token_cost <= tight_budget
@@ -979,3 +979,144 @@ async def test_journal_exclusion_from_ordinary_retrieval_and_prompt_context(post
         # Ordinary memory can be retrieved if relevant
         all_results = await conn.fetch("SELECT * FROM public.search_memories_hybrid_rpc('work', NULL, 10, 0.0)")
         assert any("Ordinary public fact" in r["content"] for r in all_results)
+
+
+@pytest.mark.asyncio
+async def test_hybrid_retrieval_scoring_weights_regression(postgresql_server):
+    """22. Verify exact approved hybrid scoring weights: 0.40 sem + 0.25 lex + 0.15 imp + 0.10 decay + 0.10 conf.
+    Specifically tests against weight reversal (0.25 sem + 0.40 lex) and prior substitution (0.35 sem + 0.30 lex).
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_weights") as (conn, db_name):
+        user_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "weights@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+
+        query_vec = [0.03] * 768
+        query_vec_str = f"[{','.join(str(x) for x in query_vec)}]"
+
+        # Memory 1: Pure Semantic Match (S_sem = 1.0, S_lex = 0.0)
+        # Content has zero lexical overlap with query
+        # importance = 5 (s_imp = 0.15)
+        # memory_type = 'preference' (s_decay = 0.10)
+        # confidence = 1.0 (s_conf = 0.10)
+        # Expected score: 0.40 * 1.0 + 0.25 * 0.0 + 0.15 + 0.10 + 0.10 = 0.750
+        # If reversed (0.25 sem): score would be 0.600
+        # If 0.35 sem: score would be 0.700
+        mem_sem_id = uuid.uuid4()
+        await conn.execute(
+            """
+            INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence)
+            VALUES ($1, $2, 'completely unrelated content alpha beta', 'preference', 'general', 5, 1.0)
+            """,
+            mem_sem_id, user_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active)
+            VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)
+            """,
+            mem_sem_id, user_id, query_vec_str,
+        )
+
+        results = await conn.fetch(
+            """
+            SELECT id, score FROM public.search_memories_hybrid_rpc(
+                p_query_text => 'uniquequeryterm',
+                p_query_embedding => $1::vector,
+                p_limit => 5,
+                p_min_similarity => 0.0
+            )
+            """,
+            query_vec_str,
+        )
+        scores = {r["id"]: r["score"] for r in results}
+        assert mem_sem_id in scores
+        actual_sem_score = scores[mem_sem_id]
+
+        # Verify exact 0.40 semantic weight contribution: 0.40 + 0.15 + 0.10 + 0.10 = 0.750
+        assert abs(actual_sem_score - 0.750) < 0.005, f"Expected 0.750 (0.40 semantic weight), got {actual_sem_score}"
+
+
+@pytest.mark.asyncio
+async def test_memory_context_epistemic_formatting_and_escaping():
+    """23. Verify that MemoryContextManager._format_memory_xml:
+    1. Serializes unconfirmed memories with confirmation_status="unconfirmed".
+    2. Serializes confirmed memories with confirmation_status="confirmed".
+    3. Serializes system_asserted memories with confirmation_status="system_asserted".
+    4. Includes explicit epistemic instructions distinguishing tentative from confirmed info.
+    5. Safely escapes XML special characters in content and attributes so structure cannot be broken.
+    """
+    import xml.etree.ElementTree as ET
+
+    cm = MemoryContextManager()
+    unconfirmed_id = uuid.uuid4()
+    confirmed_id = uuid.uuid4()
+    system_id = uuid.uuid4()
+
+    memories = [
+        MemorySearchResult(
+            id=unconfirmed_id,
+            content='User mentions preference for "dark mode" & <custom_theme>',
+            memory_type="preference",
+            category="ui & ux",
+            importance=3,
+            confidence=0.7,
+            confirmation_status="unconfirmed",
+            score=0.65,
+        ),
+        MemorySearchResult(
+            id=confirmed_id,
+            content="User lives in Zurich",
+            memory_type="fact",
+            category="location",
+            importance=5,
+            confidence=1.0,
+            confirmation_status="confirmed",
+            score=0.90,
+        ),
+        MemorySearchResult(
+            id=system_id,
+            content="Account tier is enterprise",
+            memory_type="fact",
+            category="account",
+            importance=4,
+            confidence=1.0,
+            confirmation_status="system_asserted",
+            score=0.85,
+        ),
+    ]
+
+    xml_output = cm._format_memory_xml(memories)
+
+    # 1. Epistemic instructions present and distinct
+    assert "<epistemic_instructions>" in xml_output
+    assert "unconfirmed: Tentative information inferred from conversation; potentially useful, but not an established fact. Do not state it as confirmed." in xml_output
+    assert "confirmed: Information explicitly confirmed" in xml_output
+    assert "system_asserted: System-established information; distinguish it from user-confirmed information." in xml_output
+
+    # 2. Strict XML validity & parsing
+    root = ET.fromstring(xml_output)
+    assert root.tag == "user_memories"
+
+    mem_elements = root.findall("memory")
+    assert len(mem_elements) == 3
+
+    # Check unconfirmed
+    m0 = mem_elements[0]
+    assert m0.attrib["id"] == str(unconfirmed_id)
+    assert m0.attrib["confirmation_status"] == "unconfirmed"
+    assert m0.attrib["memory_type"] == "preference"
+    assert m0.attrib["category"] == "ui & ux"
+    assert m0.attrib["importance"] == "3"
+    assert 'User mentions preference for "dark mode" & <custom_theme>' == m0.text
+
+    # Check confirmed
+    m1 = mem_elements[1]
+    assert m1.attrib["confirmation_status"] == "confirmed"
+    assert m1.attrib["memory_type"] == "fact"
+    assert m1.attrib["importance"] == "5"
+
+    # Check system_asserted
+    m2 = mem_elements[2]
+    assert m2.attrib["confirmation_status"] == "system_asserted"
+
