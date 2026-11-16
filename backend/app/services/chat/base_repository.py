@@ -177,6 +177,9 @@ class BaseChatRepository(ABC):
         limit: int = 5,
         min_similarity: float = 0.0,
         model: Optional[str] = None,
+        provider: Optional[str] = None,
+        version: Optional[str] = None,
+        dimension: Optional[int] = None,
     ) -> List[Any]:
         """Execute hybrid search for active user memories."""
         pass

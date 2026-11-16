@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import signal
+import time
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -96,11 +97,9 @@ class WorkerRunner:
             self.llm_provider = get_llm_provider(self.settings)
 
         if self.embedding_provider is None:
-            try:
-                self.embedding_provider = get_embedding_provider(self.settings)
-            except Exception as emb_err:
-                logger.warning("Could not initialize embedding provider for worker: %s", emb_err)
-                self.embedding_provider = None
+            # get_embedding_provider returns None for explicitly configured lexical-only mode.
+            # Any unexpected initialization failure will raise EmbeddingException (fail-fast).
+            self.embedding_provider = get_embedding_provider(self.settings)
 
         self._worker = MemoryExtractionWorker(
             worker_id=self.worker_id,
@@ -125,50 +124,124 @@ class WorkerRunner:
         logger.info("Stop requested for worker %s", self.worker_id)
         self._stop_event.set()
 
+    async def _process_job_safe(self, job_data: Dict[str, Any], claim_time: float):
+        """Processes a single job considering remaining lease duration and handling cancellation."""
+        job_id = job_data["id"]
+        claim_token = job_data["claim_token"]
+
+        # Check lease validity before starting execution
+        elapsed = time.monotonic() - claim_time
+        remaining_lease = self.lease_seconds - elapsed
+        if remaining_lease <= 0:
+            logger.warning(
+                "Job %s lease expired before execution began (elapsed %.1fs >= %ds)",
+                job_id,
+                elapsed,
+                self.lease_seconds,
+            )
+            try:
+                async with self.db_pool.acquire() as proc_conn:
+                    await self._worker.fail_job(
+                        proc_conn,
+                        job_id,
+                        claim_token,
+                        TimeoutError(f"Lease expired before execution: elapsed {elapsed:.1f}s >= {self.lease_seconds}s"),
+                        retry=True,
+                    )
+            except Exception as fail_err:
+                logger.error("Failed to mark expired lease for job %s: %s", job_id, fail_err)
+            self.metrics["jobs_failed"] += 1
+            return
+
+        try:
+            async with self.db_pool.acquire() as proc_conn:
+                success = await self._worker.process_job(proc_conn, job_data)
+                if success:
+                    self.metrics["jobs_succeeded"] += 1
+                else:
+                    self.metrics["jobs_failed"] += 1
+        except asyncio.CancelledError:
+            logger.warning("Task for job %s cancelled during shutdown; releasing job with retry", job_id)
+            try:
+                async with self.db_pool.acquire() as cancel_conn:
+                    await self._worker.fail_job(
+                        cancel_conn,
+                        job_id,
+                        claim_token,
+                        RuntimeError("Worker shut down while job was in-flight"),
+                        retry=True,
+                    )
+            except Exception as cancel_err:
+                logger.error("Failed to release cancelled job %s: %s", job_id, cancel_err)
+            raise
+        except Exception as proc_err:
+            logger.error("Unexpected error in _process_job_safe for job %s: %s", job_id, proc_err)
+            self.metrics["jobs_failed"] += 1
+
     async def run(self):
-        """Main operational execution loop with polling and bounded concurrency."""
+        """Main operational execution loop with bounded scheduling and graceful shutdown."""
         if self._worker is None:
             await self.initialize()
 
         self._is_running = True
-        semaphore = asyncio.Semaphore(self.concurrency)
         logger.info("Worker %s entering polling execution loop", self.worker_id)
 
         try:
             while not self._stop_event.is_set():
                 self.metrics["poll_cycles"] += 1
                 try:
+                    # Clean up completed tasks from active set
+                    self._active_tasks = {t for t in self._active_tasks if not t.done()}
+
+                    # Determine available processing capacity
+                    available_capacity = max(0, self.concurrency - len(self._active_tasks))
+
+                    # If no capacity available, wait for an in-flight task to complete before claiming more
+                    if available_capacity == 0:
+                        if self._active_tasks:
+                            done, _ = await asyncio.wait(
+                                self._active_tasks,
+                                return_when=asyncio.FIRST_COMPLETED,
+                                timeout=self.poll_interval,
+                            )
+                        continue
+
+                    # Bounded claim: only claim work within available capacity
+                    claim_limit = min(self.batch_size, available_capacity)
                     jobs: List[Dict[str, Any]] = []
                     async with self.db_pool.acquire() as claim_conn:
-                        jobs = await self._worker.claim_jobs(claim_conn)
+                        jobs = await self._worker.claim_jobs(claim_conn, limit=claim_limit)
 
                     if jobs:
                         self.metrics["jobs_claimed"] += len(jobs)
-                        logger.info("Worker %s claimed %d extraction jobs", self.worker_id, len(jobs))
+                        claim_time = time.monotonic()
+                        logger.info(
+                            "Worker %s claimed %d extraction jobs (in-flight: %d/%d)",
+                            self.worker_id,
+                            len(jobs),
+                            len(self._active_tasks) + len(jobs),
+                            self.concurrency,
+                        )
 
-                        async def _process_single(job_data: Dict[str, Any]):
-                            async with semaphore:
-                                if self._stop_event.is_set():
-                                    return
-                                async with self.db_pool.acquire() as proc_conn:
-                                    success = await self._worker.process_job(proc_conn, job_data)
-                                    if success:
-                                        self.metrics["jobs_succeeded"] += 1
-                                    else:
-                                        self.metrics["jobs_failed"] += 1
-
-                        tasks = [asyncio.create_task(_process_single(j)) for j in jobs]
-                        for t in tasks:
-                            self._active_tasks.add(t)
-                            t.add_done_callback(self._active_tasks.discard)
-
-                        await asyncio.gather(*tasks, return_exceptions=True)
+                        for job_data in jobs:
+                            task = asyncio.create_task(
+                                self._process_job_safe(job_data, claim_time)
+                            )
+                            self._active_tasks.add(task)
+                            task.add_done_callback(self._active_tasks.discard)
                     else:
-                        # Sleep with responsive stop check
-                        try:
-                            await asyncio.wait_for(self._stop_event.wait(), timeout=self.poll_interval)
-                        except asyncio.TimeoutError:
-                            pass
+                        # Sleep with responsive stop check, also waking on in-flight task completion
+                        if self._active_tasks:
+                            done, _ = await asyncio.wait(
+                                self._active_tasks,
+                                return_when=asyncio.FIRST_COMPLETED,
+                                timeout=self.poll_interval,
+                            )
+                        else:
+                            try:
+                                await asyncio.wait_for(self._stop_event.wait(), timeout=self.poll_interval)
+                            except asyncio.TimeoutError:
+                                pass
 
                 except Exception as loop_err:
                     logger.warning("Error in worker polling cycle: %s", loop_err)
@@ -181,7 +254,13 @@ class WorkerRunner:
             self._is_running = False
             logger.info("Worker %s shutting down. Awaiting %d active tasks...", self.worker_id, len(self._active_tasks))
             if self._active_tasks:
-                await asyncio.wait(self._active_tasks, timeout=15.0)
+                grace_timeout = min(30.0, float(self.lease_seconds))
+                done, pending = await asyncio.wait(self._active_tasks, timeout=grace_timeout)
+                if pending:
+                    logger.warning("Cancelling %d remaining tasks after grace timeout...", len(pending))
+                    for t in pending:
+                        t.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
 
             if self._owns_db_pool and self.db_pool is not None:
                 await self.db_pool.close()

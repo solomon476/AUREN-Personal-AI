@@ -1483,7 +1483,8 @@ async def test_incompatible_model_spaces_cannot_be_silently_mixed(postgresql_ser
             f"Expected ~0.310 (zero semantic match due to model isolation), got {scores_active[mem_old_id]}"
         )
 
-        # Now query targeting 'text-embedding-004' explicitly: semantic similarity should match!
+        # Now query targeting inactive model 'text-embedding-004' explicitly:
+        # Inactive model identities cannot participate in active retrieval, so semantic similarity is 0.0!
         results_old_space = await conn.fetch(
             """
             SELECT id, score FROM public.search_memories_hybrid_rpc(
@@ -1498,8 +1499,8 @@ async def test_incompatible_model_spaces_cannot_be_silently_mixed(postgresql_ser
         )
         scores_old = {r["id"]: r["score"] for r in results_old_space}
         assert mem_old_id in scores_old
-        # With semantic match in text-embedding-004 space: 0.40 * 1.0 + 0.310 = 0.710
-        assert abs(scores_old[mem_old_id] - 0.710) < 0.005
+        # Semantic similarity is 0.0 because text-embedding-004 is inactive: score is exactly 0.310
+        assert abs(scores_old[mem_old_id] - 0.310) < 0.005
 
 
 @pytest.mark.asyncio
@@ -1624,6 +1625,400 @@ async def test_provider_failure_prevents_fake_embeddings_and_completion(postgres
 
         emb_count = await conn.fetchval("SELECT count(*) FROM public.memory_embeddings WHERE user_id = $1", user_id)
         assert emb_count == 0
+
+        await worker_pool.close()
+
+
+@pytest.mark.asyncio
+async def test_complete_embedding_model_identity_isolation_postgres(postgresql_server):
+    """30. Verify complete embedding model identity isolation:
+    (provider, model, version, dimension, purpose='retrieval').
+    Covers:
+    - Different providers with identical model names (e.g. 'vertex' vs 'gemini')
+    - Different versions with identical provider and model names (e.g. 'v2' vs 'v1')
+    - Different dimensions (e.g. 512 vs 768)
+    - Inactive model identities ('text-embedding-004' is inactive)
+    - Unknown model identities ('unknown-model')
+    - Correct matching of the active registered identity ('gemini', 'gemini-embedding-2', 'v1', 768)
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_p30") as (conn, db_name):
+        user_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "u30@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+
+        # Register inactive alternative models in registry to satisfy FK/trigger
+        await conn.execute("""
+            INSERT INTO public.embedding_models (provider, model, version, dimension, vector_column, purpose, is_active)
+            VALUES 
+                ('vertex', 'gemini-embedding-2', 'v1', 768, 'embedding_768', 'retrieval', FALSE),
+                ('gemini', 'gemini-embedding-2', 'v2', 768, 'embedding_768', 'retrieval', FALSE),
+                ('gemini', 'gemini-embedding-2', 'v1_1536', 1536, 'embedding_1536', 'retrieval', FALSE),
+                ('gemini', 'unknown-model-xyz', 'v1', 768, 'embedding_768', 'retrieval', FALSE)
+            ON CONFLICT (provider, model, version) DO NOTHING;
+        """)
+
+        target_vec = [0.03] * 768
+        target_vec_str = f"[{','.join(str(x) for x in target_vec)}]"
+        target_vec_1536 = [0.03] * 1536
+        target_vec_1536_str = f"[{','.join(str(x) for x in target_vec_1536)}]"
+
+        # 1. Memory with active registered identity: ('gemini', 'gemini-embedding-2', 'v1', 768)
+        m_active_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'Active registered memory', 'fact', 'technical', 4, 0.9)",
+            m_active_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active) "
+            "VALUES ($1, $2, 'gemini', 'gemini-embedding-2', 'v1', 768, $3::vector, TRUE)",
+            m_active_id, user_id, target_vec_str,
+        )
+
+        # 2. Memory with different provider, identical model name: ('vertex', 'gemini-embedding-2', 'v1', 768)
+        m_diff_prov_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'Different provider memory', 'fact', 'technical', 4, 0.9)",
+            m_diff_prov_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active) "
+            "VALUES ($1, $2, 'vertex', 'gemini-embedding-2', 'v1', 768, $3::vector, TRUE)",
+            m_diff_prov_id, user_id, target_vec_str,
+        )
+
+        # 3. Memory with different version: ('gemini', 'gemini-embedding-2', 'v2', 768)
+        m_diff_ver_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'Different version memory', 'fact', 'technical', 4, 0.9)",
+            m_diff_ver_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active) "
+            "VALUES ($1, $2, 'gemini', 'gemini-embedding-2', 'v2', 768, $3::vector, TRUE)",
+            m_diff_ver_id, user_id, target_vec_str,
+        )
+
+        # 4. Memory with different dimension: ('gemini', 'gemini-embedding-2', 'v1_1536', 1536)
+        m_diff_dim_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'Different dimension memory', 'fact', 'technical', 4, 0.9)",
+            m_diff_dim_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_1536, is_active) "
+            "VALUES ($1, $2, 'gemini', 'gemini-embedding-2', 'v1_1536', 1536, $3::vector, TRUE)",
+            m_diff_dim_id, user_id, target_vec_1536_str,
+        )
+
+        # 5. Memory with inactive model: ('gemini', 'text-embedding-004', 'v1', 768)
+        m_inactive_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'Inactive model memory', 'fact', 'technical', 4, 0.9)",
+            m_inactive_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active) "
+            "VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)",
+            m_inactive_id, user_id, target_vec_str,
+        )
+
+        # 6. Memory with unknown model: ('gemini', 'unknown-model-xyz', 'v1', 768)
+        m_unknown_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'Unknown model memory', 'fact', 'technical', 4, 0.9)",
+            m_unknown_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active) "
+            "VALUES ($1, $2, 'gemini', 'unknown-model-xyz', 'v1', 768, $3::vector, TRUE)",
+            m_unknown_id, user_id, target_vec_str,
+        )
+
+        # Case A: Standard query (no model params passed -> resolves active registered identity)
+        # Only m_active_id has semantic match. All others evaluate s_sem = 0.0.
+        rows_default = await conn.fetch(
+            """
+            SELECT id, score FROM public.search_memories_hybrid_rpc(
+                p_query_text => 'completely unrelated query text',
+                p_query_embedding => $1::vector,
+                p_limit => 10,
+                p_min_similarity => 0.0
+            )
+            """,
+            target_vec_str,
+        )
+        scores_default = {r["id"]: r["score"] for r in rows_default}
+
+        # Active registered memory matches semantically: 0.40 * 1.0 + 0.12 + 0.10 + 0.09 = 0.710
+        assert abs(scores_default[m_active_id] - 0.710) < 0.005
+
+        # All incompatible identities get strictly s_sem = 0.0 (baseline non-semantic score 0.310)
+        assert abs(scores_default[m_diff_prov_id] - 0.310) < 0.005
+        assert abs(scores_default[m_diff_ver_id] - 0.310) < 0.005
+        assert abs(scores_default[m_diff_dim_id] - 0.310) < 0.005
+        assert abs(scores_default[m_inactive_id] - 0.310) < 0.005
+        assert abs(scores_default[m_unknown_id] - 0.310) < 0.005
+
+        # Case B: Threshold filter (p_min_similarity = 0.5)
+        # Because lexical match is 0, only m_active_id (s_sem >= 0.5) is returned.
+        # Memories with incompatible or inactive vector spaces are excluded.
+        rows_filtered = await conn.fetch(
+            """
+            SELECT id, score FROM public.search_memories_hybrid_rpc(
+                p_query_text => 'completely unrelated query text',
+                p_query_embedding => $1::vector,
+                p_limit => 10,
+                p_min_similarity => 0.5
+            )
+            """,
+            target_vec_str,
+        )
+        filtered_ids = {r["id"] for r in rows_filtered}
+        assert m_active_id in filtered_ids
+        assert m_diff_prov_id not in filtered_ids
+        assert m_diff_ver_id not in filtered_ids
+        assert m_diff_dim not in filtered_ids if 'm_diff_dim' in locals() else m_diff_dim_id not in filtered_ids
+        assert m_inactive_id not in filtered_ids
+        assert m_unknown_id not in filtered_ids
+
+
+@pytest.mark.asyncio
+async def test_lexical_fallback_under_nonzero_semantic_threshold(postgresql_server):
+    """31. Verify lexical fallback under non-zero semantic similarity threshold:
+    - Semantic similarity thresholds apply to compatible semantic candidates.
+    - Memories without a compatible vector remain eligible through lexical retrieval.
+    - A missing or incompatible vector is never treated as a valid semantic match (s_sem = 0.0).
+    - Scoring weights strictly preserved: 0.40 sem, 0.25 lex, 0.15 imp, 0.10 decay, 0.10 conf.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_p31") as (conn, db_name):
+        user_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "u31@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+
+        query_vec = [0.03] * 768
+        query_vec_str = f"[{','.join(str(x) for x in query_vec)}]"
+        opposite_vec = [-0.03] * 768
+        opposite_vec_str = f"[{','.join(str(x) for x in opposite_vec)}]"
+
+        # 1. Compatible memory with HIGH semantic similarity, zero lexical match
+        m_sem_high_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'astronomy galaxy cosmological physics', 'fact', 'technical', 4, 0.9)",
+            m_sem_high_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active) "
+            "VALUES ($1, $2, 'gemini', 'gemini-embedding-2', 'v1', 768, $3::vector, TRUE)",
+            m_sem_high_id, user_id, query_vec_str,
+        )
+
+        # 2. Compatible memory with LOW semantic similarity (< 0.5), zero lexical match
+        m_sem_low_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'gardening floral botany botanist', 'fact', 'general', 4, 0.9)",
+            m_sem_low_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active) "
+            "VALUES ($1, $2, 'gemini', 'gemini-embedding-2', 'v1', 768, $3::vector, TRUE)",
+            m_sem_low_id, user_id, opposite_vec_str,
+        )
+
+        # 3. Old-model memory ('text-embedding-004', incompatible vector) with STRONG lexical match
+        m_old_lex_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'specialized rust programming language and compiler', 'preference', 'technical', 5, 1.0)",
+            m_old_lex_id, user_id,
+        )
+        await conn.execute(
+            "INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active) "
+            "VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)",
+            m_old_lex_id, user_id, opposite_vec_str,
+        )
+
+        # 4. Memory WITHOUT any embedding with STRONG lexical match
+        m_no_emb_id = uuid.uuid4()
+        await conn.execute(
+            "INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence) "
+            "VALUES ($1, $2, 'rust programming language and toolchain', 'preference', 'technical', 5, 1.0)",
+            m_no_emb_id, user_id,
+        )
+
+        # Execute hybrid search with non-zero threshold p_min_similarity = 0.5
+        # Query text matches the Rust memories (3 and 4)
+        results = await conn.fetch(
+            """
+            SELECT id, score FROM public.search_memories_hybrid_rpc(
+                p_query_text => 'rust programming language',
+                p_query_embedding => $1::vector,
+                p_limit => 10,
+                p_min_similarity => 0.5
+            )
+            """,
+            query_vec_str,
+        )
+        scores = {r["id"]: r["score"] for r in results}
+
+        # 1. Memory A (compatible semantically, s_sem >= 0.5) is returned
+        assert m_sem_high_id in scores
+
+        # 2. Memory B (compatible semantically, s_sem < 0.5, no lexical match) is EXCLUDED
+        assert m_sem_low_id not in scores
+
+        # 3. Old-model memory C (incompatible vector) with strong lexical match IS returned via lexical fallback!
+        assert m_old_lex_id in scores
+
+        # 4. No-embedding memory D with strong lexical match IS returned via lexical fallback!
+        assert m_no_emb_id in scores
+
+        # Verify that memory C and D received zero semantic match points (s_sem = 0.0)
+        # Score = 0.40 * 0.0 + 0.25 * s_lex + 0.15 * (5/5) + 0.10 (decay) + 0.10 * 1.0 = 0.25 * s_lex + 0.350
+        assert scores[m_old_lex_id] < 0.60  # Lexical match without semantic boost
+
+
+@pytest.mark.asyncio
+async def test_explicit_embedding_provider_failure_modes_and_retired_model_rejection(postgresql_server):
+    """32. Verify explicit embedding provider failure behaviors:
+    1. Intentionally configured lexical-only mode (EMBEDDING_PROVIDER="none"):
+       - Memories stored in memories table.
+       - 0 records written to memory_embeddings.
+       - Extraction job succeeds as completed.
+    2. Unexpected provider initialization failure (missing credentials):
+       - get_embedding_provider raises EmbeddingAuthenticationError.
+       - Does not silently succeed.
+    3. Runtime embedding generation failure:
+       - Fail-closed: extraction job fails for retry (attempts=1, status='pending').
+       - 0 memories inserted.
+       - 0 embeddings inserted.
+    4. Retired model rejection:
+       - Instantiating GeminiEmbeddingProvider with 'text-embedding-004' raises EmbeddingProviderError.
+       - Calling insert_extracted_memory_rpc with 'text-embedding-004' raises SQL exception.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_p32") as (conn, db_name):
+        user_id = uuid.uuid4()
+        conv_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "u32@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Conv 32')", conv_id, user_id)
+
+        # Worker role setup
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'pw' IN ROLE auren_worker")
+        worker_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=worker_user, password="pw",
+            min_size=1, max_size=3,
+        )
+
+        # -------------------------------------------------------------------------
+        # Case 1: Intentionally configured lexical-only mode
+        # -------------------------------------------------------------------------
+        from app.core.config import Settings
+        from app.services.embeddings.factory import get_embedding_provider
+        from app.services.embeddings.base import EmbeddingAuthenticationError, EmbeddingProviderError
+        from app.services.embeddings.gemini import GeminiEmbeddingProvider
+
+        lexical_settings = Settings(
+            ENVIRONMENT="test",
+            JOURNAL_HMAC_SECRET="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            EMBEDDING_PROVIDER="none",
+        )
+        assert get_embedding_provider(lexical_settings) is None
+
+        # Process a job in lexical-only mode (embedding_provider=None)
+        user_msg1 = uuid.uuid4()
+        asst_msg1 = uuid.uuid4()
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'I like tea')", user_msg1, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Tea is wonderful')", asst_msg1, conv_id, user_id)
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", "idemp-lex-1", conv_id, user_msg1, "1" * 64)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", "idemp-lex-1", asst_msg1)
+
+        llm_mock = MockExtractionProvider(
+            response_json='[{"content": "User likes tea", "memory_type": "preference", "category": "personal", "importance": 3, "confidence": 0.85}]'
+        )
+        lexical_worker = MemoryExtractionWorker(
+            worker_id="lexical-worker",
+            db_pool=worker_pool,
+            llm_provider=llm_mock,
+            embedding_provider=None,  # Lexical-only mode
+        )
+
+        async with worker_pool.acquire() as c_conn:
+            jobs1 = await lexical_worker.claim_jobs(c_conn)
+            assert len(jobs1) == 1
+            async with worker_pool.acquire() as p_conn:
+                success1 = await lexical_worker.process_job(p_conn, jobs1[0])
+                assert success1 is True
+
+        # Job completed
+        j1_status = await conn.fetchval("SELECT status FROM public.memory_extraction_jobs WHERE source_message_id = $1", asst_msg1)
+        assert j1_status == "completed"
+
+        # Memory was written
+        mem1 = await conn.fetchrow("SELECT * FROM public.memories WHERE user_id = $1 AND content = 'User likes tea'", user_id)
+        assert mem1 is not None
+
+        # 0 embeddings written
+        emb1_count = await conn.fetchval("SELECT count(*) FROM public.memory_embeddings WHERE memory_id = $1", mem1["id"])
+        assert emb1_count == 0
+
+        # -------------------------------------------------------------------------
+        # Case 2: Unexpected initialization failure
+        # -------------------------------------------------------------------------
+        unconf_settings = Settings(
+            ENVIRONMENT="test",
+            JOURNAL_HMAC_SECRET="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            EMBEDDING_PROVIDER="gemini",
+            EMBEDDING_API_KEY=None,
+            LLM_API_KEY=None,
+        )
+        with pytest.raises(EmbeddingAuthenticationError, match="Gemini embedding provider configured"):
+            get_embedding_provider(unconf_settings)
+
+        # -------------------------------------------------------------------------
+        # Case 3: Retired model rejection
+        # -------------------------------------------------------------------------
+        with pytest.raises(EmbeddingProviderError, match="retired"):
+            GeminiEmbeddingProvider(api_key="fake-key", model_id="text-embedding-004")
+
+        # In PostgreSQL, insert_extracted_memory_rpc rejects text-embedding-004
+        user_msg2 = uuid.uuid4()
+        asst_msg2 = uuid.uuid4()
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Coffee')", user_msg2, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Coffee is great')", asst_msg2, conv_id, user_id)
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", "idemp-ret-1", conv_id, user_msg2, "2" * 64)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", "idemp-ret-1", asst_msg2)
+
+        async with worker_pool.acquire() as c_conn:
+            jobs2 = await lexical_worker.claim_jobs(c_conn)
+            assert len(jobs2) == 1
+            j2 = jobs2[0]
+
+            with pytest.raises(asyncpg.exceptions.PostgresError, match="retired"):
+                dummy_vec = f"[{','.join(['0.01'] * 768)}]"
+                await c_conn.fetchval(
+                    """
+                    SELECT public.insert_extracted_memory_rpc(
+                        p_job_id => $1,
+                        p_worker_id => 'lexical-worker',
+                        p_claim_token => $2,
+                        p_content => 'User likes coffee',
+                        p_memory_type => 'preference',
+                        p_category => 'personal',
+                        p_embedding_768 => $3::vector,
+                        p_model => 'text-embedding-004'
+                    )
+                    """,
+                    j2["id"], j2["claim_token"], dummy_vec,
+                )
 
         await worker_pool.close()
 

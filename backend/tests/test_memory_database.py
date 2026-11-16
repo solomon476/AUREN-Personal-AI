@@ -181,7 +181,7 @@ async def test_legacy_memory_records_null_confidence_preservation(postgresql_ser
         # Apply 001 through 010 first
         migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
         for mf in migration_files:
-            if any(x in mf for x in ("011_", "012_", "013_", "014_", "015_", "016_")):
+            if any(x in mf for x in ("011_", "012_", "013_", "014_", "015_", "016_", "017_")):
                 continue
             sql = Path(mf).read_text(encoding="utf-8")
             await conn.execute(sql)
@@ -210,8 +210,8 @@ async def test_legacy_memory_records_null_confidence_preservation(postgresql_ser
             )
             legacy_ids.append((mid, cat, content, imp))
 
-        # Now execute Migration 011, 012, 013, 014, 015, and 016 in order
-        for suffix in ("011_", "012_", "013_", "014_", "015_", "016_"):
+        # Now execute Migration 011, 012, 013, 014, 015, 016, and 017 in order
+        for suffix in ("011_", "012_", "013_", "014_", "015_", "016_", "017_"):
             target_mf = [mf for mf in migration_files if suffix in mf][0]
             sql = Path(target_mf).read_text(encoding="utf-8")
             await conn.execute(sql)
@@ -1360,3 +1360,182 @@ async def test_cascading_deletion_and_gdpr_purge(postgresql_server):
 
         # Assert other user's memory is untouched
         assert await conn.fetchval("SELECT count(*) FROM public.memories WHERE user_id = $1", other_user) == 1
+
+
+@pytest.mark.asyncio
+async def test_fresh_database_applies_all_migrations_001_through_017(postgresql_server):
+    """Verify that a fresh database successfully applies all migrations 001 through 017 in sequence,
+    establishing correct table structures, active embedding models, restricted worker privileges,
+    and dedicated login service roles.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_fresh_17", apply_all_migrations=True) as (conn, db_name):
+        # 1. Verify all expected memory and security tables exist
+        tables = await conn.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+        table_names = {t["table_name"] for t in tables}
+        for expected in ("memories", "memory_embeddings", "embedding_models", "memory_extraction_jobs", "consumed_consent_tokens"):
+            assert expected in table_names
+
+        # 2. Verify active retrieval embedding model is gemini-embedding-2 (768-dim)
+        active_model = await conn.fetchrow(
+            "SELECT provider, model, version, dimension, is_active FROM public.embedding_models WHERE purpose = 'retrieval' AND is_active = TRUE"
+        )
+        assert active_model is not None
+        assert active_model["provider"] == "gemini"
+        assert active_model["model"] == "gemini-embedding-2"
+        assert active_model["version"] == "v1"
+        assert active_model["dimension"] == 768
+
+        # 3. Verify text-embedding-004 is retained in registry as inactive
+        old_model = await conn.fetchrow(
+            "SELECT is_active FROM public.embedding_models WHERE model = 'text-embedding-004' AND provider = 'gemini'"
+        )
+        assert old_model is not None
+        assert old_model["is_active"] is False
+
+        # 4. Verify auren_worker role is NOLOGIN NOINHERIT
+        role_info = await conn.fetchrow("SELECT rolcanlogin, rolinherit FROM pg_roles WHERE rolname = 'auren_worker'")
+        assert role_info is not None
+        assert role_info["rolcanlogin"] is False
+        assert role_info["rolinherit"] is False
+
+        # 5. Verify auren_worker_service has LOGIN and membership in auren_worker
+        svc_info = await conn.fetchrow("SELECT rolcanlogin FROM pg_roles WHERE rolname = 'auren_worker_service'")
+        assert svc_info is not None
+        assert svc_info["rolcanlogin"] is True
+
+        is_member = await conn.fetchval("""
+            SELECT pg_has_role('auren_worker_service', 'auren_worker', 'MEMBER')
+        """)
+        assert is_member is True
+
+
+@pytest.mark.asyncio
+async def test_upgrade_database_016_to_017_migration_safety(postgresql_server):
+    """Verify forward migration upgrade safety:
+    1. An existing database with migrations 001 through 016 applied and containing pre-existing
+       data (memories and legacy embeddings under text-embedding-004).
+    2. Forward migration 017 is applied to upgrade the database.
+    3. Demonstrates:
+       - Existing memories and embeddings are preserved intact without data loss.
+       - Active retrieval model shifts to gemini-embedding-2, retiring text-embedding-004.
+       - auren_worker is reconciled to NOLOGIN NOINHERIT.
+       - auren_worker_service exists with LOGIN and auren_worker membership.
+       - Direct table SELECT/DML by auren_worker on data tables is strictly denied.
+       - RPC functions (insert_extracted_memory_rpc, search_memories_hybrid_rpc) work accurately.
+       - Migration 017 is repeatable / idempotent.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_upg_17", apply_all_migrations=False) as (conn, db_name):
+        # Step A: Apply migrations 001 through 016 (representing existing database prior to upgrade)
+        migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
+        mf_001_to_016 = [mf for mf in migration_files if "017_" not in mf]
+        assert len(mf_001_to_016) == 16, f"Expected 16 baseline migrations, got {len(mf_001_to_016)}"
+        for mf in mf_001_to_016:
+            sql = Path(mf).read_text(encoding="utf-8")
+            await conn.execute(sql)
+
+        # Verify initial 016 state: text-embedding-004 is active
+        init_active = await conn.fetchval(
+            "SELECT model FROM public.embedding_models WHERE purpose = 'retrieval' AND is_active = TRUE"
+        )
+        assert init_active == "text-embedding-004"
+
+        # Step B: Insert pre-existing user data under baseline 016
+        user_id = uuid.uuid4()
+        conv_id = uuid.uuid4()
+        msg_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "upgrade_user@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Pre-upgrade Conv')", conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Historical message')", msg_id, conv_id, user_id)
+
+        legacy_mem_id = uuid.uuid4()
+        await conn.execute(
+            """
+            INSERT INTO public.memories (id, user_id, content, memory_type, category, importance, confidence, confirmation_status, last_confirmed_at, lifecycle_status, metadata)
+            VALUES ($1, $2, 'Pre-existing persistent memory about Python', 'fact', 'technical', 4, 0.95, 'confirmed', now(), 'active', '{"pre_upgrade": true}'::jsonb)
+            """,
+            legacy_mem_id, user_id,
+        )
+
+        dummy_768 = f"[{','.join(['0.02'] * 768)}]"
+        await conn.execute(
+            """
+            INSERT INTO public.memory_embeddings (memory_id, user_id, provider, model, version, dimension, embedding_768, is_active)
+            VALUES ($1, $2, 'gemini', 'text-embedding-004', 'v1', 768, $3::vector, TRUE)
+            """,
+            legacy_mem_id, user_id, dummy_768,
+        )
+
+        # Step C: Execute forward migration 017
+        mf_017 = [mf for mf in migration_files if "017_" in mf][0]
+        sql_017 = Path(mf_017).read_text(encoding="utf-8")
+        await conn.execute(sql_017)
+
+        # Step D: Verify data preservation
+        mem_after = await conn.fetchrow("SELECT * FROM public.memories WHERE id = $1", legacy_mem_id)
+        assert mem_after is not None
+        assert mem_after["content"] == "Pre-existing persistent memory about Python"
+        import json
+        meta = json.loads(mem_after["metadata"]) if isinstance(mem_after["metadata"], str) else mem_after["metadata"]
+        assert meta["pre_upgrade"] is True
+
+        emb_after = await conn.fetchrow("SELECT * FROM public.memory_embeddings WHERE memory_id = $1", legacy_mem_id)
+        assert emb_after is not None
+        assert emb_after["model"] == "text-embedding-004"
+        assert emb_after["dimension"] == 768
+        assert emb_after["embedding_768"] is not None
+
+        # Step E: Verify active embedding model shifted to gemini-embedding-2
+        active_after = await conn.fetchrow(
+            "SELECT provider, model, version, dimension FROM public.embedding_models WHERE purpose = 'retrieval' AND is_active = TRUE"
+        )
+        assert active_after is not None
+        assert active_after["model"] == "gemini-embedding-2"
+        assert active_after["dimension"] == 768
+
+        old_after = await conn.fetchval(
+            "SELECT is_active FROM public.embedding_models WHERE model = 'text-embedding-004' AND provider = 'gemini'"
+        )
+        assert old_after is False
+
+        # Step F: Verify worker role reconciliation
+        worker_role = await conn.fetchrow("SELECT rolcanlogin, rolinherit FROM pg_roles WHERE rolname = 'auren_worker'")
+        assert worker_role["rolcanlogin"] is False
+        assert worker_role["rolinherit"] is False
+
+        svc_role = await conn.fetchrow("SELECT rolcanlogin FROM pg_roles WHERE rolname = 'auren_worker_service'")
+        assert svc_role["rolcanlogin"] is True
+
+        # Step G: Verify direct table access denial from auren_worker
+        worker_test_user = f"worker_test_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_test_user} WITH PASSWORD 'pw' IN ROLE auren_worker")
+        worker_conn = await asyncpg.connect(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name,
+            user=worker_test_user, password="pw",
+        )
+        try:
+            # Direct SELECT on memories must be denied
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                await worker_conn.fetch("SELECT * FROM public.memories")
+
+            # Direct SELECT on messages must be denied
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                await worker_conn.fetch("SELECT * FROM public.messages")
+
+            # Direct SELECT on journal_entries must be denied
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                await worker_conn.fetch("SELECT * FROM public.journal_entries")
+
+            # Direct SELECT on memory_extraction_jobs must be denied
+            with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
+                await worker_conn.fetch("SELECT * FROM public.memory_extraction_jobs")
+
+            # But worker CAN execute queue claim RPC
+            jobs = await worker_conn.fetch("SELECT * FROM public.claim_memory_extraction_jobs_rpc('worker-test', 5, 300)")
+            assert isinstance(jobs, list)
+
+        finally:
+            await worker_conn.close()
+
+        # Step H: Verify repeatability / idempotency: re-running 017 succeeds without error
+        await conn.execute(sql_017)

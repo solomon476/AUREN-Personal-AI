@@ -73,6 +73,14 @@ class BaseEmbeddingProvider(ABC):
         """Return the model identifier."""
         pass
 
+    def get_provider_name(self) -> str:
+        """Return the provider identifier (e.g. 'gemini')."""
+        return "gemini"
+
+    def get_version(self) -> str:
+        """Return the model release/version string (e.g. 'v1')."""
+        return "v1"
+
     @abstractmethod
     async def embed_text(self, text: str) -> List[float]:
         """Generate a vector embedding for a single text input."""

@@ -167,6 +167,7 @@ async def test_worker_runner_transient_failure_and_retry(postgresql_server):
             worker_id="runner-fail-test",
             db_pool=worker_pool,
             llm_provider=llm_failing,
+            embedding_provider=MockEmbeddingProvider(model_id="gemini-embedding-2"),
             poll_interval=0.1,
             batch_size=5,
             lease_seconds=60,
@@ -215,6 +216,7 @@ async def test_worker_runner_graceful_shutdown(postgresql_server):
             worker_id="runner-shutdown-test",
             db_pool=worker_pool,
             llm_provider=MockExtractionProvider(),
+            embedding_provider=MockEmbeddingProvider(model_id="gemini-embedding-2"),
             poll_interval=0.05,
         )
 
@@ -280,5 +282,225 @@ async def test_worker_runner_accepts_auren_worker_service_login(postgresql_serve
             assert isinstance(jobs, list)
 
         await runner.db_pool.close()
+
+
+@pytest.mark.asyncio
+async def test_worker_runner_bounded_scheduling_batch_larger_than_concurrency(postgresql_server):
+    """Verify that WorkerRunner bounds in-flight work when batch_size > concurrency.
+    Even with 6 available jobs and batch_size=5, at most concurrency=2 jobs are claimed/active at once.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_runner_bound") as (conn, db_name):
+        user_id = uuid.uuid4()
+        conv_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "ubound@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Conv Bound')", conv_id, user_id)
+
+        # Enqueue 6 jobs
+        for i in range(6):
+            user_msg_id = uuid.uuid4()
+            asst_msg_id = uuid.uuid4()
+            await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', $4)", user_msg_id, conv_id, user_id, f"User msg {i}")
+            await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', $4)", asst_msg_id, conv_id, user_id, f"Asst msg {i}")
+            fp = f"{i:02d}" + "c" * 62
+            idemp = f"bound-idemp-{i}"
+            await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", idemp, conv_id, user_msg_id, fp)
+            await conn.execute("SELECT public.complete_chat_request($1, $2)", idemp, asst_msg_id)
+
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'secret' IN ROLE auren_worker")
+        worker_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=worker_user, password="secret",
+            min_size=1, max_size=5,
+        )
+
+        max_active_observed = 0
+        lock = asyncio.Lock()
+
+        class SlowExtractionProvider(BaseLLMProvider):
+            def get_model_id(self) -> str:
+                return "slow-model"
+
+            async def generate_response(self, messages, **kwargs) -> LLMResponse:
+                nonlocal max_active_observed
+                async with lock:
+                    current = len(runner._active_tasks)
+                    if current > max_active_observed:
+                        max_active_observed = current
+                await asyncio.sleep(0.05)
+                return LLMResponse(content='[{"content": "fact", "memory_type": "fact", "category": "general", "importance": 3, "confidence": 0.8}]', model="slow-model")
+
+            async def stream_response(self, messages, **kwargs):
+                yield "[]"
+
+        runner = WorkerRunner(
+            worker_id="runner-bound-test",
+            db_pool=worker_pool,
+            llm_provider=SlowExtractionProvider(),
+            embedding_provider=MockEmbeddingProvider(model_id="gemini-embedding-2"),
+            poll_interval=0.02,
+            batch_size=5,  # Batch size 5 is larger than concurrency 2
+            concurrency=2,
+            lease_seconds=60,
+        )
+
+        run_task = asyncio.create_task(runner.run())
+
+        # Wait until all 6 jobs are processed or 5s timeout
+        for _ in range(50):
+            completed_count = await conn.fetchval("SELECT count(*) FROM public.memory_extraction_jobs WHERE status = 'completed'")
+            if completed_count == 6:
+                break
+            await asyncio.sleep(0.1)
+
+        runner.stop()
+        await asyncio.wait_for(run_task, timeout=3.0)
+
+        # In-flight concurrency must NEVER have exceeded 2
+        assert max_active_observed <= 2, f"Active tasks exceeded concurrency limit: {max_active_observed} > 2"
+        completed = await conn.fetchval("SELECT count(*) FROM public.memory_extraction_jobs WHERE status = 'completed'")
+        assert completed == 6
+        assert runner.metrics["jobs_succeeded"] == 6
+
+        await worker_pool.close()
+
+
+@pytest.mark.asyncio
+async def test_worker_runner_lease_timing_and_expired_lease_handling(postgresql_server):
+    """Verify that WorkerRunner detects when a claimed job's lease has expired before execution,
+    fails the job cleanly for retry, and does not execute or commit stale work.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_runner_lease") as (conn, db_name):
+        user_id = uuid.uuid4()
+        conv_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "ulease@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Conv Lease')", conv_id, user_id)
+
+        user_msg_id = uuid.uuid4()
+        asst_msg_id = uuid.uuid4()
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Lease msg')", user_msg_id, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Lease asst')", asst_msg_id, conv_id, user_id)
+
+        fp = "d" * 64
+        idemp = "lease-idemp-1"
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", idemp, conv_id, user_msg_id, fp)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", idemp, asst_msg_id)
+
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'secret' IN ROLE auren_worker")
+        worker_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=worker_user, password="secret",
+            min_size=1, max_size=3,
+        )
+
+        runner = WorkerRunner(
+            worker_id="runner-lease-test",
+            db_pool=worker_pool,
+            llm_provider=MockExtractionProvider(),
+            embedding_provider=MockEmbeddingProvider(model_id="gemini-embedding-2"),
+            poll_interval=0.1,
+            lease_seconds=30,
+        )
+        await runner.initialize()
+
+        # Claim the job
+        async with worker_pool.acquire() as claim_conn:
+            jobs = await runner._worker.claim_jobs(claim_conn)
+            assert len(jobs) == 1
+            job = jobs[0]
+
+        # Artificially simulate that claim time was in the distant past (elapsed 50s > lease_seconds 30s)
+        import time
+        stale_claim_time = time.monotonic() - 50.0
+
+        await runner._process_job_safe(job, stale_claim_time)
+
+        # Runner must record failure and not complete the job
+        assert runner.metrics["jobs_failed"] == 1
+        assert runner.metrics["jobs_succeeded"] == 0
+
+        # In database, job must be pending for retry, not abandoned or completed
+        job_db = await conn.fetchrow("SELECT status, attempts, last_error FROM public.memory_extraction_jobs WHERE id = $1", job["id"])
+        assert job_db["status"] == "pending"
+        assert job_db["attempts"] == 1
+        assert "lease expired" in job_db["last_error"].lower()
+
+        # No memories should have been written
+        mems = await conn.fetch("SELECT * FROM public.memories WHERE user_id = $1", user_id)
+        assert len(mems) == 0
+
+        await worker_pool.close()
+
+
+@pytest.mark.asyncio
+async def test_worker_runner_graceful_shutdown_with_in_flight_tasks(postgresql_server):
+    """Verify that stopping the runner during active execution allows in-flight tasks to finish
+    or cleanly releases them with retry rather than silently abandoning them.
+    """
+    async with isolated_postgres_db(postgresql_server, prefix="mem_runner_shut") as (conn, db_name):
+        user_id = uuid.uuid4()
+        conv_id = uuid.uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, "ushut@example.com")
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_id}'")
+        await conn.execute("INSERT INTO public.conversations (id, user_id, title) VALUES ($1, $2, 'Conv Shut')", conv_id, user_id)
+
+        user_msg_id = uuid.uuid4()
+        asst_msg_id = uuid.uuid4()
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'user', 'Inflight msg')", user_msg_id, conv_id, user_id)
+        await conn.execute("INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'assistant', 'Inflight asst')", asst_msg_id, conv_id, user_id)
+
+        fp = "e" * 64
+        idemp = "shut-idemp-1"
+        await conn.execute("SELECT public.claim_chat_request($1, $2, $3, $4)", idemp, conv_id, user_msg_id, fp)
+        await conn.execute("SELECT public.complete_chat_request($1, $2)", idemp, asst_msg_id)
+
+        worker_user = f"worker_{uuid.uuid4().hex[:8]}"
+        await conn.execute(f"CREATE USER {worker_user} WITH PASSWORD 'secret' IN ROLE auren_worker")
+        worker_pool = await asyncpg.create_pool(
+            host=postgresql_server["host"], port=postgresql_server["port"], database=db_name, user=worker_user, password="secret",
+            min_size=1, max_size=3,
+        )
+
+        class DeliberateSlowLLM(BaseLLMProvider):
+            def get_model_id(self) -> str:
+                return "slow"
+
+            async def generate_response(self, messages, **kwargs) -> LLMResponse:
+                await asyncio.sleep(0.1)
+                return LLMResponse(content='[{"content": "shut fact", "memory_type": "fact", "category": "general", "importance": 3, "confidence": 0.8}]', model="slow")
+
+            async def stream_response(self, messages, **kwargs):
+                yield "[]"
+
+        runner = WorkerRunner(
+            worker_id="runner-shut-test",
+            db_pool=worker_pool,
+            llm_provider=DeliberateSlowLLM(),
+            embedding_provider=MockEmbeddingProvider(model_id="gemini-embedding-2"),
+            poll_interval=0.05,
+            concurrency=2,
+            lease_seconds=60,
+        )
+
+        run_task = asyncio.create_task(runner.run())
+        # Wait until job is claimed and task is running
+        for _ in range(20):
+            if runner.metrics["jobs_claimed"] > 0:
+                break
+            await asyncio.sleep(0.02)
+
+        # Stop runner while task is in flight
+        runner.stop()
+        await asyncio.wait_for(run_task, timeout=3.0)
+
+        # Job must be either cleanly completed (since grace period allowed it to finish)
+        # or released with retry if cancelled, NEVER left locked without accounting.
+        job_db = await conn.fetchrow("SELECT status, locked_by FROM public.memory_extraction_jobs WHERE source_message_id = $1", asst_msg_id)
+        assert job_db["status"] in ("completed", "pending")
+        if job_db["status"] == "pending":
+            assert job_db["locked_by"] is None
+
+        await worker_pool.close()
 
 

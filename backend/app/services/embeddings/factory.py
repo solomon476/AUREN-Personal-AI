@@ -31,6 +31,8 @@ class MockEmbeddingProvider(BaseEmbeddingProvider):
         simulate_invalid_dimension: Optional[int] = None,
         simulate_non_finite: bool = False,
         simulate_auth_error: bool = False,
+        provider: str = "gemini",
+        version: str = "v1",
     ):
         self.dimension = dimension
         self.model_id = model_id
@@ -39,12 +41,20 @@ class MockEmbeddingProvider(BaseEmbeddingProvider):
         self.simulate_invalid_dimension = simulate_invalid_dimension
         self.simulate_non_finite = simulate_non_finite
         self.simulate_auth_error = simulate_auth_error
+        self.provider = provider
+        self.version = version
 
     def get_dimension(self) -> int:
         return self.dimension
 
     def get_model_id(self) -> str:
         return self.model_id
+
+    def get_provider_name(self) -> str:
+        return self.provider
+
+    def get_version(self) -> str:
+        return self.version
 
     def _generate_deterministic_vector(self, text: str) -> List[float]:
         """Generates a deterministic L2-normalized vector from text content."""
@@ -97,19 +107,32 @@ class MockEmbeddingProvider(BaseEmbeddingProvider):
         return vectors
 
 
-def get_embedding_provider(settings: Settings = default_settings) -> BaseEmbeddingProvider:
-    """Return an initialized embedding provider instance matching the active configuration."""
+def get_embedding_provider(settings: Settings = default_settings) -> Optional[BaseEmbeddingProvider]:
+    """Return an initialized embedding provider instance matching the active configuration.
+
+    Distinguishes intentionally configured lexical-only mode (returns None) from unexpected
+    provider initialization failures (raises appropriate EmbeddingException).
+    """
     provider_name = settings.EMBEDDING_PROVIDER.lower().strip()
+
+    if provider_name in ("none", "disabled", "lexical_only", "lexical-only"):
+        logger.info("Embedding provider explicitly disabled; running in lexical-only retrieval mode")
+        return None
 
     if provider_name == "gemini":
         api_key = settings.EMBEDDING_API_KEY or settings.LLM_API_KEY
+        if not api_key:
+            raise EmbeddingAuthenticationError(
+                "Gemini embedding provider configured (EMBEDDING_PROVIDER='gemini') but neither "
+                "EMBEDDING_API_KEY nor LLM_API_KEY was provided"
+            )
         return GeminiEmbeddingProvider(
             api_key=api_key,
             model_id=settings.EMBEDDING_MODEL,
             dimension=768,
         )
     elif provider_name == "mock":
-        return MockEmbeddingProvider(dimension=768)
+        return MockEmbeddingProvider(dimension=768, model_id=settings.EMBEDDING_MODEL)
     else:
         raise EmbeddingProviderError(f"Unsupported EMBEDDING_PROVIDER: '{settings.EMBEDDING_PROVIDER}'")
 

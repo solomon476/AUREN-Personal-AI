@@ -42,19 +42,38 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
                 f"Configured dimension {self.dimension} is incompatible with PostgreSQL schema (expected 768)"
             )
 
+        if self.model_id == "text-embedding-004":
+            raise EmbeddingProviderError(
+                "Model 'text-embedding-004' was retired on 14 January 2026 and cannot be used for new embedding generation; "
+                "use 'gemini-embedding-2' instead"
+            )
+
         if self._api_key:
             try:
                 from google import genai
                 self._client = genai.Client(api_key=self._api_key)
             except Exception as exc:
-                logger.warning("Could not initialize google-genai Client: %s", self._sanitize_message(str(exc)))
-                self._client = None
+                sanitized = self._sanitize_message(str(exc))
+                raise EmbeddingProviderError(f"Could not initialize google-genai Client: {sanitized}") from exc
 
     def get_dimension(self) -> int:
         return self.dimension
 
     def get_model_id(self) -> str:
         return self.model_id
+
+    def get_provider_name(self) -> str:
+        return "gemini"
+
+    def get_version(self) -> str:
+        return "v1"
+
+    def _ensure_authenticated_client(self):
+        """Verify client and credentials availability before invocation."""
+        if not self._api_key:
+            raise EmbeddingAuthenticationError("Gemini embedding API key is unconfigured")
+        if self._client is None:
+            raise EmbeddingAuthenticationError("Gemini client initialization failed")
 
     def __repr__(self) -> str:
         key_repr = "***" if self._api_key else "None"

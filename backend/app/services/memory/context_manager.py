@@ -74,12 +74,18 @@ class MemoryContextManager:
         # 1. Generate query embedding if embedding provider is available (with graceful lexical degradation)
         actual_query_embedding = query_embedding
         model_id = None
+        provider_name = None
+        version = None
+        dimension = None
         if self._embedding_provider is not None:
             model_id = self._embedding_provider.get_model_id()
+            provider_name = getattr(self._embedding_provider, "get_provider_name", lambda: "gemini")()
+            version = getattr(self._embedding_provider, "get_version", lambda: "v1")()
+            dimension = getattr(self._embedding_provider, "get_dimension", lambda: 768)()
             if actual_query_embedding is None:
                 try:
                     actual_query_embedding = await self._embedding_provider.embed_text(query_text)
-                    logger.debug("Generated 768-dim query embedding using model '%s'", model_id)
+                    logger.debug("Generated %d-dim query embedding using model '%s'", dimension, model_id)
                 except Exception as emb_err:
                     logger.warning(
                         "Query embedding generation failed (graceful degradation to lexical-only retrieval): %s",
@@ -87,7 +93,7 @@ class MemoryContextManager:
                     )
                     actual_query_embedding = None
 
-        # 2. Retrieve candidates via hybrid retrieval
+        # 2. Retrieve candidates via hybrid retrieval with complete model identity
         candidates = await self._retriever.search_memories(
             user_id=user_id,
             query_text=query_text,
@@ -95,6 +101,9 @@ class MemoryContextManager:
             limit=settings.MEMORY_SEARCH_LIMIT,
             min_similarity=settings.MEMORY_SIMILARITY_THRESHOLD,
             model=model_id,
+            provider=provider_name,
+            version=version,
+            dimension=dimension,
         )
 
         if not candidates:

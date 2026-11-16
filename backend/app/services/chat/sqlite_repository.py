@@ -894,6 +894,9 @@ class SQLiteChatRepository(BaseChatRepository):
         limit: int = 5,
         min_similarity: float = 0.0,
         model: Optional[str] = None,
+        provider: Optional[str] = None,
+        version: Optional[str] = None,
+        dimension: Optional[int] = None,
     ) -> List[Any]:
         """Local SQLite mock returns empty memory candidates."""
         return []

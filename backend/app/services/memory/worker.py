@@ -59,8 +59,9 @@ class MemoryExtractionWorker:
         self.batch_size = batch_size
         self.lease_seconds = lease_seconds
 
-    async def claim_jobs(self, conn) -> List[Dict[str, Any]]:
+    async def claim_jobs(self, conn, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """Claims a batch of pending or expired jobs using atomic SKIP LOCKED RPC."""
+        actual_limit = limit if limit is not None else self.batch_size
         rows = await conn.fetch(
             """
             SELECT id, user_id, conversation_id, source_message_id, claim_token, attempts, max_attempts
@@ -71,7 +72,7 @@ class MemoryExtractionWorker:
             )
             """,
             self.worker_id,
-            self.batch_size,
+            actual_limit,
             self.lease_seconds,
         )
         return [dict(r) for r in rows]
@@ -147,7 +148,17 @@ class MemoryExtractionWorker:
     ) -> UUID:
         """Persists extracted memory via insert_extracted_memory_rpc, enforcing epistemic constraints."""
         embedding_str = f"[{','.join(str(x) for x in embedding)}]" if embedding else None
-        model_id = self.embedding_provider.get_model_id() if self.embedding_provider else "gemini-embedding-2"
+        if embedding is not None and self.embedding_provider is not None:
+            model_id = self.embedding_provider.get_model_id()
+            provider_name = getattr(self.embedding_provider, "get_provider_name", lambda: "gemini")()
+            version = getattr(self.embedding_provider, "get_version", lambda: "v1")()
+            dimension = getattr(self.embedding_provider, "get_dimension", lambda: 768)()
+        else:
+            model_id = "gemini-embedding-2"
+            provider_name = "gemini"
+            version = "v1"
+            dimension = 768
+
         return await conn.fetchval(
             """
             SELECT public.insert_extracted_memory_rpc(
@@ -161,7 +172,10 @@ class MemoryExtractionWorker:
                 p_confidence => $8,
                 p_metadata => $9::jsonb,
                 p_embedding_768 => $10::vector,
-                p_model => $11
+                p_model => $11,
+                p_provider => $12,
+                p_version => $13,
+                p_dimension => $14
             )
             """,
             job_id,
@@ -175,6 +189,9 @@ class MemoryExtractionWorker:
             json.dumps(item.metadata),
             embedding_str,
             model_id,
+            provider_name,
+            version,
+            dimension,
         )
 
     async def complete_job(self, conn, job_id: UUID, claim_token: UUID) -> bool:
