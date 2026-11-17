@@ -25,6 +25,8 @@ from uuid import UUID
 
 from app.models.search import (
     ContradictionItem,
+    RecordLinkCreate,
+    RecordLinkItem,
     RelatedRecord,
     ReflectionInsightsResponse,
     RelationshipsResponse,
@@ -137,7 +139,9 @@ class ReflectionService:
                     ))
 
         # --- Strategy 2: Same-category value conflicts ---
-        # Group memories by category, look for opposing value signals
+        # Group memories by category, look for opposing value signals.
+        # Requires subject-token overlap to avoid false positives from unrelated statements
+        # in the same broad category (e.g., "I like dogs" vs "I dislike Mondays").
         by_category: Dict[str, list] = {}
         for mem in active_memories:
             by_category.setdefault(mem.category, []).append(mem)
@@ -150,6 +154,26 @@ class ReflectionService:
             (r"\bcan\b", r"\bcannot\b"),
         ]
 
+        # Tokens that must appear in both memories for a contradiction to be flagged.
+        _STOPWORDS = frozenset({
+            "the", "a", "an", "i", "my", "me", "is", "are", "was", "were", "be",
+            "been", "have", "has", "had", "do", "does", "did", "will", "would",
+            "can", "could", "this", "that", "in", "on", "at", "to", "for", "of",
+            "and", "or", "but", "not", "with", "it", "its", "so", "if", "when",
+            "then", "than", "also", "just", "very", "more", "most", "some", "any",
+        })
+
+        def _significant_tokens(text: str) -> set:
+            """Extract meaningful non-trivial tokens (len>=4, not stopwords) from text."""
+            tokens = re.findall(r"\b\w{4,}\b", text.lower())
+            return {t for t in tokens if t not in _STOPWORDS}
+
+        # Conditional markers: statements with these are likely situational, not contradictions.
+        _CONDITIONAL_MARKERS = re.compile(
+            r"\b(if|when|unless|except|only|sometimes|usually|often|rarely|might|maybe|perhaps)\b",
+            re.IGNORECASE,
+        )
+
         seen_pairs: Set[Tuple[UUID, UUID]] = set()
 
         for category, mems in by_category.items():
@@ -160,6 +184,22 @@ class ReflectionService:
                     pair_key = (min(mem_a.id, mem_b.id), max(mem_a.id, mem_b.id))
                     if pair_key in seen_pairs:
                         continue
+
+                    # Require shared subject/object tokens to suppress false positives
+                    shared_tokens = (
+                        _significant_tokens(mem_a.content) &
+                        _significant_tokens(mem_b.content)
+                    )
+                    if not shared_tokens:
+                        continue  # Different subjects — not a contradiction
+
+                    # Skip conditional/situational statements
+                    if (
+                        _CONDITIONAL_MARKERS.search(mem_a.content)
+                        or _CONDITIONAL_MARKERS.search(mem_b.content)
+                    ):
+                        continue
+
                     for pat_a, pat_b in _NEGATION_PAIRS:
                         a_has = bool(re.search(pat_a, mem_a.content, re.IGNORECASE))
                         b_has = bool(re.search(pat_b, mem_b.content, re.IGNORECASE))
@@ -177,8 +217,9 @@ class ReflectionService:
                                 contradiction_type="value_conflict",
                                 explanation=(
                                     f"Two active memories in the '{category}' category appear to "
-                                    f"express opposing views. This may reflect a changed preference "
-                                    f"or an extraction error."
+                                    f"express opposing views about the same subject "
+                                    f"(shared terms: {', '.join(sorted(shared_tokens)[:3])}). "
+                                    f"This may reflect a changed preference or an extraction error."
                                 ),
                                 confidence=_CONTRADICTION_MIN_CONFIDENCE,
                                 suggested_action=(
@@ -354,6 +395,23 @@ class ReflectionService:
                 await self._relationships_for_memory(user_id, source_id)
             )
 
+        # Explicit user-confirmed and persisted record links
+        try:
+            persisted_links = await self._prod.list_record_links(user_id, source_type, source_id)
+            for pl in persisted_links:
+                nav = f"/{pl.target_type.value}s" if pl.target_type.value != "memory" else "/memories"
+                relationships.append(RelatedRecord(
+                    source_type=pl.target_type,
+                    id=pl.target_id,
+                    title=f"Linked {pl.target_type.value}",
+                    relationship_type=pl.relationship_type,
+                    relationship_source="user_confirmed" if not pl.is_inferred else "inferred",
+                    confidence=pl.confidence,
+                    navigation_path=nav,
+                ))
+        except Exception as exc:
+            logger.warning("Failed querying persisted record links: %s", exc)
+
         return RelationshipsResponse(
             source_type=source_type,
             source_id=source_id,
@@ -525,4 +583,25 @@ class ReflectionService:
         except Exception as exc:
             logger.warning("Memory relationship discovery error: %s", exc)
         return results
+
+    # ------------------------------------------------------------------
+    # User-Confirmed Record Links (Phase 3C.5.2 / API-01)
+    # ------------------------------------------------------------------
+
+    async def create_link(
+        self, user_id: UUID, link: RecordLinkCreate
+    ) -> RecordLinkItem:
+        """Create a user-confirmed cross-entity relationship link."""
+        return await self._prod.create_record_link(user_id, link)
+
+    async def list_links(
+        self, user_id: UUID, source_type: SourceType, source_id: UUID
+    ) -> List[RecordLinkItem]:
+        """List record links for a given source entity owned by the user."""
+        return await self._prod.list_record_links(user_id, source_type, source_id)
+
+    async def delete_link(self, user_id: UUID, link_id: UUID) -> bool:
+        """Delete a record link owned by the user."""
+        return await self._prod.delete_record_link(user_id, link_id)
+
 

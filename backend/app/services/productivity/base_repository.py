@@ -19,6 +19,8 @@ from app.models.productivity import (
     TaskModel,
     TaskUpdate,
 )
+from app.models.search import RecordLinkCreate, RecordLinkItem, SourceType
+from app.models.search import RecordLinkCreate, RecordLinkItem, SourceType
 
 
 class BaseProductivityRepository(ABC):
@@ -175,3 +177,30 @@ class BaseProductivityRepository(ABC):
         """Assemble bounded read-only productivity context for conversational AI."""
         pass
 
+    # ------------------------------------------------------------------------
+    # Record Links (Phase 3C.5.2 / API-01)
+    # ------------------------------------------------------------------------
+
+    @abstractmethod
+    async def create_record_link(
+        self,
+        user_id: UUID,
+        link: "RecordLinkCreate",
+    ) -> "RecordLinkItem":
+        """Persist a user-confirmed cross-entity relationship link."""
+        pass
+
+    @abstractmethod
+    async def list_record_links(
+        self,
+        user_id: UUID,
+        source_type: "SourceType",
+        source_id: UUID,
+    ) -> List["RecordLinkItem"]:
+        """List all record_links where user owns both source and the link."""
+        pass
+
+    @abstractmethod
+    async def delete_record_link(self, user_id: UUID, link_id: UUID) -> bool:
+        """Delete a record link the user owns. Returns True if deleted."""
+        pass

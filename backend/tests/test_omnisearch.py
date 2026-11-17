@@ -373,3 +373,37 @@ async def test_sources_searched_field_reflects_filter():
     result = await service.search(user_id, "Python", sources=[SourceType.task, SourceType.goal])
     assert set(result.sources_searched) == {SourceType.task, SourceType.goal}
 
+
+@pytest.mark.asyncio
+async def test_omnisearch_passes_query_to_productivity_repositories():
+    """Phase 3C.5.2 / DATA-01: Verify Omnisearch forwards query parameter to
+    list_tasks, list_projects, and list_goals to prevent 50-item truncation.
+    """
+    mock_prod = MagicMock()
+    mock_prod.list_tasks = AsyncMock(return_value=([], 0))
+    mock_prod.list_projects = AsyncMock(return_value=([], 0))
+    mock_prod.list_goals = AsyncMock(return_value=([], 0))
+
+    mock_chat = MagicMock()
+    mock_chat.list_conversations = AsyncMock(return_value=[])
+
+    mock_mem = MagicMock()
+    mock_mem.list_memories = AsyncMock(return_value=([], 0))
+
+    service = OmnisearchService(chat_repo=mock_chat, memory_repo=mock_mem, productivity_repo=mock_prod)
+    user_id = uuid.uuid4()
+    query_str = "deep learning project"
+
+    await service.search(user_id, query_str)
+
+    # Verify query was forwarded to all 3 productivity list calls
+    mock_prod.list_tasks.assert_called_once()
+    assert mock_prod.list_tasks.call_args.kwargs.get("query") == query_str
+
+    mock_prod.list_projects.assert_called_once()
+    assert mock_prod.list_projects.call_args.kwargs.get("query") == query_str
+
+    mock_prod.list_goals.assert_called_once()
+    assert mock_prod.list_goals.call_args.kwargs.get("query") == query_str
+
+

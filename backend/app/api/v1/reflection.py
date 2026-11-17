@@ -21,8 +21,8 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Query, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse, Response
 
 from app.core.security import get_current_user
 from app.models.search import (
@@ -111,3 +111,70 @@ async def get_relationships(
     service: ReflectionService = Depends(_get_reflection_service),
 ) -> RelationshipsResponse:
     return await service.get_relationships(user.user_id, source_type, source_id)
+
+
+# ---------------------------------------------------------------------------
+# Record Links (Phase 3C.5.2 / API-01)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/links",
+    response_model=RecordLinkItem,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a user-confirmed cross-entity relationship link",
+    description=(
+        "Persists a relationship link between two entities owned by the authenticated user. "
+        "Validates that both source and target exist and belong to the user."
+    ),
+)
+async def create_link(
+    link: RecordLinkCreate,
+    user: AuthenticatedUser = Depends(get_current_user),
+    service: ReflectionService = Depends(_get_reflection_service),
+) -> RecordLinkItem:
+    try:
+        return await service.create_link(user.user_id, link)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        logger.error("Error creating record link: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create record link",
+        )
+
+
+@router.get(
+    "/links",
+    response_model=List[RecordLinkItem],
+    summary="List record links for an entity",
+    description="Returns all record links where source_id matches and the record is owned by the user.",
+)
+async def list_links(
+    source_type: SourceType = Query(..., description="Entity type of the source record"),
+    source_id: UUID = Query(..., description="UUID of the source record"),
+    user: AuthenticatedUser = Depends(get_current_user),
+    service: ReflectionService = Depends(_get_reflection_service),
+) -> List[RecordLinkItem]:
+    return await service.list_links(user.user_id, source_type, source_id)
+
+
+@router.delete(
+    "/links/{link_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a user-confirmed record link",
+    description="Deletes a record link owned by the authenticated user.",
+)
+async def delete_link(
+    link_id: UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    service: ReflectionService = Depends(_get_reflection_service),
+):
+    deleted = await service.delete_link(user.user_id, link_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Record link not found or not owned by user",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+

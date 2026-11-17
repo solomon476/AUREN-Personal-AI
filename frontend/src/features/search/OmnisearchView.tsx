@@ -121,8 +121,11 @@ const ResultCard: React.FC<ResultCardProps> = ({ item }) => {
               {new Date(item.created_at).toLocaleDateString()}
             </span>
             <span className="text-slate-600 text-xs">{item.provenance}</span>
-            <span className="text-slate-600 text-xs ml-auto">
-              {Math.round(item.score * 100)}% match
+            <span
+              className="text-slate-600 text-xs ml-auto"
+              title="Keyword coverage: percentage of your search terms found in this result. This is lexical token coverage, not semantic certainty."
+            >
+              {Math.round(item.score * 100)}% keyword coverage
             </span>
           </div>
         </div>

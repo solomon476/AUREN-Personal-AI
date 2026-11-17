@@ -433,3 +433,113 @@ async def test_get_insights_aggregates_correctly():
     assert result.staleness_count >= 1
     assert isinstance(result.generated_at, datetime)
 
+
+# ---------------------------------------------------------------------------
+# Phase 3C.5.2 / EPI-01: False-Positive Contradiction Tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_value_conflict_different_subjects_not_flagged():
+    """EPI-01: Statements in the same category about different subjects
+    must NOT be flagged as contradictions.
+    """
+    mem_a = _make_memory("I like Italian pasta dishes", category="preferences")
+    mem_b = _make_memory("I dislike Monday morning meetings", category="preferences")
+    service = _build_service(memories=[mem_a, mem_b])
+    user_id = uuid.uuid4()
+    result = await service.get_contradictions(user_id)
+    value_conflicts = [c for c in result if c.contradiction_type == "value_conflict"]
+    assert len(value_conflicts) == 0
+
+
+@pytest.mark.asyncio
+async def test_value_conflict_conditional_statement_not_flagged():
+    """EPI-01: Statements containing conditional or situational markers
+    (when, if, sometimes) must NOT be flagged as contradictions.
+    """
+    mem_a = _make_memory("When travelling abroad I prefer hotels", category="travel")
+    mem_b = _make_memory("I avoid hotels during local roadtrips", category="travel")
+    service = _build_service(memories=[mem_a, mem_b])
+    user_id = uuid.uuid4()
+    result = await service.get_contradictions(user_id)
+    value_conflicts = [c for c in result if c.contradiction_type == "value_conflict"]
+    assert len(value_conflicts) == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 3C.5.2 / API-01: Record Links Repository & Relationship Tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_sqlite_record_links_crud_and_cross_tenant_validation(tmp_path):
+    """API-01: Verify SQLite repository CRUD and endpoint ownership validation."""
+    from app.services.productivity.sqlite_repository import SQLiteProductivityRepository
+    from app.models.productivity import TaskCreate, ProjectCreate
+    from app.models.search import RecordLinkCreate, RelationshipType, SourceType
+
+    repo = SQLiteProductivityRepository(db_path=tmp_path / "test_rl.db")
+    user_a = uuid.uuid4()
+    user_b = uuid.uuid4()
+
+    # User A creates a task and a project
+    task_a = await repo.create_task(user_a, TaskCreate(title="Task A"))
+    proj_a = await repo.create_project(user_a, ProjectCreate(name="Project A"))
+
+    # User B creates a task
+    task_b = await repo.create_task(user_b, TaskCreate(title="Task B"))
+
+    # 1. User A creates valid link
+    link = await repo.create_record_link(
+        user_a,
+        RecordLinkCreate(
+            source_type=SourceType.task,
+            source_id=task_a.id,
+            target_type=SourceType.project,
+            target_id=proj_a.id,
+            relationship_type=RelationshipType.related,
+        ),
+    )
+    assert link.id is not None
+    assert link.user_id == user_a
+    assert link.source_id == task_a.id
+    assert link.target_id == proj_a.id
+
+    # 2. List record links
+    links = await repo.list_record_links(user_a, SourceType.task, task_a.id)
+    assert len(links) == 1
+    assert links[0].target_id == proj_a.id
+
+    # 3. User B attempts cross-tenant target linking (task B -> proj A) -> Rejected
+    with pytest.raises(ValueError) as exc_target:
+        await repo.create_record_link(
+            user_b,
+            RecordLinkCreate(
+                source_type=SourceType.task,
+                source_id=task_b.id,
+                target_type=SourceType.project,
+                target_id=proj_a.id,
+            ),
+        )
+    assert "not found or not owned by user" in str(exc_target.value)
+
+    # 4. User B attempts cross-tenant source linking (task A -> task B) -> Rejected
+    with pytest.raises(ValueError) as exc_source:
+        await repo.create_record_link(
+            user_b,
+            RecordLinkCreate(
+                source_type=SourceType.task,
+                source_id=task_a.id,
+                target_type=SourceType.task,
+                target_id=task_b.id,
+            ),
+        )
+    assert "not found or not owned by user" in str(exc_source.value)
+
+    # 5. Delete record link
+    deleted = await repo.delete_record_link(user_a, link.id)
+    assert deleted is True
+    # Re-list should be empty
+    remaining = await repo.list_record_links(user_a, SourceType.task, task_a.id)
+    assert len(remaining) == 0
+
+

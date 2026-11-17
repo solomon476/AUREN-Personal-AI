@@ -1,12 +1,20 @@
 """Phase 3C.5 Omnisearch Service.
 
-Coordinates cross-entity search across conversations, messages, memories,
+Coordinates cross-entity lexical search across conversations, messages, memories,
 tasks, projects, and goals. All queries are strictly scoped by user_id;
 no cross-tenant data exposure is possible through this service.
 
+Retrieval Architecture (Phase 3C.5.2 / ARCH-01 Clarification):
+- Omnisearch is 100% lexical (exact word/prefix token matching and query coverage).
+- It does NOT perform semantic vector cosine similarity searches across entities;
+  semantic/hybrid retrieval is provided exclusively by MemoryRetriever (Phase 3C.3)
+  for conversational memory context injection.
+- Match scores represent keyword token coverage (the fraction of query terms present
+  in the target entity's text fields), scaled by recency, not semantic confidence.
+
 Design principles:
 - Each source is searched independently with its own relevance heuristic.
-- Results are merged and re-ranked by a normalised score.
+- Results are merged and re-ranked by a normalised lexical score.
 - Journal entries are NEVER included (they are consent-protected).
 - AI-extracted unconfirmed memories are labelled distinctly in provenance.
 - All returned navigation_paths are frontend routes, not API URLs.
@@ -303,7 +311,7 @@ class OmnisearchService:
     ) -> List[SearchResultItem]:
         try:
             tasks, _ = await self._prod.list_tasks(
-                user_id=user_id, page=1, page_size=_PER_SOURCE_LIMIT
+                user_id=user_id, query=query, page=1, page_size=_PER_SOURCE_LIMIT
             )
         except Exception as exc:
             logger.warning("Task search error: %s", exc)
@@ -342,7 +350,7 @@ class OmnisearchService:
     ) -> List[SearchResultItem]:
         try:
             projects, _ = await self._prod.list_projects(
-                user_id=user_id, page=1, page_size=_PER_SOURCE_LIMIT
+                user_id=user_id, query=query, page=1, page_size=_PER_SOURCE_LIMIT
             )
         except Exception as exc:
             logger.warning("Project search error: %s", exc)
@@ -379,7 +387,7 @@ class OmnisearchService:
     ) -> List[SearchResultItem]:
         try:
             goals, _ = await self._prod.list_goals(
-                user_id=user_id, page=1, page_size=_PER_SOURCE_LIMIT
+                user_id=user_id, query=query, page=1, page_size=_PER_SOURCE_LIMIT
             )
         except Exception as exc:
             logger.warning("Goal search error: %s", exc)

@@ -664,3 +664,127 @@ async def test_postgresql_migration_019_rls_and_cross_tenant_prevention(postgres
         admin_conn = await asyncpg.connect(host=postgresql_server["host"], port=postgresql_server["port"], database="postgres")
         await admin_conn.execute(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
         await admin_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_postgresql_migration_022_record_links_endpoint_ownership(postgresql_server):
+    """Verify on local PostgreSQL 18:
+    1. Migration 022 applies cleanly on top of all 21 preceding migrations.
+    2. User A can link their own task to their own project.
+    3. User B cannot link their task to User A's task (foreign target rejected by trigger).
+    4. User B cannot link User A's task to their task (foreign source rejected by trigger).
+    5. User B cannot spoof User A's user_id in record_links (rejected by trigger).
+    6. Nonexistent UUIDs are rejected.
+    """
+    db_name = f"auren_rl_test_{uuid4().hex[:10]}"
+    admin_conn = await asyncpg.connect(host=postgresql_server["host"], port=postgresql_server["port"], database="postgres")
+    await admin_conn.execute(f'CREATE DATABASE "{db_name}"')
+    await admin_conn.close()
+
+    conn = await asyncpg.connect(host=postgresql_server["host"], port=postgresql_server["port"], database=db_name)
+    try:
+        await conn.execute(MOCK_AUTH_SQL)
+        migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
+        assert len(migration_files) >= 22, f"Expected at least 22 migrations, got {len(migration_files)}"
+        for mf in migration_files:
+            sql = Path(mf).read_text(encoding="utf-8")
+            await conn.execute(sql)
+
+        user_a = uuid4()
+        user_b = uuid4()
+        await conn.execute("INSERT INTO auth.users (id, email) VALUES ($1, 'a@example.com'), ($2, 'b@example.com')", user_a, user_b)
+
+        # 1. User A creates task and project
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_a}'")
+        await conn.execute("SET ROLE authenticated")
+
+        task_a_id = await conn.fetchval(
+            "INSERT INTO public.tasks (user_id, title, status) VALUES ($1, 'Task A', 'todo') RETURNING id;",
+            user_a,
+        )
+        proj_a_id = await conn.fetchval(
+            "INSERT INTO public.projects (user_id, name, status) VALUES ($1, 'Project A', 'active') RETURNING id;",
+            user_a,
+        )
+        assert task_a_id is not None
+        assert proj_a_id is not None
+
+        # User A creates valid record_link (task A -> project A) -> SUCCEEDS
+        link_a_id = await conn.fetchval(
+            """
+            INSERT INTO public.record_links (user_id, source_type, source_id, target_type, target_id, relationship_type)
+            VALUES ($1, 'task', $2, 'project', $3, 'related')
+            RETURNING id;
+            """,
+            user_a,
+            task_a_id,
+            proj_a_id,
+        )
+        assert link_a_id is not None
+
+        # 2. Switch to User B
+        await conn.execute(f"SET request.jwt.claim.sub = '{user_b}'")
+        task_b_id = await conn.fetchval(
+            "INSERT INTO public.tasks (user_id, title, status) VALUES ($1, 'Task B', 'todo') RETURNING id;",
+            user_b,
+        )
+        assert task_b_id is not None
+
+        # 3. User B attempts cross-tenant target linking: User B task -> User A project -> REJECTED
+        with pytest.raises(asyncpg.PostgresError) as exc_target:
+            await conn.execute(
+                """
+                INSERT INTO public.record_links (user_id, source_type, source_id, target_type, target_id, relationship_type)
+                VALUES ($1, 'task', $2, 'project', $3, 'related');
+                """,
+                user_b,
+                task_b_id,
+                proj_a_id,
+            )
+        assert "not found or not owned by user" in str(exc_target.value)
+
+        # 4. User B attempts cross-tenant source linking: User A task -> User B task -> REJECTED
+        with pytest.raises(asyncpg.PostgresError) as exc_source:
+            await conn.execute(
+                """
+                INSERT INTO public.record_links (user_id, source_type, source_id, target_type, target_id, relationship_type)
+                VALUES ($1, 'task', $2, 'task', $3, 'related');
+                """,
+                user_b,
+                task_a_id,
+                task_b_id,
+            )
+        assert "not found or not owned by user" in str(exc_source.value)
+
+        # 5. User B attempts to spoof User A's user_id -> REJECTED
+        with pytest.raises(asyncpg.PostgresError) as exc_spoof:
+            await conn.execute(
+                """
+                INSERT INTO public.record_links (user_id, source_type, source_id, target_type, target_id, relationship_type)
+                VALUES ($1, 'task', $2, 'project', $3, 'related');
+                """,
+                user_a,  # Spoofed user_id
+                task_a_id,
+                proj_a_id,
+            )
+        assert "must equal auth.uid()" in str(exc_spoof.value) or "row-level security" in str(exc_spoof.value).lower()
+
+        # 6. Nonexistent UUID -> REJECTED
+        fake_id = uuid4()
+        with pytest.raises(asyncpg.PostgresError) as exc_fake:
+            await conn.execute(
+                """
+                INSERT INTO public.record_links (user_id, source_type, source_id, target_type, target_id, relationship_type)
+                VALUES ($1, 'task', $2, 'task', $3, 'related');
+                """,
+                user_b,
+                task_b_id,
+                fake_id,
+            )
+        assert "not found or not owned by user" in str(exc_fake.value)
+
+    finally:
+        await conn.close()
+        admin_conn = await asyncpg.connect(host=postgresql_server["host"], port=postgresql_server["port"], database="postgres")
+        await admin_conn.execute(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
+        await admin_conn.close()

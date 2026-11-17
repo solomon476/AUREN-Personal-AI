@@ -180,8 +180,9 @@ async def test_legacy_memory_records_null_confidence_preservation(postgresql_ser
     async with isolated_postgres_db(postgresql_server, prefix="mem_legacy", apply_all_migrations=False) as (conn, db_name):
         # Apply 001 through 010 first
         migration_files = sorted(glob.glob(str(MIGRATIONS_DIR / "202611*.sql")))
+        legacy_prefixes = tuple(f"{i:03d}_" for i in range(1, 11))
         for mf in migration_files:
-            if any(x in mf for x in ("011_", "012_", "013_", "014_", "015_", "016_", "017_")):
+            if not any(x in mf for x in legacy_prefixes):
                 continue
             sql = Path(mf).read_text(encoding="utf-8")
             await conn.execute(sql)

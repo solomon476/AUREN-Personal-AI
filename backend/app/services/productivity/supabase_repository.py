@@ -32,6 +32,7 @@ from app.models.productivity import (
     TaskStatus,
     TaskUpdate,
 )
+from app.models.search import RecordLinkCreate, RecordLinkItem, RelationshipType, SourceType
 from app.services.productivity.base_repository import BaseProductivityRepository
 
 logger = logging.getLogger(__name__)
@@ -721,3 +722,108 @@ class SupabaseProductivityRepository(BaseProductivityRepository):
             total_active_goals=dashboard.active_goals_count,
         )
 
+
+    # ------------------------------------------------------------------------
+    # Record Links (Phase 3C.5.2 / API-01)
+    # ------------------------------------------------------------------------
+
+    async def create_record_link(
+        self, user_id: UUID, link: RecordLinkCreate
+    ) -> RecordLinkItem:
+        """Create a user-confirmed record link via Supabase PostgREST.
+
+        Ownership validation is enforced by the database trigger
+        validate_record_link_endpoints() (Migration 022 / SEC-01).
+        """
+        payload = {
+            "user_id": str(user_id),
+            "source_type": link.source_type.value,
+            "source_id": str(link.source_id),
+            "target_type": link.target_type.value,
+            "target_id": str(link.target_id),
+            "relationship_type": link.relationship_type.value,
+            "confidence": link.confidence,
+            "is_inferred": False,
+            "notes": link.notes,
+        }
+        resp = await self._request(
+            "POST",
+            "record_links",
+            json_data=payload,
+            prefer="return=representation",
+        )
+        if resp.status_code not in (200, 201):
+            raise DatabaseError(
+                f"Failed to create record link: {resp.status_code} {resp.text}"
+            )
+        data = resp.json()
+        row = data[0] if isinstance(data, list) else data
+        return RecordLinkItem(
+            id=UUID(row["id"]),
+            user_id=UUID(row["user_id"]),
+            source_type=SourceType(row["source_type"]),
+            source_id=UUID(row["source_id"]),
+            target_type=SourceType(row["target_type"]),
+            target_id=UUID(row["target_id"]),
+            relationship_type=RelationshipType(row["relationship_type"]),
+            confidence=float(row["confidence"]),
+            is_inferred=bool(row["is_inferred"]),
+            notes=row.get("notes"),
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+    async def list_record_links(
+        self, user_id: UUID, source_type: SourceType, source_id: UUID
+    ) -> List[RecordLinkItem]:
+        """List record links for the given source, owned by user."""
+        resp = await self._request(
+            "GET",
+            "record_links",
+            params={
+                "user_id": f"eq.{user_id}",
+                "source_type": f"eq.{source_type.value}",
+                "source_id": f"eq.{source_id}",
+                "order": "created_at.desc",
+            },
+        )
+        if resp.status_code not in (200, 206):
+            raise DatabaseError(
+                f"Failed to list record links: {resp.status_code} {resp.text}"
+            )
+        return [
+            RecordLinkItem(
+                id=UUID(row["id"]),
+                user_id=UUID(row["user_id"]),
+                source_type=SourceType(row["source_type"]),
+                source_id=UUID(row["source_id"]),
+                target_type=SourceType(row["target_type"]),
+                target_id=UUID(row["target_id"]),
+                relationship_type=RelationshipType(row["relationship_type"]),
+                confidence=float(row["confidence"]),
+                is_inferred=bool(row["is_inferred"]),
+                notes=row.get("notes"),
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
+            for row in resp.json()
+        ]
+
+    async def delete_record_link(self, user_id: UUID, link_id: UUID) -> bool:
+        """Delete a record link the user owns. Returns True if deleted."""
+        resp = await self._request(
+            "DELETE",
+            "record_links",
+            params={
+                "id": f"eq.{link_id}",
+                "user_id": f"eq.{user_id}",
+            },
+            prefer="return=minimal",
+        )
+        if resp.status_code == 404:
+            return False
+        if resp.status_code not in (200, 204):
+            raise DatabaseError(
+                f"Failed to delete record link: {resp.status_code} {resp.text}"
+            )
+        return True

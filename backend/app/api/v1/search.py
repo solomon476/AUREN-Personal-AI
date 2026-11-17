@@ -42,10 +42,12 @@ def _get_omnisearch_service(user: AuthenticatedUser = Depends(get_current_user))
 @router.get(
     "",
     response_model=OmnisearchResponse,
-    summary="Unified search across all personal data entities",
+    summary="Unified lexical search across all personal data entities",
     description=(
         "Search conversations, messages, memories, tasks, projects, and goals "
-        "in a single request. Results are ranked by relevance and recency. "
+        "in a single request. Omnisearch performs lexical keyword matching across "
+        "all entity records and ranks results by token coverage and recency. "
+        "(For semantic vector retrieval, see chat context memory injection.) "
         "Journal entries are excluded. All results belong exclusively to the "
         "authenticated user."
     ),

@@ -36,6 +36,7 @@ from app.models.productivity import (
     TaskStatus,
     TaskUpdate,
 )
+from app.models.search import RecordLinkCreate, RecordLinkItem, RelationshipType, SourceType
 from app.services.productivity.base_repository import BaseProductivityRepository
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,25 @@ class SQLiteProductivityRepository(BaseProductivityRepository):
                 CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id);
                 CREATE INDEX IF NOT EXISTS idx_tasks_user_status_due ON tasks(user_id, status, due_date);
                 CREATE INDEX IF NOT EXISTS idx_tasks_user_created ON tasks(user_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS record_links (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    target_type TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    relationship_type TEXT NOT NULL DEFAULT 'related',
+                    confidence REAL NOT NULL DEFAULT 1.0,
+                    is_inferred INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(user_id, source_type, source_id, target_type, target_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_record_links_source ON record_links(user_id, source_type, source_id);
+                CREATE INDEX IF NOT EXISTS idx_record_links_target ON record_links(user_id, target_type, target_id);
             """)
             conn.commit()
 
@@ -1449,3 +1469,163 @@ class SQLiteProductivityRepository(BaseProductivityRepository):
     ) -> ProductivityContextSummary:
         return await asyncio.to_thread(self._sync_get_productivity_context, user_id, max_items)
 
+
+    # ------------------------------------------------------------------------
+    # Record Links (Phase 3C.5.2 / API-01)
+    # ------------------------------------------------------------------------
+
+    def _validate_link_endpoint(
+        self, conn: sqlite3.Connection, user_id: str, entity_type: str, entity_id: str
+    ) -> None:
+        """Raise ValueError if entity does not exist and belong to user_id."""
+        table_map = {
+            "task": "tasks",
+            "project": "projects",
+            "goal": "goals",
+        }
+        if entity_type in table_map:
+            table = table_map[entity_type]
+            row = conn.execute(
+                f"SELECT id FROM {table} WHERE id = ? AND user_id = ?",
+                (entity_id, user_id),
+            ).fetchone()
+            if not row:
+                raise ValueError(
+                    f"record_links: {entity_type} {entity_id} not found or not owned by user"
+                )
+        elif entity_type == "memory":
+            row = conn.execute(
+                "SELECT id FROM memories WHERE id = ? AND user_id = ?",
+                (entity_id, user_id),
+            ).fetchone()
+            if not row:
+                raise ValueError(
+                    f"record_links: memory {entity_id} not found or not owned by user"
+                )
+        elif entity_type == "conversation":
+            row = conn.execute(
+                "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
+                (entity_id, user_id),
+            ).fetchone()
+            if not row:
+                raise ValueError(
+                    f"record_links: conversation {entity_id} not found or not owned by user"
+                )
+        elif entity_type == "message":
+            row = conn.execute(
+                """
+                SELECT m.id FROM messages m
+                JOIN conversations c ON c.id = m.conversation_id
+                WHERE m.id = ? AND c.user_id = ?
+                """,
+                (entity_id, user_id),
+            ).fetchone()
+            if not row:
+                raise ValueError(
+                    f"record_links: message {entity_id} not found or not owned by user"
+                )
+        else:
+            raise ValueError(f"record_links: invalid entity_type '{entity_type}'")
+
+    def _sync_create_record_link(
+        self, user_id: UUID, link: RecordLinkCreate
+    ) -> RecordLinkItem:
+        now = datetime.now(timezone.utc).isoformat()
+        link_id = uuid4()
+        with self._get_connection() as conn:
+            self._validate_link_endpoint(
+                conn, str(user_id), link.source_type.value, str(link.source_id)
+            )
+            self._validate_link_endpoint(
+                conn, str(user_id), link.target_type.value, str(link.target_id)
+            )
+            conn.execute(
+                """
+                INSERT INTO record_links
+                    (id, user_id, source_type, source_id, target_type, target_id,
+                     relationship_type, confidence, is_inferred, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                """,
+                (
+                    str(link_id),
+                    str(user_id),
+                    link.source_type.value,
+                    str(link.source_id),
+                    link.target_type.value,
+                    str(link.target_id),
+                    link.relationship_type.value,
+                    link.confidence,
+                    link.notes,
+                    now,
+                    now,
+                ),
+            )
+            conn.commit()
+        return RecordLinkItem(
+            id=link_id,
+            user_id=user_id,
+            source_type=link.source_type,
+            source_id=link.source_id,
+            target_type=link.target_type,
+            target_id=link.target_id,
+            relationship_type=link.relationship_type,
+            confidence=link.confidence,
+            is_inferred=False,
+            notes=link.notes,
+            created_at=datetime.fromisoformat(now),
+            updated_at=datetime.fromisoformat(now),
+        )
+
+    def _sync_list_record_links(
+        self, user_id: UUID, source_type: SourceType, source_id: UUID
+    ) -> List[RecordLinkItem]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, user_id, source_type, source_id, target_type, target_id,
+                       relationship_type, confidence, is_inferred, notes, created_at, updated_at
+                FROM record_links
+                WHERE user_id = ? AND source_type = ? AND source_id = ?
+                ORDER BY created_at DESC
+                """,
+                (str(user_id), source_type.value, str(source_id)),
+            ).fetchall()
+        return [
+            RecordLinkItem(
+                id=UUID(row["id"]),
+                user_id=UUID(row["user_id"]),
+                source_type=SourceType(row["source_type"]),
+                source_id=UUID(row["source_id"]),
+                target_type=SourceType(row["target_type"]),
+                target_id=UUID(row["target_id"]),
+                relationship_type=RelationshipType(row["relationship_type"]),
+                confidence=row["confidence"],
+                is_inferred=bool(row["is_inferred"]),
+                notes=row["notes"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
+            for row in rows
+        ]
+
+    def _sync_delete_record_link(self, user_id: UUID, link_id: UUID) -> bool:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM record_links WHERE id = ? AND user_id = ?",
+                (str(link_id), str(user_id)),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    async def create_record_link(self, user_id: UUID, link: RecordLinkCreate) -> RecordLinkItem:
+        return await asyncio.to_thread(self._sync_create_record_link, user_id, link)
+
+    async def list_record_links(
+        self, user_id: UUID, source_type: SourceType, source_id: UUID
+    ) -> List[RecordLinkItem]:
+        return await asyncio.to_thread(
+            self._sync_list_record_links, user_id, source_type, source_id
+        )
+
+    async def delete_record_link(self, user_id: UUID, link_id: UUID) -> bool:
+        return await asyncio.to_thread(self._sync_delete_record_link, user_id, link_id)
