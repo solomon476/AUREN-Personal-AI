@@ -66,7 +66,7 @@ async def omnisearch(
     service: OmnisearchService = Depends(_get_omnisearch_service),
 ) -> OmnisearchResponse:
     return await service.search(
-        user_id=user.user_id,
+        user_id=user.id,
         query=q,
         sources=sources,
         date_from=date_from,

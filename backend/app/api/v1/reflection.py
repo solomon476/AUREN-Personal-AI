@@ -65,7 +65,7 @@ async def get_insights(
     user: AuthenticatedUser = Depends(get_current_user),
     service: ReflectionService = Depends(_get_reflection_service),
 ) -> ReflectionInsightsResponse:
-    return await service.get_insights(user.user_id)
+    return await service.get_insights(user.id)
 
 
 @router.get(
@@ -77,7 +77,7 @@ async def get_contradictions(
     user: AuthenticatedUser = Depends(get_current_user),
     service: ReflectionService = Depends(_get_reflection_service),
 ):
-    contradictions = await service.get_contradictions(user.user_id)
+    contradictions = await service.get_contradictions(user.id)
     return {"contradictions": [c.model_dump() for c in contradictions], "count": len(contradictions)}
 
 
@@ -90,7 +90,7 @@ async def get_staleness(
     user: AuthenticatedUser = Depends(get_current_user),
     service: ReflectionService = Depends(_get_reflection_service),
 ):
-    items = await service.get_staleness(user.user_id)
+    items = await service.get_staleness(user.id)
     return {"items": [i.model_dump() for i in items], "count": len(items)}
 
 
@@ -110,7 +110,7 @@ async def get_relationships(
     user: AuthenticatedUser = Depends(get_current_user),
     service: ReflectionService = Depends(_get_reflection_service),
 ) -> RelationshipsResponse:
-    return await service.get_relationships(user.user_id, source_type, source_id)
+    return await service.get_relationships(user.id, source_type, source_id)
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ async def create_link(
     service: ReflectionService = Depends(_get_reflection_service),
 ) -> RecordLinkItem:
     try:
-        return await service.create_link(user.user_id, link)
+        return await service.create_link(user.id, link)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
@@ -156,7 +156,7 @@ async def list_links(
     user: AuthenticatedUser = Depends(get_current_user),
     service: ReflectionService = Depends(_get_reflection_service),
 ) -> List[RecordLinkItem]:
-    return await service.list_links(user.user_id, source_type, source_id)
+    return await service.list_links(user.id, source_type, source_id)
 
 
 @router.delete(
@@ -170,7 +170,7 @@ async def delete_link(
     user: AuthenticatedUser = Depends(get_current_user),
     service: ReflectionService = Depends(_get_reflection_service),
 ):
-    deleted = await service.delete_link(user.user_id, link_id)
+    deleted = await service.delete_link(user.id, link_id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

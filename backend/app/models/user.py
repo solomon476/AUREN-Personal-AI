@@ -15,6 +15,11 @@ class AuthenticatedUser(BaseModel):
     app_metadata: Dict[str, Any] = Field(default_factory=dict)
     user_metadata: Dict[str, Any] = Field(default_factory=dict)
 
+    @property
+    def user_id(self) -> UUID:
+        """Compatibility property aliasing the canonical id attribute (Supabase Auth sub UUID)."""
+        return self.id
+
 
 class UserProfileResponse(BaseModel):
     """Response schema for the authenticated user's profile (/api/v1/auth/me)."""
