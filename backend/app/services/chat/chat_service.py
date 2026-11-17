@@ -404,6 +404,54 @@ class ChatService:
         except Exception as prod_err:
             logger.warning("Failed injecting productivity context (safe continue): %s", prod_err)
 
+        # -------------------------------------------------------------------
+        # Phase 3C.5: Omnisearch / Reflective context injection (READ-ONLY)
+        # Injected only when the query appears to ask about historical context.
+        # Strictly bounded: max 5 results, no journal entries, no mutations.
+        # -------------------------------------------------------------------
+        SEARCH_TRIGGER_PATTERNS = [
+            "remember", "recall", "did i", "have i", "when did", "last time",
+            "previously", "before", "history", "earlier", "find", "search",
+            "past", "ago", "what was", "what were", "show me", "where did",
+        ]
+        message_lower = request.message.lower()
+        should_inject_search = any(pat in message_lower for pat in SEARCH_TRIGGER_PATTERNS)
+        if should_inject_search:
+            try:
+                from app.services.search.omnisearch_service import OmnisearchService
+                from app.services.memory.repository import get_memory_repository
+                from app.services.productivity.repository import get_productivity_repository as _get_prod_repo
+
+                _search_svc = OmnisearchService(
+                    chat_repo=repo,
+                    memory_repo=get_memory_repository(user_token=user_token),
+                    productivity_repo=_get_prod_repo(user_token=user_token),
+                )
+                _search_resp = await _search_svc.search(
+                    user_id=user.id,
+                    query=request.message,
+                    page=1,
+                    page_size=5,
+                )
+                if _search_resp.results:
+                    _search_lines = [
+                        "## Retrieved Context (Omnisearch — read-only, user-verified records prioritised)",
+                        "These are relevant records from the user's personal data. Use as context "
+                        "but do NOT present ai-extracted unconfirmed items as established facts.",
+                        "",
+                    ]
+                    for _item in _search_resp.results:
+                        _search_lines.append(
+                            f"- [{_item.source_type.value.upper()}] {_item.title} "
+                            f"(provenance: {_item.provenance}): {_item.snippet}"
+                        )
+                    llm_messages.append(ChatMessage(
+                        role="system",
+                        content="\n".join(_search_lines),
+                    ))
+            except Exception as _search_err:
+                logger.warning("Omnisearch context injection failed (safe continue): %s", _search_err)
+
         for msg in history:
             llm_messages.append(ChatMessage(role=msg.role, content=msg.content))
 

@@ -21,6 +21,8 @@ import { TasksView } from './features/tasks/TasksView';
 import { ProjectsView } from './features/projects/ProjectsView';
 import { GoalsView } from './features/goals/GoalsView';
 import { ProductivityDashboardView } from './features/productivity/ProductivityDashboardView';
+import { OmnisearchView } from './features/search/OmnisearchView';
+import { ReflectionView } from './features/reflection/ReflectionView';
 import { SectionPlaceholder } from './components/placeholders/SectionPlaceholder';
 import { NotFound } from './components/common/NotFound';
 
@@ -95,6 +97,20 @@ export const productivityRoute = createRoute({
   component: ProductivityDashboardView,
 });
 
+// Omnisearch — Phase 3C.5
+export const searchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/search',
+  component: OmnisearchView,
+});
+
+// Reflective Intelligence — Phase 3C.5
+export const reflectionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reflection',
+  component: ReflectionView,
+});
+
 // Private Journaling Placeholder (Phase 3C.5)
 export const journalRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -148,6 +164,8 @@ export const routeTree = rootRoute.addChildren([
   projectsRoute,
   goalsRoute,
   productivityRoute,
+  searchRoute,
+  reflectionRoute,
   journalRoute,
   settingsRoute,
 ]);

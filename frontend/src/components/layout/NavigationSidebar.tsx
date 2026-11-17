@@ -15,7 +15,9 @@ import {
   BookOpen, 
   Settings,
   LogIn,
-  Activity
+  Activity,
+  Search,
+  Sparkles,
 } from 'lucide-react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
@@ -76,6 +78,20 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       icon: Brain,
       badge: 'Explorer',
       badgeColor: 'bg-cyan-950/80 text-cyan-300 border-cyan-800/40',
+    },
+    {
+      to: '/search',
+      label: 'Omnisearch',
+      icon: Search,
+      badge: 'Phase 3C.5',
+      badgeColor: 'bg-violet-950/80 text-violet-300 border-violet-800/40',
+    },
+    {
+      to: '/reflection',
+      label: 'Reflective Intelligence',
+      icon: Sparkles,
+      badge: 'Phase 3C.5',
+      badgeColor: 'bg-violet-950/80 text-violet-300 border-violet-800/40',
     },
     {
       to: '/system',
