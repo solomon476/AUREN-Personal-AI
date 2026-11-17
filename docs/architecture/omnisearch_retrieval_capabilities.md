@@ -49,3 +49,4 @@ Where:
 
 ### UI Labeling Requirement (UX-01)
 In the frontend UI, this score is displayed as **`X% keyword coverage`** with a clarifying tooltip, rather than an ambiguous "match %" or "confidence %", ensuring users understand it measures lexical presence rather than epistemic certainty or semantic similarity.
+

@@ -9,7 +9,7 @@ test.describe('AUREN Smoke Suite', () => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/chat/);
     await expect(page.getByRole('link', { name: /auren/i }).first()).toBeVisible();
-    await expect(page.getByText('Phase 3C.1')).toBeVisible();
+    await expect(page.getByText('Phase 3C', { exact: true })).toBeVisible();
   });
 
   test('navigates to system health and database schema matrix', async ({ page }) => {

@@ -25,10 +25,10 @@ export const SystemView: React.FC = () => {
     { name: 'conversations', records: 'AI Chat Dialogues', rls: 'auth.uid() = user_id' },
     { name: 'messages', records: 'Chat Messages & Metadata', rls: 'auth.uid() = user_id' },
     { name: 'memories', records: 'Structured Long-term Memory', rls: 'auth.uid() = user_id' },
+    { name: 'record_links', records: 'Cross-Entity Graph Relationships', rls: 'auth.uid() = user_id (Trigger Verified)' },
+    { name: 'chat_requests', records: 'Idempotency & Lifecycle Leases', rls: 'auth.uid() = user_id' },
     { name: 'journal_entries', records: 'Private Journaling & Moods', rls: 'auth.uid() = user_id' },
     { name: 'goals', records: 'Personal Goals & Progress', rls: 'auth.uid() = user_id' },
-    { name: 'milestones', records: 'Measurable Milestones', rls: 'auth.uid() = user_id' },
-    { name: 'briefings', records: 'Daily Synthesized Briefings', rls: 'auth.uid() = user_id' },
   ];
 
   return (

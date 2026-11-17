@@ -139,7 +139,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               AUREN
             </span>
             <span className="ml-1.5 text-[9px] text-slate-400 uppercase tracking-widest font-semibold px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800">
-              Phase 3C.1
+              Phase 3C
             </span>
           </div>
         </Link>

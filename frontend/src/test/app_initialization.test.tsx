@@ -44,7 +44,7 @@ describe('Application Initialization', () => {
     await waitFor(() => {
       // Verify brand heading
       expect(screen.getAllByText('AUREN').length).toBeGreaterThan(0);
-      expect(screen.getByText('Phase 3C.1')).toBeInTheDocument();
+      expect(screen.getByText('Phase 3C')).toBeInTheDocument();
 
       // Verify primary navigation items
       expect(screen.getByText('AI Assistant')).toBeInTheDocument();
