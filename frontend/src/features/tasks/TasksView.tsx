@@ -1,6 +1,7 @@
 /**
  * Tasks Management View for AUREN Phase 3C.4 Productivity Core.
  * Provides interactive task organization, status transitions, priority filtering, and project association.
+ * Elevated with AUREN Obsidian & Champagne Design System.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -32,10 +33,10 @@ import { TaskModal } from '../../components/productivity/TaskModal';
 import { useAuth } from '../../context/AuthContext';
 
 const PRIORITY_BADGES: Record<TaskPriority, { label: string; color: string }> = {
-  low: { label: 'Low', color: 'bg-slate-800 text-slate-300 border-slate-700' },
-  medium: { label: 'Medium', color: 'bg-blue-950/80 text-blue-300 border-blue-800/40' },
-  high: { label: 'High', color: 'bg-amber-950/80 text-amber-300 border-amber-800/40' },
-  urgent: { label: 'Urgent', color: 'bg-rose-950/80 text-rose-300 border-rose-800/40' },
+  low: { label: 'Low', color: 'bg-slate-800/80 text-slate-300 border-slate-700' },
+  medium: { label: 'Medium', color: 'bg-indigo-950/70 text-indigo-300 border-indigo-800/40' },
+  high: { label: 'High', color: 'bg-amber-950/70 text-amber-300 border-amber-800/40' },
+  urgent: { label: 'Urgent', color: 'bg-rose-950/70 text-rose-300 border-rose-800/40' },
 };
 
 export const TasksView: React.FC = () => {
@@ -112,22 +113,24 @@ export const TasksView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden text-slate-100">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-slate-800 bg-slate-900/40 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur gap-4">
         <div>
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+          <div className="flex items-center space-x-3.5">
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-sm">
               <CheckSquare className="w-5 h-5" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-100">Tasks & Timetable</h1>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-slate-100">Tasks &amp; Timetable</h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Personal task tracking with priority tiers, project binding, and deadline awareness.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Personal task tracking with priority tiers, project binding, and deadline awareness.
-          </p>
         </div>
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center justify-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-indigo-600/20 self-start md:self-auto"
+          className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-indigo-600/20 self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />
           <span>New Task</span>
@@ -137,7 +140,7 @@ export const TasksView: React.FC = () => {
       {/* Filter and Tab Bar */}
       <div className="p-6 pb-2 space-y-4">
         {/* Status Tabs */}
-        <div className="flex items-center space-x-2 border-b border-slate-800 pb-2 overflow-x-auto">
+        <div className="flex items-center space-x-2 border-b border-slate-800/80 pb-3 overflow-x-auto scrollbar-none">
           {[
             { id: 'all', label: 'All Tasks' },
             { id: 'todo', label: 'To Do' },
@@ -151,10 +154,10 @@ export const TasksView: React.FC = () => {
                 setActiveTab(tab.id);
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-150 whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                  ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
               }`}
             >
               {tab.label}
@@ -165,7 +168,7 @@ export const TasksView: React.FC = () => {
         {/* Filter Controls */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
               value={searchQuery}
@@ -174,7 +177,7 @@ export const TasksView: React.FC = () => {
                 setPage(1);
               }}
               placeholder="Search tasks..."
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full pl-10 pr-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
             />
           </div>
 
@@ -185,7 +188,7 @@ export const TasksView: React.FC = () => {
                 setSelectedPriority(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+              className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition"
             >
               <option value="">All Priorities</option>
               <option value="urgent">Urgent</option>
@@ -202,7 +205,7 @@ export const TasksView: React.FC = () => {
                 setSelectedProjectId(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+              className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition"
             >
               <option value="">All Projects</option>
               {projectsData?.items.map((p) => (
@@ -216,14 +219,14 @@ export const TasksView: React.FC = () => {
       </div>
 
       {/* Task List */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
         {isLoading ? (
           <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
-            <Clock className="w-5 h-5 animate-spin mr-2" />
+            <Clock className="w-5 h-5 animate-spin mr-2 text-indigo-400" />
             Loading tasks...
           </div>
         ) : error ? (
-          <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl text-center space-y-2">
+          <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-center space-y-2 shadow-sm">
             <AlertCircle className="w-5 h-5 text-indigo-400 mx-auto" />
             <div className="text-sm font-semibold text-slate-200">
               {!user ? 'Sign In to Access Tasks' : 'Failed to load tasks'}
@@ -235,7 +238,7 @@ export const TasksView: React.FC = () => {
             </p>
           </div>
         ) : tasksData?.items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 border border-dashed border-slate-800 rounded-xl p-8 text-center bg-slate-900/20">
+          <div className="flex flex-col items-center justify-center h-64 border border-dashed border-slate-800/80 rounded-2xl p-8 text-center bg-slate-900/20">
             <CheckSquare className="w-12 h-12 text-slate-600 mb-3" />
             <h3 className="text-sm font-semibold text-slate-300">No tasks found</h3>
             <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4">
@@ -245,13 +248,13 @@ export const TasksView: React.FC = () => {
             </p>
             <button
               onClick={handleOpenCreate}
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors border border-slate-700"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition-colors border border-slate-700"
             >
               Create Task
             </button>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {tasksData?.items.map((task) => {
               const priorityInfo = PRIORITY_BADGES[task.priority] || PRIORITY_BADGES.medium;
               const overdue = isOverdue(task);
@@ -259,15 +262,15 @@ export const TasksView: React.FC = () => {
               return (
                 <div
                   key={task.id}
-                  className={`group flex items-start justify-between p-3.5 rounded-xl border transition-all ${
+                  className={`group flex items-start justify-between p-4 rounded-2xl border transition-all duration-200 shadow-subtle-elevation ${
                     task.status === 'completed'
-                      ? 'bg-slate-900/30 border-slate-800/60 opacity-75'
+                      ? 'bg-slate-900/30 border-slate-800/50 opacity-70'
                       : overdue
-                      ? 'bg-rose-950/10 border-rose-900/40 hover:border-rose-800/80'
-                      : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                      ? 'bg-rose-950/15 border-rose-900/40 hover:border-rose-800/80'
+                      : 'bg-slate-900/70 border-slate-800/80 hover:border-slate-700/90 hover:bg-slate-900'
                   }`}
                 >
-                  <div className="flex items-start space-x-3 flex-1 min-w-0">
+                  <div className="flex items-start space-x-3.5 flex-1 min-w-0">
                     <button
                       onClick={() => handleToggleComplete(task)}
                       className="mt-0.5 text-slate-500 hover:text-indigo-400 transition-colors"
@@ -276,14 +279,14 @@ export const TasksView: React.FC = () => {
                       {task.status === 'completed' ? (
                         <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                       ) : (
-                        <Circle className="w-5 h-5" />
+                        <Circle className="w-5 h-5 hover:text-indigo-400" />
                       )}
                     </button>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 flex-wrap">
+                      <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
                         <span
-                          className={`text-sm font-medium ${
+                          className={`text-xs sm:text-sm font-medium ${
                             task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-100'
                           }`}
                         >
@@ -291,32 +294,32 @@ export const TasksView: React.FC = () => {
                         </span>
 
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${priorityInfo.color}`}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${priorityInfo.color}`}
                         >
                           {priorityInfo.label}
                         </span>
 
                         {task.status === 'in_progress' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800/50">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-800/50">
                             In Progress
                           </span>
                         )}
 
                         {task.status === 'blocked' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-950 text-amber-300 border border-amber-800/50">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/50">
                             Blocked
                           </span>
                         )}
                       </div>
 
                       {task.description && (
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">{task.description}</p>
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">{task.description}</p>
                       )}
 
                       {/* Metadata Badges */}
                       <div className="flex items-center space-x-3 mt-2 text-[11px] text-slate-400 flex-wrap gap-y-1">
                         {task.project_name && (
-                          <span className="flex items-center text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700/50">
+                          <span className="flex items-center text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/50 font-medium">
                             <FolderKanban className="w-3 h-3 mr-1 text-indigo-400" />
                             {task.project_name}
                           </span>
@@ -338,7 +341,7 @@ export const TasksView: React.FC = () => {
                           <div className="flex items-center space-x-1">
                             <Tag className="w-3 h-3 text-slate-500" />
                             {task.tags.map((tag) => (
-                              <span key={tag} className="text-slate-400">
+                              <span key={tag} className="text-slate-400 font-mono text-[10px]">
                                 #{tag}
                               </span>
                             ))}
@@ -381,4 +384,3 @@ export const TasksView: React.FC = () => {
     </div>
   );
 };
-

@@ -1,6 +1,7 @@
 /**
  * Productivity Overview and Dashboard View for AUREN Phase 3C.4 Productivity Core.
  * Aggregates live KPI metrics from persisted tasks, projects, and goals.
+ * Elevated with AUREN Obsidian & Champagne Design System.
  */
 
 import React from 'react';
@@ -27,7 +28,7 @@ export const ProductivityDashboardView: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-slate-950 text-slate-500 text-sm">
-        <Clock className="w-5 h-5 animate-spin mr-2" />
+        <Clock className="w-5 h-5 animate-spin mr-2 text-indigo-400" />
         Loading productivity overview...
       </div>
     );
@@ -36,12 +37,12 @@ export const ProductivityDashboardView: React.FC = () => {
   if (error || !dashboard) {
     return (
       <div className="p-6 bg-slate-950 text-slate-100 flex-1">
-        <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-xl text-center space-y-2 max-w-lg mx-auto mt-12">
+        <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl text-center space-y-2 max-w-lg mx-auto mt-12 shadow-subtle-elevation">
           <AlertTriangle className="w-6 h-6 text-indigo-400 mx-auto" />
           <div className="text-sm font-semibold text-slate-200">
             {!user ? 'Sign In to View Productivity Metrics' : 'Productivity Metrics Unavailable'}
           </div>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
             {!user
               ? 'Sign in or register an account to track execution velocity, active task breakdowns, and goal progress.'
               : 'Unable to retrieve your productivity overview. Please verify your connection or try again later.'}
@@ -52,39 +53,41 @@ export const ProductivityDashboardView: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-y-auto text-slate-100 p-6 space-y-6">
+    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-y-auto text-slate-100 p-6 space-y-6 scrollbar-thin">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+      <div className="flex items-center justify-between pb-4 border-b border-slate-800/80">
         <div>
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+          <div className="flex items-center space-x-3.5">
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-sm">
               <LayoutDashboard className="w-5 h-5" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-100">Productivity Overview</h1>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-slate-100">Productivity Overview</h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Real-time status of your active commitments, upcoming deadlines, and strategic execution.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Real-time status of your active commitments, upcoming deadlines, and strategic execution.
-          </p>
         </div>
       </div>
 
       {/* KPI Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
+        <div className="p-4.5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-subtle-elevation">
+          <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Active Tasks</span>
             <CheckSquare className="w-4 h-4 text-indigo-400" />
           </div>
           <div className="text-2xl font-bold text-slate-100">{dashboard.active_tasks_count}</div>
-          <span className="text-[10px] text-slate-500">To do & in progress</span>
+          <span className="text-[10px] text-slate-500">To do &amp; in progress</span>
         </div>
 
-        <div className={`p-4 rounded-xl border ${
+        <div className={`p-4.5 rounded-2xl border shadow-subtle-elevation ${
           dashboard.overdue_tasks_count > 0
             ? 'bg-rose-950/20 border-rose-900/50 text-rose-300'
-            : 'bg-slate-900/60 border-slate-800'
+            : 'bg-slate-900/70 border-slate-800/80'
         }`}>
-          <div className="flex items-center justify-between text-xs mb-1">
+          <div className="flex items-center justify-between text-xs mb-1.5">
             <span className={dashboard.overdue_tasks_count > 0 ? 'text-rose-400 font-medium' : 'text-slate-400'}>
               Overdue Tasks
             </span>
@@ -94,8 +97,8 @@ export const ProductivityDashboardView: React.FC = () => {
           <span className="text-[10px] opacity-75">Needs immediate review</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+        <div className="p-4.5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-subtle-elevation">
+          <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Completed</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
@@ -103,8 +106,8 @@ export const ProductivityDashboardView: React.FC = () => {
           <span className="text-[10px] text-slate-500">All-time finished</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+        <div className="p-4.5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-subtle-elevation">
+          <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Active Projects</span>
             <FolderKanban className="w-4 h-4 text-emerald-400" />
           </div>
@@ -112,8 +115,8 @@ export const ProductivityDashboardView: React.FC = () => {
           <span className="text-[10px] text-slate-500">Workspaces in flight</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 col-span-2 md:col-span-1">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+        <div className="p-4.5 rounded-2xl bg-slate-900/70 border border-slate-800/80 col-span-2 md:col-span-1 shadow-subtle-elevation">
+          <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Active Goals</span>
             <Target className="w-4 h-4 text-purple-400" />
           </div>
@@ -125,7 +128,7 @@ export const ProductivityDashboardView: React.FC = () => {
       {/* Main Grid: Overdue & Upcoming */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Overdue / High Priority Tasks */}
-        <div className="p-5 rounded-xl bg-slate-900/40 border border-slate-800 flex flex-col">
+        <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800/80 flex flex-col shadow-subtle-elevation">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center">
               <AlertTriangle className="w-4 h-4 mr-2 text-rose-400" />
@@ -146,7 +149,7 @@ export const ProductivityDashboardView: React.FC = () => {
               {dashboard.overdue_tasks.map((task) => (
                 <div
                   key={task.id}
-                  className="p-3 rounded-lg bg-rose-950/20 border border-rose-900/40 flex items-center justify-between text-xs"
+                  className="p-3 rounded-xl bg-rose-950/20 border border-rose-900/40 flex items-center justify-between text-xs"
                 >
                   <div className="truncate mr-3">
                     <div className="font-medium text-rose-200 truncate">{task.title}</div>
@@ -166,11 +169,11 @@ export const ProductivityDashboardView: React.FC = () => {
         </div>
 
         {/* Upcoming Tasks */}
-        <div className="p-5 rounded-xl bg-slate-900/40 border border-slate-800 flex flex-col">
+        <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800/80 flex flex-col shadow-subtle-elevation">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center">
               <Calendar className="w-4 h-4 mr-2 text-indigo-400" />
-              Upcoming & Priority Tasks
+              Upcoming &amp; Priority Tasks
             </h3>
             <Link to="/tasks" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center">
               View all <ArrowRight className="w-3 h-3 ml-1" />
@@ -187,7 +190,7 @@ export const ProductivityDashboardView: React.FC = () => {
               {dashboard.upcoming_tasks.map((task) => (
                 <div
                   key={task.id}
-                  className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs"
+                  className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80 flex items-center justify-between text-xs"
                 >
                   <div className="truncate mr-3">
                     <div className="font-medium text-slate-200 truncate">{task.title}</div>
@@ -216,7 +219,7 @@ export const ProductivityDashboardView: React.FC = () => {
       {/* Projects and Goals In Progress */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Active Projects */}
-        <div className="p-5 rounded-xl bg-slate-900/40 border border-slate-800">
+        <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800/80 shadow-subtle-elevation">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center">
               <FolderKanban className="w-4 h-4 mr-2 text-emerald-400" />
@@ -232,17 +235,16 @@ export const ProductivityDashboardView: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {dashboard.active_projects.map((p) => (
-                <div key={p.id} className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-xs">
-                  <div className="flex items-center justify-between mb-1">
+                <div key={p.id} className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 text-xs">
+                  <div className="flex items-center justify-between mb-1.5">
                     <span className="font-medium text-slate-200">{p.name}</span>
-                    <span className="font-semibold text-slate-300">{p.progress_percentage}%</span>
+                    <span className="font-semibold text-slate-300 font-mono">{p.progress_percentage}%</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden mb-1">
+                  <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden mb-1.5">
                     <div
-                      className="h-full rounded-full"
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400"
                       style={{
                         width: `${p.progress_percentage}%`,
-                        backgroundColor: p.color || '#10b981',
                       }}
                     />
                   </div>
@@ -256,7 +258,7 @@ export const ProductivityDashboardView: React.FC = () => {
         </div>
 
         {/* Strategic Goals */}
-        <div className="p-5 rounded-xl bg-slate-900/40 border border-slate-800">
+        <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800/80 shadow-subtle-elevation">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center">
               <Target className="w-4 h-4 mr-2 text-purple-400" />
@@ -272,11 +274,11 @@ export const ProductivityDashboardView: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {dashboard.active_goals.map((g) => (
-                <div key={g.id} className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-xs">
+                <div key={g.id} className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 text-xs">
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-medium text-slate-200">{g.title}</span>
                     {g.progress_percentage != null && (
-                      <span className="font-semibold text-purple-300">{g.progress_percentage}%</span>
+                      <span className="font-semibold text-purple-300 font-mono">{g.progress_percentage}%</span>
                     )}
                   </div>
                   {g.target_value ? (
@@ -298,4 +300,3 @@ export const ProductivityDashboardView: React.FC = () => {
     </div>
   );
 };
-

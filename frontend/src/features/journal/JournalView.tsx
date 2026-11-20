@@ -2,6 +2,7 @@
  * Private Journal and Reflection Feature View.
  * Implements distraction-free writing, cryptographic consent isolation guarantees,
  * mood tracking, reflection prompts, and chronological history browsing.
+ * Elevated with AUREN Obsidian & Champagne Design System.
  */
 
 import React, { useState } from 'react';
@@ -173,15 +174,20 @@ export const JournalView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden text-slate-100">
       {/* Top Banner & Privacy Invariant Header */}
-      <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="px-6 py-4.5 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+          <div className="flex items-center space-x-3.5">
+            <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 shadow-sm">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-100">Private Journaling &amp; Reflection</h1>
-              <p className="text-xs text-slate-400">
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl font-bold tracking-tight text-slate-100">Private Journaling &amp; Reflection</h1>
+                <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                  Quarantined Storage
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
                 Distraction-free Markdown workspace for private daily reflections, mood tracking, and cognitive clarity.
               </p>
             </div>
@@ -189,7 +195,7 @@ export const JournalView: React.FC = () => {
         </div>
 
         {/* Cryptographic Privacy Assurance Badge */}
-        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs">
+        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs shadow-sm">
           <Lock className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
           <span className="font-mono text-[11px]">Consent Protected: Cryptographically isolated from AI chat retrieval</span>
         </div>
@@ -198,12 +204,12 @@ export const JournalView: React.FC = () => {
       {/* Main Workspace Body */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Column: Entries List & Filters */}
-        <div className="w-full md:w-80 lg:w-96 border-r border-slate-800 flex flex-col bg-slate-950">
+        <div className="w-full md:w-80 lg:w-96 border-r border-slate-800/80 flex flex-col bg-slate-950">
           {/* Action Bar */}
           <div className="p-4 border-b border-slate-800/80 space-y-3">
             <button
               onClick={() => handleOpenNewEntry()}
-              className="w-full flex items-center justify-center space-x-2 py-2 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition shadow-md shadow-indigo-600/20"
+              className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold text-xs transition shadow-md shadow-indigo-600/20"
             >
               <Plus className="w-4 h-4" />
               <span>Write Reflection</span>
@@ -217,7 +223,7 @@ export const JournalView: React.FC = () => {
                 placeholder="Search reflections..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
               />
             </div>
 
@@ -225,10 +231,10 @@ export const JournalView: React.FC = () => {
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] scrollbar-none">
               <button
                 onClick={() => setSelectedMood('')}
-                className={`px-2 py-0.5 rounded-md font-medium border ${
+                className={`px-2.5 py-1 rounded-lg font-medium border transition ${
                   selectedMood === ''
-                    ? 'bg-slate-800 text-slate-100 border-slate-700'
-                    : 'text-slate-400 border-transparent hover:text-slate-200'
+                    ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-sm'
+                    : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/60'
                 }`}
               >
                 All
@@ -237,10 +243,10 @@ export const JournalView: React.FC = () => {
                 <button
                   key={m.value}
                   onClick={() => setSelectedMood(selectedMood === m.value ? '' : m.value)}
-                  className={`px-2 py-0.5 rounded-md font-medium border whitespace-nowrap ${
+                  className={`px-2 py-1 rounded-lg font-medium border whitespace-nowrap transition ${
                     selectedMood === m.value
                       ? m.color
-                      : 'text-slate-400 border-transparent hover:text-slate-200'
+                      : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
                   {m.label}
@@ -250,26 +256,26 @@ export const JournalView: React.FC = () => {
           </div>
 
           {/* Entries Feed */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40 scrollbar-thin">
             {!user ? (
               <div className="p-8 text-center space-y-3">
                 <Lock className="w-8 h-8 text-indigo-400 mx-auto" />
                 <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
-                <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+                <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
                   Sign in to create, browse, and sync your private reflection journal with cryptographic guarantees.
                 </p>
               </div>
             ) : isLoading ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading reflections...</div>
             ) : error ? (
-              <div className="p-4 m-3 bg-red-950/40 border border-red-800/80 rounded-lg text-xs text-red-300">
+              <div className="p-4 m-3 bg-red-950/40 border border-red-800/80 rounded-xl text-xs text-red-300">
                 Failed to load journal entries.
               </div>
             ) : !journalData?.items.length ? (
               <div className="p-8 text-center space-y-3">
                 <BookOpen className="w-8 h-8 text-slate-600 mx-auto" />
                 <p className="text-xs text-slate-400">No reflections recorded yet.</p>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500 leading-relaxed">
                   Reflections help clarify thoughts, track progress, and sharpen intuition.
                 </p>
               </div>
@@ -281,35 +287,35 @@ export const JournalView: React.FC = () => {
                   <div
                     key={entry.id}
                     onClick={() => handleSelectEntry(entry)}
-                    className={`p-3.5 cursor-pointer transition select-none ${
+                    className={`p-4 cursor-pointer transition select-none ${
                       isSelected
-                        ? 'bg-indigo-950/30 border-l-2 border-l-indigo-500'
+                        ? 'bg-slate-900/90 border-l-2 border-l-indigo-500 shadow-sm'
                         : 'hover:bg-slate-900/40'
                     }`}
                   >
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-                      <span className="flex items-center space-x-1">
-                        <Calendar className="w-3 h-3" />
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5">
+                      <span className="flex items-center space-x-1 font-mono">
+                        <Calendar className="w-3 h-3 text-slate-500" />
                         <span>{entry.entry_date}</span>
                       </span>
                       {moodObj && (
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${moodObj.color}`}>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-medium border ${moodObj.color}`}>
                           {moodObj.label}
                         </span>
                       )}
                     </div>
-                    <h3 className="text-xs font-semibold text-slate-200 truncate mb-1">
+                    <h3 className="text-xs sm:text-sm font-semibold text-slate-100 truncate mb-1">
                       {entry.title || 'Untitled Reflection'}
                     </h3>
                     <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
                       {entry.content}
                     </p>
                     {entry.tags?.length > 0 && (
-                      <div className="flex items-center gap-1 mt-2">
+                      <div className="flex items-center gap-1 mt-2.5">
                         {entry.tags.slice(0, 3).map((tag, idx) => (
                           <span
                             key={idx}
-                            className="text-[9px] px-1.5 py-0.2 rounded bg-slate-900 text-slate-400 border border-slate-800"
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-mono"
                           >
                             #{tag}
                           </span>
@@ -336,13 +342,13 @@ export const JournalView: React.FC = () => {
                 </div>
                 <div className="flex items-center space-x-2">
                   {/* Write vs Preview Toggle */}
-                  <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 mr-2">
+                  <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 mr-2">
                     <button
                       type="button"
                       onClick={() => setEditorTab('write')}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
+                      className={`px-3 py-1 text-xs font-medium rounded-lg transition ${
                         editorTab === 'write'
-                          ? 'bg-indigo-600 text-white'
+                          ? 'bg-indigo-600 text-white shadow-sm'
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
@@ -351,13 +357,13 @@ export const JournalView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setEditorTab('preview')}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition flex items-center space-x-1 ${
+                      className={`px-3 py-1 text-xs font-medium rounded-lg transition flex items-center space-x-1.5 ${
                         editorTab === 'preview'
-                          ? 'bg-indigo-600 text-white'
+                          ? 'bg-indigo-600 text-white shadow-sm'
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      <Eye className="w-3 h-3" />
+                      <Eye className="w-3.5 h-3.5" />
                       <span>Preview</span>
                     </button>
                   </div>
@@ -370,14 +376,14 @@ export const JournalView: React.FC = () => {
                         setEditingEntryId(null);
                       }
                     }}
-                    className="px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-xs transition"
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-xs transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={createMutation.isPending || updateMutation.isPending || !content.trim()}
-                    className="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 disabled:opacity-50"
+                    className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 disabled:opacity-50"
                   >
                     <Save className="w-3.5 h-3.5" />
                     <span>Save</span>
@@ -386,7 +392,7 @@ export const JournalView: React.FC = () => {
               </div>
 
               {statusMessage && (
-                <div className="p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-800/60 text-xs text-indigo-200 flex items-center space-x-2">
+                <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-800/60 text-xs text-indigo-200 flex items-center space-x-2">
                   <CheckCircle2 className="w-4 h-4 text-indigo-400" />
                   <span>{statusMessage}</span>
                 </div>
@@ -400,7 +406,7 @@ export const JournalView: React.FC = () => {
                     placeholder="Reflection title (optional)..."
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
                   />
                 </div>
                 <div>
@@ -408,20 +414,20 @@ export const JournalView: React.FC = () => {
                     type="date"
                     value={entryDate}
                     onChange={(e) => setEntryDate(e.target.value)}
-                    className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition font-mono"
                   />
                 </div>
               </div>
 
               {/* Mood and Tags Controls */}
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center space-x-1.5">
+                <div className="flex items-center space-x-2">
                   <Smile className="w-3.5 h-3.5 text-slate-400" />
                   <span className="text-xs text-slate-400">Mood:</span>
                   <select
                     value={mood}
                     onChange={(e) => setMood(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition"
                   >
                     {MOOD_OPTIONS.map((m) => (
                       <option key={m.value} value={m.value}>
@@ -431,14 +437,14 @@ export const JournalView: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="flex-1 flex items-center space-x-1.5 min-w-[200px]">
+                <div className="flex-1 flex items-center space-x-2 min-w-[200px]">
                   <Tag className="w-3.5 h-3.5 text-slate-400" />
                   <input
                     type="text"
                     placeholder="Tags (comma separated, e.g. strategy, health)"
                     value={tagsInput}
                     onChange={(e) => setTagsInput(e.target.value)}
-                    className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
                   />
                 </div>
               </div>
@@ -450,10 +456,10 @@ export const JournalView: React.FC = () => {
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
                     placeholder="Begin your reflection... Markdown formatting supported."
-                    className="w-full flex-1 bg-slate-900/30 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none font-sans leading-relaxed"
+                    className="w-full flex-1 bg-slate-900/40 border border-slate-800 rounded-2xl p-4.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none font-sans leading-relaxed"
                   />
                 ) : (
-                  <div className="w-full flex-1 bg-slate-900/30 border border-slate-800 rounded-xl p-6 overflow-y-auto">
+                  <div className="w-full flex-1 bg-slate-900/40 border border-slate-800 rounded-2xl p-6 overflow-y-auto">
                     {content.trim() ? (
                       <MessageContent content={content} role="assistant" />
                     ) : (
@@ -468,37 +474,37 @@ export const JournalView: React.FC = () => {
             <div className="flex-1 flex flex-col h-full overflow-hidden p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
                 <div>
-                  <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 mb-1">
-                    <div className="flex items-center space-x-1.5">
-                      <Calendar className="w-3.5 h-3.5" />
+                  <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 mb-1.5">
+                    <div className="flex items-center space-x-1.5 font-mono">
+                      <Calendar className="w-3.5 h-3.5 text-slate-500" />
                       <span>{selectedEntry.entry_date}</span>
                     </div>
                     {selectedEntry.mood && (
                       <>
                         <span>•</span>
-                        <span className="capitalize text-indigo-400">{selectedEntry.mood}</span>
+                        <span className="capitalize text-indigo-400 font-medium">{selectedEntry.mood}</span>
                       </>
                     )}
                     {selectedEntry.integrity_verified === true && (
-                      <span className="flex items-center space-x-1 text-[10px] text-emerald-400 bg-emerald-950/50 border border-emerald-800/60 px-2 py-0.5 rounded font-mono">
-                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                      <span className="flex items-center space-x-1 text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-md font-mono">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                         <span>RFC 8785 HMAC Verified</span>
                       </span>
                     )}
                     {selectedEntry.integrity_verified === false && (
-                      <span className="flex items-center space-x-1 text-[10px] text-rose-400 bg-rose-950/50 border border-rose-800/60 px-2 py-0.5 rounded font-mono">
-                        <AlertCircle className="w-3 h-3 text-rose-400" />
+                      <span className="flex items-center space-x-1 text-[10px] text-rose-400 bg-rose-950/60 border border-rose-800/60 px-2 py-0.5 rounded-md font-mono">
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
                         <span>Integrity Failed</span>
                       </span>
                     )}
                     {selectedEntry.integrity_verified === null && (
-                      <span className="flex items-center space-x-1 text-[10px] text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded font-mono">
-                        <Shield className="w-3 h-3 text-slate-400" />
+                      <span className="flex items-center space-x-1 text-[10px] text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md font-mono">
+                        <Shield className="w-3.5 h-3.5 text-slate-400" />
                         <span>Unsigned (Legacy)</span>
                       </span>
                     )}
                   </div>
-                  <h2 className="text-lg font-bold text-slate-100">
+                  <h2 className="text-lg font-bold text-slate-100 tracking-tight">
                     {selectedEntry.title || 'Untitled Reflection'}
                   </h2>
                 </div>
@@ -507,7 +513,7 @@ export const JournalView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleStartEdit(selectedEntry)}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20"
+                    className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                     <span>Edit</span>
@@ -515,7 +521,7 @@ export const JournalView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleDeleteEntry(selectedEntry.id)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition text-xs border border-slate-800"
+                    className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition text-xs border border-slate-800"
                     title="Delete Entry"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -523,7 +529,7 @@ export const JournalView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedEntry(null)}
-                    className="px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-xs transition"
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-xs transition"
                   >
                     Close
                   </button>
@@ -544,8 +550,8 @@ export const JournalView: React.FC = () => {
               )}
 
               {/* Rendered Markdown Body */}
-              <div className="flex-1 overflow-y-auto pr-2">
-                <div className="p-5 rounded-2xl bg-slate-900/30 border border-slate-800/80 leading-relaxed text-sm">
+              <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
+                <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-800/80 leading-relaxed text-sm shadow-subtle-elevation">
                   <MessageContent content={selectedEntry.content} role="assistant" />
                 </div>
               </div>
@@ -553,31 +559,31 @@ export const JournalView: React.FC = () => {
           ) : (
             /* Focused Welcome / Reflection Prompts Screen */
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-xl mx-auto space-y-6">
-              <div className="p-3 rounded-2xl bg-gradient-to-tr from-purple-600/20 to-indigo-600/20 border border-purple-500/20 text-purple-400">
+              <div className="p-3.5 rounded-2xl bg-gradient-to-tr from-purple-600/20 to-indigo-600/20 border border-purple-500/20 text-purple-400 shadow-sm">
                 <BookOpen className="w-8 h-8" />
               </div>
 
               <div className="space-y-2">
-                <h2 className="text-lg font-bold text-slate-100">Daily Reflection &amp; Contemplation</h2>
-                <p className="text-xs text-slate-400 leading-relaxed">
+                <h2 className="text-lg font-bold text-slate-100 tracking-tight">Daily Reflection &amp; Contemplation</h2>
+                <p className="text-xs text-slate-400 leading-relaxed max-w-md">
                   Take a quiet moment to record your thoughts, decisions, and mindset. Your reflections are strictly isolated and never used to generate conversational memories without explicit consent.
                 </p>
               </div>
 
               {/* Reflection Prompts Cards */}
               <div className="w-full space-y-2 text-left">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 flex items-center space-x-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5 font-mono">
                   <Sparkles className="w-3 h-3 text-indigo-400" />
                   <span>Inspiration Prompts for Today</span>
                 </p>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {REFLECTION_PROMPTS.map((prompt, idx) => (
                     <button
                       key={idx}
                       onClick={() => handleOpenNewEntry(prompt)}
-                      className="w-full text-left p-3 rounded-xl bg-slate-900/50 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700 text-xs text-slate-300 transition flex items-center justify-between group"
+                      className="w-full text-left p-3.5 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700/90 text-xs text-slate-300 transition-all duration-150 flex items-center justify-between group shadow-subtle-elevation"
                     >
-                      <span className="leading-relaxed pr-2">{prompt}</span>
+                      <span className="leading-relaxed pr-3">{prompt}</span>
                       <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 flex-shrink-0 transition" />
                     </button>
                   ))}
@@ -586,7 +592,7 @@ export const JournalView: React.FC = () => {
 
               <button
                 onClick={() => handleOpenNewEntry()}
-                className="flex items-center space-x-2 py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition shadow-lg shadow-indigo-600/20"
+                className="flex items-center space-x-2 py-2.5 px-5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-medium text-xs transition shadow-lg shadow-indigo-600/20"
               >
                 <Plus className="w-4 h-4" />
                 <span>Start Blank Reflection</span>

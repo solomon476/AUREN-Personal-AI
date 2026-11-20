@@ -24,9 +24,9 @@ export const AppLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans selection:bg-indigo-600 selection:text-white">
       {/* Desktop Sidebar (Persistent) */}
-      <div className="hidden md:flex flex-shrink-0">
+      <div className="hidden md:flex flex-shrink-0 z-20">
         <NavigationSidebar onOpenAuth={openAuth} />
       </div>
 
@@ -34,10 +34,10 @@ export const AppLayout: React.FC = () => {
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden animate-in fade-in duration-200">
           <div
-            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          <div className="relative flex flex-col w-72 max-w-xs bg-slate-950 shadow-2xl z-10 border-r border-slate-800">
+          <div className="relative flex flex-col w-72 max-w-xs bg-slate-950 shadow-2xl z-10 border-r border-slate-800/80">
             <button
               onClick={() => setIsMobileMenuOpen(false)}
               className="absolute top-4 right-3 text-slate-400 hover:text-white p-1 rounded-lg"
@@ -54,9 +54,12 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* Main Execution View */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Subtle Ambient Background Gradient */}
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.06),rgba(255,255,255,0))]" />
+
         {/* Mobile Header Bar */}
-        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
+        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md z-10">
           <div className="flex items-center space-x-3">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
@@ -65,11 +68,11 @@ export const AppLayout: React.FC = () => {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <Link to="/chat" className="flex items-center space-x-2">
-              <div className="h-7 w-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-sky-500 p-0.5 flex items-center justify-center text-white">
+            <Link to="/home" className="flex items-center space-x-2">
+              <div className="h-7 w-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-sky-500 p-0.5 flex items-center justify-center text-white shadow-sm">
                 <Bot className="h-4 w-4 text-white" />
               </div>
-              <span className="text-base font-bold bg-gradient-to-r from-indigo-400 via-sky-300 to-emerald-400 bg-clip-text text-transparent">
+              <span className="text-sm font-extrabold tracking-widest bg-gradient-to-r from-slate-100 via-sky-200 to-indigo-200 bg-clip-text text-transparent">
                 AUREN
               </span>
             </Link>
@@ -81,7 +84,7 @@ export const AppLayout: React.FC = () => {
             ) : (
               <button
                 onClick={() => openAuth('signin')}
-                className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition"
+                className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-sm transition"
               >
                 Sign In
               </button>
@@ -90,7 +93,7 @@ export const AppLayout: React.FC = () => {
         </header>
 
         {/* Dynamic Route Content */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-950/50">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-7 relative z-0">
           <Outlet />
         </main>
       </div>

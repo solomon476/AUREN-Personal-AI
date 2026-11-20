@@ -2,9 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  color-scheme: dark;
+@layer base {
+  :root {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color-scheme: dark;
+    --auren-bg: #08090d;
+    --auren-surface: #0f1118;
+    --auren-border: #1e2333;
+  }
+
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased selection:bg-indigo-600 selection:text-white;
+    background-color: var(--auren-bg);
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.3);
 }
 
 /* ========================================================================= */
@@ -16,6 +46,8 @@ html[data-theme="obsidian"] .bg-slate-950 {
   background-color: #000000 !important;
 }
 html[data-theme="obsidian"] .bg-slate-900,
+html[data-theme="obsidian"] .bg-slate-900\/80,
+html[data-theme="obsidian"] .bg-slate-900\/70,
 html[data-theme="obsidian"] .bg-slate-900\/60,
 html[data-theme="obsidian"] .bg-slate-900\/50,
 html[data-theme="obsidian"] .bg-slate-900\/40,
@@ -25,11 +57,11 @@ html[data-theme="obsidian"] .bg-slate-900\/30 {
 html[data-theme="obsidian"] .border-slate-800,
 html[data-theme="obsidian"] .border-slate-800\/80,
 html[data-theme="obsidian"] .border-slate-800\/60 {
-  border-color: #1c1c1c !important;
+  border-color: #1a1a1a !important;
 }
 html[data-theme="obsidian"] .hover\:bg-slate-800:hover,
 html[data-theme="obsidian"] .hover\:bg-slate-900:hover {
-  background-color: #171717 !important;
+  background-color: #141414 !important;
 }
 
 html[data-theme="midnight"] body,
@@ -37,6 +69,8 @@ html[data-theme="midnight"] .bg-slate-950 {
   background-color: #060914 !important;
 }
 html[data-theme="midnight"] .bg-slate-900,
+html[data-theme="midnight"] .bg-slate-900\/80,
+html[data-theme="midnight"] .bg-slate-900\/70,
 html[data-theme="midnight"] .bg-slate-900\/60,
 html[data-theme="midnight"] .bg-slate-900\/50,
 html[data-theme="midnight"] .bg-slate-900\/40,
@@ -51,4 +85,13 @@ html[data-theme="midnight"] .border-slate-800\/60 {
 html[data-theme="midnight"] .hover\:bg-slate-800:hover,
 html[data-theme="midnight"] .hover\:bg-slate-900:hover {
   background-color: #171f45 !important;
+}
+
+/* Subtle Ambient Glow Utilities */
+.ambient-glow-indigo {
+  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+}
+
+.ambient-glow-champagne {
+  background: radial-gradient(circle at 50% 0%, rgba(202, 163, 94, 0.06) 0%, transparent 65%);
 }
