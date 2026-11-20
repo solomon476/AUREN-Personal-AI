@@ -1,0 +1,11 @@
+# Nixpacks configuration for Railway monorepo build
+providers = ["python"]
+
+[phases.setup]
+nixPkgs = ["python312", "gcc"]
+
+[phases.install]
+cmds = ["python3 -m pip install --upgrade pip", "python3 -m pip install -r backend/requirements.txt"]
+
+[start]
+cmd = "cd backend && python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-1}"
