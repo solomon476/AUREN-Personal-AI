@@ -20,6 +20,9 @@ import {
   ChevronRight,
   Smile,
   Eye,
+  Shield,
+  ShieldCheck,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -465,14 +468,34 @@ export const JournalView: React.FC = () => {
             <div className="flex-1 flex flex-col h-full overflow-hidden p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
                 <div>
-                  <div className="flex items-center space-x-2 text-xs text-slate-400 mb-1">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>{selectedEntry.entry_date}</span>
+                  <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 mb-1">
+                    <div className="flex items-center space-x-1.5">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>{selectedEntry.entry_date}</span>
+                    </div>
                     {selectedEntry.mood && (
                       <>
                         <span>•</span>
                         <span className="capitalize text-indigo-400">{selectedEntry.mood}</span>
                       </>
+                    )}
+                    {selectedEntry.integrity_verified === true && (
+                      <span className="flex items-center space-x-1 text-[10px] text-emerald-400 bg-emerald-950/50 border border-emerald-800/60 px-2 py-0.5 rounded font-mono">
+                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                        <span>RFC 8785 HMAC Verified</span>
+                      </span>
+                    )}
+                    {selectedEntry.integrity_verified === false && (
+                      <span className="flex items-center space-x-1 text-[10px] text-rose-400 bg-rose-950/50 border border-rose-800/60 px-2 py-0.5 rounded font-mono">
+                        <AlertCircle className="w-3 h-3 text-rose-400" />
+                        <span>Integrity Failed</span>
+                      </span>
+                    )}
+                    {selectedEntry.integrity_verified === null && (
+                      <span className="flex items-center space-x-1 text-[10px] text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded font-mono">
+                        <Shield className="w-3 h-3 text-slate-400" />
+                        <span>Unsigned (Legacy)</span>
+                      </span>
                     )}
                   </div>
                   <h2 className="text-lg font-bold text-slate-100">

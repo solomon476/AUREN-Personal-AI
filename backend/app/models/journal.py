@@ -41,6 +41,8 @@ class JournalEntryResponse(BaseModel):
     tags: List[str] = Field(default_factory=list)
     is_private: bool = True
     entry_date: date
+    integrity_signature: Optional[str] = None
+    integrity_verified: Optional[bool] = None
     created_at: datetime
     updated_at: datetime
 

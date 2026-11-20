@@ -14,6 +14,7 @@ from app.models.journal import (
     JournalEntryUpdate,
 )
 from app.services.journal.base_repository import BaseJournalRepository
+from app.services.journal.integrity import compute_journal_signature, verify_journal_signature
 
 logger = logging.getLogger(__name__)
 
@@ -101,15 +102,32 @@ class SupabaseJournalRepository(BaseJournalRepository):
         else:
             parsed_date = date.today()
 
+        sig = data.get("integrity_signature")
+        integrity_verified = None
+        if sig:
+            integrity_verified = verify_journal_signature(
+                entry_id=UUID(str(data["id"])),
+                user_id=UUID(str(data["user_id"])),
+                title=data.get("title"),
+                content=data["content"],
+                mood=data.get("mood"),
+                tags=tags,
+                entry_date=parsed_date,
+                signature=sig,
+                is_private=bool(data.get("is_private", True)),
+            )
+
         return JournalEntryResponse(
-            id=UUID(data["id"]),
-            user_id=UUID(data["user_id"]),
+            id=UUID(str(data["id"])),
+            user_id=UUID(str(data["user_id"])),
             title=data.get("title"),
             content=data["content"],
             mood=data.get("mood"),
             tags=tags,
             is_private=bool(data.get("is_private", True)),
             entry_date=parsed_date,
+            integrity_signature=sig,
+            integrity_verified=integrity_verified,
             created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
             updated_at=datetime.fromisoformat(data["updated_at"].replace("Z", "+00:00")),
         )
@@ -172,17 +190,40 @@ class SupabaseJournalRepository(BaseJournalRepository):
         return self._dict_to_entry(items[0])
 
     async def create_entry(self, user_id: UUID, payload: JournalEntryCreate) -> JournalEntryResponse:
-        entry_date_iso = (payload.entry_date or date.today()).isoformat()
+        from uuid import uuid4
+        new_id = uuid4()
+        entry_date_val = payload.entry_date or date.today()
+        entry_date_iso = entry_date_val.isoformat()
+        is_priv = True if payload.is_private is None else bool(payload.is_private)
+        clean_tags = payload.tags or []
+
+        sig = compute_journal_signature(
+            entry_id=new_id,
+            user_id=user_id,
+            title=payload.title,
+            content=payload.content,
+            mood=payload.mood,
+            tags=clean_tags,
+            entry_date=entry_date_val,
+            is_private=is_priv,
+        )
+
         body = {
+            "id": str(new_id),
             "user_id": str(user_id),
             "title": payload.title,
             "content": payload.content,
             "mood": payload.mood,
-            "tags": payload.tags,
-            "is_private": payload.is_private,
+            "tags": clean_tags,
+            "is_private": is_priv,
             "entry_date": entry_date_iso,
+            "integrity_signature": sig,
         }
         resp = await self._request("POST", "journal_entries", json_body=body, prefer="return=representation")
+        if resp.status_code == 400 and "integrity_signature" in resp.text:
+            body.pop("integrity_signature", None)
+            resp = await self._request("POST", "journal_entries", json_body=body, prefer="return=representation")
+
         if resp.status_code in (401, 403):
             raise DatabaseAuthError("Unauthorized creating journal entry.")
         if resp.status_code not in (200, 201):
@@ -197,7 +238,18 @@ class SupabaseJournalRepository(BaseJournalRepository):
         entry_id: UUID,
         payload: JournalEntryUpdate,
     ) -> Optional[JournalEntryResponse]:
+        current = await self.get_entry(user_id, entry_id)
+        if not current:
+            return None
+
         body: Dict[str, Any] = {}
+        new_title = payload.title if payload.title is not None else current.title
+        new_content = payload.content if payload.content is not None else current.content
+        new_mood = payload.mood if payload.mood is not None else current.mood
+        new_tags = payload.tags if payload.tags is not None else current.tags
+        new_is_priv = payload.is_private if payload.is_private is not None else current.is_private
+        new_entry_date = payload.entry_date if payload.entry_date is not None else current.entry_date
+
         if payload.title is not None:
             body["title"] = payload.title
         if payload.content is not None:
@@ -212,7 +264,19 @@ class SupabaseJournalRepository(BaseJournalRepository):
             body["entry_date"] = payload.entry_date.isoformat()
 
         if not body:
-            return await self.get_entry(user_id, entry_id)
+            return current
+
+        new_sig = compute_journal_signature(
+            entry_id=entry_id,
+            user_id=user_id,
+            title=new_title,
+            content=new_content,
+            mood=new_mood,
+            tags=new_tags,
+            entry_date=new_entry_date,
+            is_private=new_is_priv,
+        )
+        body["integrity_signature"] = new_sig
 
         params = {
             "id": f"eq.{entry_id}",
@@ -225,6 +289,15 @@ class SupabaseJournalRepository(BaseJournalRepository):
             json_body=body,
             prefer="return=representation",
         )
+        if resp.status_code == 400 and "integrity_signature" in resp.text:
+            body.pop("integrity_signature", None)
+            resp = await self._request(
+                "PATCH",
+                "journal_entries",
+                params=params,
+                json_body=body,
+                prefer="return=representation",
+            )
         if resp.status_code != 200:
             return None
         items = resp.json()

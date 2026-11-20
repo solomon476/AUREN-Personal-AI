@@ -31,12 +31,12 @@ export const rootRoute = createRootRoute({
   notFoundComponent: NotFound,
 });
 
-// Index Route: Redirects to /chat (Assistant conversational center)
+// Index Route: Redirects to /home (Personal AI Command Center)
 export const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   beforeLoad: () => {
-    throw redirect({ to: '/chat' });
+    throw redirect({ to: '/home' });
   },
 });
 

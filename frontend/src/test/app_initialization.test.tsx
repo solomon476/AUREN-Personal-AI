@@ -44,7 +44,7 @@ describe('Application Initialization', () => {
     await waitFor(() => {
       // Verify brand heading
       expect(screen.getAllByText('AUREN').length).toBeGreaterThan(0);
-      expect(screen.getByText('Phase 3C')).toBeInTheDocument();
+      expect(screen.getByText('Personal AI')).toBeInTheDocument();
 
       // Verify primary navigation items
       expect(screen.getByText('AI Assistant')).toBeInTheDocument();
@@ -59,11 +59,11 @@ describe('Application Initialization', () => {
     });
   });
 
-  it('redirects root route (/) to (/chat)', async () => {
+  it('redirects root route (/) to (/home)', async () => {
     const { history } = await renderRouter('/');
 
     await waitFor(() => {
-      expect(history.location.pathname).toBe('/chat');
+      expect(history.location.pathname).toBe('/home');
     });
   });
 });

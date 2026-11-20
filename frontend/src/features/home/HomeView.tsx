@@ -313,7 +313,10 @@ export const HomeView: React.FC = () => {
                   >
                     <div className="flex items-center space-x-3 min-w-0">
                       <button
+                        type="button"
                         onClick={() => handleToggleTask(task)}
+                        title="Toggle task status"
+                        aria-label="Toggle task status"
                         className={`w-4 h-4 rounded border flex items-center justify-center transition flex-shrink-0 ${
                           task.status === 'completed'
                             ? 'bg-emerald-600 border-emerald-500 text-white'

@@ -15,6 +15,7 @@ from app.models.journal import (
     JournalEntryUpdate,
 )
 from app.services.journal.base_repository import BaseJournalRepository
+from app.services.journal.integrity import compute_journal_signature, verify_journal_signature
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +50,15 @@ class SQLiteJournalRepository(BaseJournalRepository):
                     tags TEXT NOT NULL DEFAULT '[]',
                     is_private INTEGER NOT NULL DEFAULT 1,
                     entry_date TEXT NOT NULL,
+                    integrity_signature TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
             """)
+            try:
+                conn.execute("ALTER TABLE journal_entries ADD COLUMN integrity_signature TEXT;")
+            except Exception:
+                pass
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_journal_user_entry_date 
                 ON journal_entries(user_id, entry_date DESC);
@@ -69,15 +75,33 @@ class SQLiteJournalRepository(BaseJournalRepository):
         entry_date_str = row["entry_date"]
         parsed_date = date.fromisoformat(entry_date_str[:10])
 
+        col_keys = row.keys()
+        sig = row["integrity_signature"] if "integrity_signature" in col_keys else None
+        integrity_verified = None
+        if sig:
+            integrity_verified = verify_journal_signature(
+                entry_id=UUID(str(row["id"])),
+                user_id=UUID(str(row["user_id"])),
+                title=row["title"],
+                content=row["content"],
+                mood=row["mood"],
+                tags=tags,
+                entry_date=parsed_date,
+                signature=sig,
+                is_private=bool(row["is_private"]),
+            )
+
         return JournalEntryResponse(
-            id=UUID(row["id"]),
-            user_id=UUID(row["user_id"]),
+            id=UUID(str(row["id"])),
+            user_id=UUID(str(row["user_id"])),
             title=row["title"],
             content=row["content"],
             mood=row["mood"],
             tags=tags,
             is_private=bool(row["is_private"]),
             entry_date=parsed_date,
+            integrity_signature=sig,
+            integrity_verified=integrity_verified,
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
@@ -145,15 +169,29 @@ class SQLiteJournalRepository(BaseJournalRepository):
         def _execute() -> JournalEntryResponse:
             entry_id = str(uuid4())
             now_iso = datetime.now(timezone.utc).isoformat()
-            entry_date_iso = (payload.entry_date or date.today()).isoformat()
-            tags_json = json.dumps(payload.tags or [])
+            entry_date_val = payload.entry_date or date.today()
+            entry_date_iso = entry_date_val.isoformat()
+            tags_list = payload.tags or []
+            tags_json = json.dumps(tags_list)
+            is_priv = True if payload.is_private is None else bool(payload.is_private)
+
+            sig = compute_journal_signature(
+                entry_id=UUID(entry_id),
+                user_id=user_id,
+                title=payload.title,
+                content=payload.content,
+                mood=payload.mood,
+                tags=tags_list,
+                entry_date=entry_date_val,
+                is_private=is_priv,
+            )
 
             with self._get_connection() as conn:
                 conn.execute(
                     """
                     INSERT INTO journal_entries (
-                        id, user_id, title, content, mood, tags, is_private, entry_date, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        id, user_id, title, content, mood, tags, is_private, entry_date, integrity_signature, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         entry_id,
@@ -162,8 +200,9 @@ class SQLiteJournalRepository(BaseJournalRepository):
                         payload.content,
                         payload.mood,
                         tags_json,
-                        1 if payload.is_private else 0,
+                        1 if is_priv else 0,
                         entry_date_iso,
+                        sig,
                         now_iso,
                         now_iso,
                     ),
@@ -182,51 +221,65 @@ class SQLiteJournalRepository(BaseJournalRepository):
         payload: JournalEntryUpdate,
     ) -> Optional[JournalEntryResponse]:
         def _execute() -> Optional[JournalEntryResponse]:
-            updates = []
-            params: List[Any] = []
+            with self._get_connection() as conn:
+                existing = conn.execute(
+                    "SELECT * FROM journal_entries WHERE id = ? AND user_id = ?",
+                    (str(entry_id), str(user_id)),
+                ).fetchone()
+                if not existing:
+                    return None
 
-            if payload.title is not None:
-                updates.append("title = ?")
-                params.append(payload.title)
-            if payload.content is not None:
-                updates.append("content = ?")
-                params.append(payload.content)
-            if payload.mood is not None:
-                updates.append("mood = ?")
-                params.append(payload.mood)
-            if payload.tags is not None:
-                updates.append("tags = ?")
-                params.append(json.dumps(payload.tags))
-            if payload.is_private is not None:
-                updates.append("is_private = ?")
-                params.append(1 if payload.is_private else 0)
-            if payload.entry_date is not None:
-                updates.append("entry_date = ?")
-                params.append(payload.entry_date.isoformat())
+                # Compute updated attributes
+                new_title = payload.title if payload.title is not None else existing["title"]
+                new_content = payload.content if payload.content is not None else existing["content"]
+                new_mood = payload.mood if payload.mood is not None else existing["mood"]
+                if payload.tags is not None:
+                    new_tags = payload.tags
+                else:
+                    try:
+                        new_tags = json.loads(existing["tags"]) if existing["tags"] else []
+                    except Exception:
+                        new_tags = []
+                new_is_priv = payload.is_private if payload.is_private is not None else bool(existing["is_private"])
+                if payload.entry_date is not None:
+                    new_entry_date = payload.entry_date
+                else:
+                    new_entry_date = date.fromisoformat(existing["entry_date"][:10])
 
-            if not updates:
-                # Return current entry without modifications
-                return self._row_to_entry(
-                    self._get_connection().execute(
-                        "SELECT * FROM journal_entries WHERE id = ? AND user_id = ?",
-                        (str(entry_id), str(user_id)),
-                    ).fetchone()
+                # Recompute cryptographic integrity signature
+                new_sig = compute_journal_signature(
+                    entry_id=entry_id,
+                    user_id=user_id,
+                    title=new_title,
+                    content=new_content,
+                    mood=new_mood,
+                    tags=new_tags,
+                    entry_date=new_entry_date,
+                    is_private=new_is_priv,
                 )
 
-            now_iso = datetime.now(timezone.utc).isoformat()
-            updates.append("updated_at = ?")
-            params.append(now_iso)
-
-            params.extend([str(entry_id), str(user_id)])
-
-            with self._get_connection() as conn:
-                res = conn.execute(
-                    f"UPDATE journal_entries SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
-                    params,
+                now_iso = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    """
+                    UPDATE journal_entries
+                    SET title = ?, content = ?, mood = ?, tags = ?, is_private = ?, entry_date = ?,
+                        integrity_signature = ?, updated_at = ?
+                    WHERE id = ? AND user_id = ?
+                    """,
+                    (
+                        new_title,
+                        new_content,
+                        new_mood,
+                        json.dumps(new_tags),
+                        1 if new_is_priv else 0,
+                        new_entry_date.isoformat(),
+                        new_sig,
+                        now_iso,
+                        str(entry_id),
+                        str(user_id),
+                    ),
                 )
                 conn.commit()
-                if res.rowcount == 0:
-                    return None
 
                 row = conn.execute(
                     "SELECT * FROM journal_entries WHERE id = ? AND user_id = ?",

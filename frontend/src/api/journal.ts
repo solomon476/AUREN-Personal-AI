@@ -14,6 +14,8 @@ export interface JournalEntry {
   tags: string[];
   is_private: boolean;
   entry_date: string;
+  integrity_signature?: string | null;
+  integrity_verified?: boolean | null;
   created_at: string;
   updated_at: string;
 }

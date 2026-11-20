@@ -4,7 +4,7 @@
  * Memory Controls, Privacy Guarantees, and GDPR Data Export.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Settings,
   User,
@@ -19,6 +19,7 @@ import {
   Cpu,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme, ThemeMode } from '../../context/ThemeContext';
 import { useExportUserData, useUpdateUserProfile, useUserProfile } from '../../hooks/useSettings';
 
 export const SettingsView: React.FC = () => {
@@ -33,7 +34,7 @@ export const SettingsView: React.FC = () => {
   // Form State
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
-  const [theme, setTheme] = useState('dark');
+  const { theme, setTheme } = useTheme();
   const [aiModel, setAiModel] = useState('gemini-2.5-flash');
   const [aiTone, setAiTone] = useState('concise');
   const [aiCustomInstructions, setAiCustomInstructions] = useState('');
@@ -41,21 +42,25 @@ export const SettingsView: React.FC = () => {
   const [memoryMinConfidence, setMemoryMinConfidence] = useState(0.7);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const hasSyncedRef = useRef(false);
 
   // Sync profile data when loaded
   useEffect(() => {
-    if (profile) {
+    if (profile && !hasSyncedRef.current) {
+      hasSyncedRef.current = true;
       setFullName(profile.full_name || '');
       setAvatarUrl(profile.avatar_url || '');
       const prefs = profile.preferences || {};
-      if (prefs.theme) setTheme(String(prefs.theme));
+      if (prefs.theme && ['dark', 'midnight', 'obsidian'].includes(String(prefs.theme))) {
+        setTheme(prefs.theme as ThemeMode);
+      }
       if (prefs.ai_model) setAiModel(String(prefs.ai_model));
       if (prefs.ai_tone) setAiTone(String(prefs.ai_tone));
       if (prefs.ai_custom_instructions) setAiCustomInstructions(String(prefs.ai_custom_instructions));
       if (prefs.memory_auto_extraction !== undefined) setMemoryAutoExtraction(Boolean(prefs.memory_auto_extraction));
       if (prefs.memory_min_confidence !== undefined) setMemoryMinConfidence(Number(prefs.memory_min_confidence));
     }
-  }, [profile]);
+  }, [profile, setTheme]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +78,7 @@ export const SettingsView: React.FC = () => {
           memory_min_confidence: memoryMinConfidence,
         },
       });
-      setSaveStatus('Preferences saved successfully.');
+      setSaveStatus('Settings saved successfully.');
       setTimeout(() => setSaveStatus(null), 3000);
     } catch (err: any) {
       setSaveStatus(`Failed to save: ${err.message || 'Unknown error'}`);
@@ -235,7 +240,7 @@ export const SettingsView: React.FC = () => {
                     <label className="block text-xs font-medium text-slate-400 mb-1">Theme</label>
                     <select
                       value={theme}
-                      onChange={(e) => setTheme(e.target.value)}
+                      onChange={(e) => setTheme(e.target.value as ThemeMode)}
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     >
                       <option value="dark">Dark Slate (Default)</option>
@@ -285,10 +290,15 @@ export const SettingsView: React.FC = () => {
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     >
                       <option value="gemini-2.5-flash">Google Gemini 2.5 Flash (Fast, High Intelligence, Native)</option>
-                      <option value="claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet (Reflective, Code, Analytical)</option>
-                      <option value="gpt-4o">OpenAI GPT-4o (Multimodal, Broad Knowledge)</option>
+                      <option value="gemini-2.5-pro">Google Gemini 2.5 Pro (Deep Reasoning &amp; Complex Analysis)</option>
+                      <option value="gemini-2.0-flash">Google Gemini 2.0 Flash (High Throughput &amp; Low Latency)</option>
                       <option value="mock">Local Development Mock (Offline testing)</option>
                     </select>
+                    {!['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'mock'].includes(aiModel) && (
+                      <p className="text-[11px] text-amber-400 mt-1">
+                        Currently saved model ({aiModel}) is not supported by the operational Gemini provider. Please select a supported model above.
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -367,10 +377,10 @@ export const SettingsView: React.FC = () => {
                   <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-900/40 text-emerald-300 space-y-2">
                     <div className="flex items-center space-x-2 text-xs font-semibold">
                       <Lock className="w-4 h-4 text-emerald-400" />
-                      <span>Cryptographic Isolation Guarantees</span>
+                      <span>Cryptographic Isolation &amp; Integrity</span>
                     </div>
                     <p className="text-[11px] text-emerald-400/80 leading-relaxed">
-                      Journal entries are signed with RFC 8785 canonical JSON and HMAC SHA-256. They are strictly quarantined from ordinary LLM context injection and cannot be extracted without an explicit user consent token.
+                      Journal entries are cryptographically signed with RFC 8785 canonical JSON and HMAC SHA-256 for integrity verification. Reflections are strictly quarantined from ordinary LLM context injection and excluded from automated memory extraction.
                     </p>
                   </div>
                 </div>

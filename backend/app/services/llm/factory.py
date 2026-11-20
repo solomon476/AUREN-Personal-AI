@@ -40,18 +40,42 @@ class MockLLMProvider(BaseLLMProvider):
             yield word + (" " if i < len(words) - 1 else "")
 
 
-def get_llm_provider(settings: Settings = default_settings) -> BaseLLMProvider:
-    """Return an initialized LLM provider instance matching the active configuration."""
+SUPPORTED_GEMINI_MODELS = {
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+}
+
+
+def get_llm_provider(
+    settings: Settings = default_settings,
+    model_id: Optional[str] = None,
+) -> BaseLLMProvider:
+    """Return an initialized LLM provider instance matching the active configuration.
+
+    If model_id is specified, validates model compatibility with the configured provider.
+    """
     provider_name = settings.LLM_PROVIDER.lower().strip()
+    active_model = model_id.strip() if model_id and str(model_id).strip() else settings.LLM_MODEL
+
+    if active_model == "mock" or provider_name == "mock":
+        return MockLLMProvider(model_id=active_model)
 
     if provider_name == "gemini":
+        if active_model not in SUPPORTED_GEMINI_MODELS:
+            raise LLMProviderError(
+                f"Model '{active_model}' is not supported by the Gemini provider. "
+                f"Supported operational models: {', '.join(sorted(SUPPORTED_GEMINI_MODELS))}."
+            )
         return GeminiProvider(
             api_key=settings.LLM_API_KEY,
-            model_id=settings.LLM_MODEL,
+            model_id=active_model,
             timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
         )
     elif provider_name == "mock":
-        return MockLLMProvider(model_id=settings.LLM_MODEL)
+        return MockLLMProvider(model_id=active_model)
     else:
         raise LLMProviderError(
             f"Unsupported LLM provider '{provider_name}'. Supported providers: 'gemini', 'mock'."

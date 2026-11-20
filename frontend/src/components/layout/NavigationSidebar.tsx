@@ -192,8 +192,8 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-indigo-400 via-sky-300 to-emerald-400 bg-clip-text text-transparent">
               AUREN
             </span>
-            <span className="ml-1.5 text-[9px] text-slate-400 uppercase tracking-widest font-semibold px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800">
-              Phase 3C
+            <span className="ml-1.5 text-[9px] text-indigo-300 uppercase tracking-widest font-semibold px-1.5 py-0.5 bg-indigo-950/60 rounded border border-indigo-800/50">
+              Personal AI
             </span>
           </div>
         </Link>

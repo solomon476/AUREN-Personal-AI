@@ -227,6 +227,8 @@ class ProfileService:
         return UserDataExportResponse(
             user_id=user.id,
             email=user.email,
+            full_name=profile.full_name,
+            avatar_url=profile.avatar_url,
             exported_at=datetime.now(timezone.utc),
             preferences=profile.preferences,
             tasks=[t.model_dump(mode="json") for t in tasks],

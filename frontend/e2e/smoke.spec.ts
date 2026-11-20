@@ -5,11 +5,11 @@ import { test, expect } from '@playwright/test';
  * Verifies core navigation, application shell initialization, and routing.
  */
 test.describe('AUREN Smoke Suite', () => {
-  test('initializes application and redirects to /chat', async ({ page }) => {
+  test('initializes application and redirects to /home', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveURL(/\/chat/);
+    await expect(page).toHaveURL(/\/home/);
     await expect(page.getByRole('link', { name: /auren/i }).first()).toBeVisible();
-    await expect(page.getByText('Phase 3C', { exact: true })).toBeVisible();
+    await expect(page.getByText('Personal AI', { exact: true })).toBeVisible();
   });
 
   test('navigates to system health and database schema matrix', async ({ page }) => {

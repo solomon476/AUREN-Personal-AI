@@ -72,8 +72,8 @@ class ChatService:
         token = user.token if user else None
         return get_chat_repository(user_token=token)
 
-    def _get_provider(self) -> BaseLLMProvider:
-        return get_llm_provider(settings)
+    def _get_provider(self, model_id: Optional[str] = None) -> BaseLLMProvider:
+        return get_llm_provider(settings, model_id=model_id)
 
     async def validate_and_resolve_conversation(
         self,
@@ -351,22 +351,15 @@ class ChatService:
         yield f"event: metadata\ndata: {json.dumps(init_event)}\n\n"
 
         # -------------------------------------------------------------------
-        # 4. Assemble Sliding Window Context & Memory Context
+        # 4. Resolve Preferences, Model & Assemble Sliding Window Context
         # -------------------------------------------------------------------
-        provider = self._get_provider()
-
-        history = await repo.get_messages(
-            user_id=user.id,
-            conversation_id=conversation.id,
-            limit=settings.CHAT_HISTORY_LIMIT,
-        )
-
-        system_content = SYSTEM_PROMPT
+        user_model = None
+        user_instructions = []
         try:
             from app.services.profile_service import profile_service
             profile = await profile_service.get_profile(user)
             prefs = profile.preferences or {}
-            user_instructions = []
+            user_model = prefs.get("ai_model")
             tone = prefs.get("ai_tone")
             if tone:
                 tone_descriptions = {
@@ -380,10 +373,34 @@ class ChatService:
             custom_inst = prefs.get("ai_custom_instructions")
             if custom_inst and str(custom_inst).strip():
                 user_instructions.append(f"User custom instructions: {str(custom_inst).strip()}")
-            if user_instructions:
-                system_content += "\n\nUser Preferences:\n" + "\n".join(f"- {inst}" for inst in user_instructions)
         except Exception as pref_err:
             logger.warning("Failed loading user preferences for chat context: %s", pref_err)
+
+        try:
+            try:
+                provider = self._get_provider(model_id=user_model)
+            except TypeError:
+                provider = self._get_provider()
+        except LLMProviderError as prov_err:
+            logger.warning("Unsupported user model preference '%s': %s", user_model, prov_err)
+            if request.idempotency_key:
+                await repo.update_chat_request_status(user.id, request.idempotency_key, status="failed")
+            error_event = {
+                "detail": str(prov_err),
+                "code": "unsupported_model_configuration",
+            }
+            yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+            return
+
+        history = await repo.get_messages(
+            user_id=user.id,
+            conversation_id=conversation.id,
+            limit=settings.CHAT_HISTORY_LIMIT,
+        )
+
+        system_content = SYSTEM_PROMPT
+        if user_instructions:
+            system_content += "\n\nUser Preferences:\n" + "\n".join(f"- {inst}" for inst in user_instructions)
 
         llm_messages: list[ChatMessage] = [
             ChatMessage(role="system", content=system_content)

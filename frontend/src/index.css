@@ -7,3 +7,48 @@
   color-scheme: dark;
 }
 
+/* ========================================================================= */
+/* Theme Switching Engine: Obsidian & Midnight Variations                    */
+/* ========================================================================= */
+
+html[data-theme="obsidian"] body,
+html[data-theme="obsidian"] .bg-slate-950 {
+  background-color: #000000 !important;
+}
+html[data-theme="obsidian"] .bg-slate-900,
+html[data-theme="obsidian"] .bg-slate-900\/60,
+html[data-theme="obsidian"] .bg-slate-900\/50,
+html[data-theme="obsidian"] .bg-slate-900\/40,
+html[data-theme="obsidian"] .bg-slate-900\/30 {
+  background-color: #0a0a0a !important;
+}
+html[data-theme="obsidian"] .border-slate-800,
+html[data-theme="obsidian"] .border-slate-800\/80,
+html[data-theme="obsidian"] .border-slate-800\/60 {
+  border-color: #1c1c1c !important;
+}
+html[data-theme="obsidian"] .hover\:bg-slate-800:hover,
+html[data-theme="obsidian"] .hover\:bg-slate-900:hover {
+  background-color: #171717 !important;
+}
+
+html[data-theme="midnight"] body,
+html[data-theme="midnight"] .bg-slate-950 {
+  background-color: #060914 !important;
+}
+html[data-theme="midnight"] .bg-slate-900,
+html[data-theme="midnight"] .bg-slate-900\/60,
+html[data-theme="midnight"] .bg-slate-900\/50,
+html[data-theme="midnight"] .bg-slate-900\/40,
+html[data-theme="midnight"] .bg-slate-900\/30 {
+  background-color: #0e1329 !important;
+}
+html[data-theme="midnight"] .border-slate-800,
+html[data-theme="midnight"] .border-slate-800\/80,
+html[data-theme="midnight"] .border-slate-800\/60 {
+  border-color: #1c244b !important;
+}
+html[data-theme="midnight"] .hover\:bg-slate-800:hover,
+html[data-theme="midnight"] .hover\:bg-slate-900:hover {
+  background-color: #171f45 !important;
+}

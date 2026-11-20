@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import { setupAuthenticatedSession } from './helpers';
 
 test.describe('Application Navigation & Routing', () => {
-  test('application loads and redirects root route to /chat', async ({ page }) => {
+  test('application loads and redirects root route to /home', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveURL(/\/chat/);
+    await expect(page).toHaveURL(/\/home/);
     await expect(page.getByRole('link', { name: /auren/i }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: /ai assistant/i })).toBeVisible();
     await expect(page.getByText('System & Database')).toBeVisible();

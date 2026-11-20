@@ -215,6 +215,33 @@ class MemoryExtractionWorker:
             retry,
         )
 
+    async def get_user_preferences(self, conn, user_id: UUID) -> Dict[str, Any]:
+        """Fetches user preferences to enforce extraction toggles and confidence thresholds."""
+        try:
+            raw = await conn.fetchval(
+                "SELECT public.get_user_extraction_preferences_rpc($1, $2)",
+                user_id,
+                self.worker_id,
+            )
+            if raw:
+                if isinstance(raw, str):
+                    return json.loads(raw)
+                return dict(raw)
+        except Exception:
+            pass
+        try:
+            raw = await conn.fetchval(
+                "SELECT preferences FROM public.profiles WHERE id = $1",
+                user_id,
+            )
+            if raw:
+                if isinstance(raw, str):
+                    return json.loads(raw)
+                return dict(raw)
+        except Exception:
+            pass
+        return {}
+
     async def process_job(self, conn, job: Dict[str, Any]) -> bool:
         """Processes a single extraction job end-to-end with full error sanitization and lease checks."""
         job_id = job["id"]
@@ -227,20 +254,48 @@ class MemoryExtractionWorker:
                 # Turn was quarantined or invalid; RPC already handled dead-lettering
                 return False
 
+            # Check user preferences for extraction policies
+            user_prefs = await self.get_user_preferences(conn, source["user_id"])
+            if user_prefs.get("memory_auto_extraction") is False:
+                logger.info(
+                    "Memory auto-extraction is disabled for user %s; skipping extraction for job %s",
+                    source["user_id"],
+                    job_id,
+                )
+                await self.complete_job(conn, job_id, claim_token)
+                return True
+
+            min_confidence = float(user_prefs.get("memory_min_confidence", 0.7))
+
             # 2. Extract durable memories
             extracted_items = await self.extract_memories(
                 user_text=source["user_message_content"],
                 assistant_text=source["assistant_content"],
             )
 
+            # Filter items respecting user's confidence threshold
+            qualified_items = [
+                item for item in extracted_items
+                if item.confidence >= min_confidence
+            ]
+
+            if not qualified_items:
+                logger.info(
+                    "No extracted memories met the user confidence threshold (%f) for job %s",
+                    min_confidence,
+                    job_id,
+                )
+                await self.complete_job(conn, job_id, claim_token)
+                return True
+
             # 3. Generate embeddings if embedding provider configured
-            embeddings: List[Optional[List[float]]] = [None] * len(extracted_items)
-            if extracted_items and self.embedding_provider is not None:
-                texts = [item.content for item in extracted_items]
+            embeddings: List[Optional[List[float]]] = [None] * len(qualified_items)
+            if qualified_items and self.embedding_provider is not None:
+                texts = [item.content for item in qualified_items]
                 embeddings = await self.embedding_provider.embed_batch(texts)
 
             # 4. Ingest each extracted memory with its vector embedding
-            for item, emb in zip(extracted_items, embeddings):
+            for item, emb in zip(qualified_items, embeddings):
                 await self.ingest_memory(conn, job_id, claim_token, item, embedding=emb)
 
             # 5. Atomically complete the job with terminal lease cleanup

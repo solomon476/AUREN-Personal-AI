@@ -48,6 +48,8 @@ class UserDataExportResponse(BaseModel):
 
     user_id: UUID
     email: Optional[str] = None
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
     exported_at: datetime
     preferences: Dict[str, Any] = Field(default_factory=dict)
     tasks: List[Dict[str, Any]] = Field(default_factory=list)

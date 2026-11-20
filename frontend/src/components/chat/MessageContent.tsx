@@ -5,7 +5,7 @@
  * and Interactive Assistant Action Proposal Cards.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -20,9 +20,12 @@ import {
   Target,
   Plus,
   CheckCircle2,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCreateGoal, useCreateProject, useCreateTask } from '../../hooks/useProductivity';
+import * as productivityApi from '../../api/productivity';
 
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github-dark.css';
@@ -80,51 +83,198 @@ export const markdownSanitizeSchema = {
   },
 };
 
-interface ActionProposalItemProps {
-  action: any;
+export type ActionLifecycleStatus =
+  | 'proposed'
+  | 'awaiting_confirmation'
+  | 'executing'
+  | 'completed'
+  | 'failed';
+
+interface ActionStateRecord {
+  status: ActionLifecycleStatus;
+  entityId?: string;
+  error?: string;
+  updatedAt: string;
 }
 
-const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action }) => {
+interface MessageContextValue {
+  conversationId?: string;
+  messageId?: string;
+}
+
+export const MessageContext = React.createContext<MessageContextValue>({});
+
+const getStoredActionState = (key: string): ActionStateRecord | null => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // Ignore storage parse exceptions
+  }
+  return null;
+};
+
+const persistActionState = (key: string, record: ActionStateRecord) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(record));
+  } catch {
+    // Ignore storage write exceptions
+  }
+};
+
+const checkExistingEntity = async (action: any): Promise<boolean> => {
+  try {
+    if (action.type === 'create_task') {
+      const title = (action.title || 'Untitled Task').trim();
+      const res = await productivityApi.getTasks({ query: title });
+      return Boolean(res?.items?.some((t) => t.title.toLowerCase() === title.toLowerCase()));
+    } else if (action.type === 'create_project') {
+      const name = (action.name || action.title || 'Untitled Project').trim();
+      const res = await productivityApi.getProjects({ query: name });
+      return Boolean(res?.items?.some((p) => p.name.toLowerCase() === name.toLowerCase()));
+    } else if (action.type === 'create_goal') {
+      const title = (action.title || action.name || 'Untitled Goal').trim();
+      const res = await productivityApi.getGoals();
+      return Boolean(res?.items?.some((g) => g.title.toLowerCase() === title.toLowerCase()));
+    }
+  } catch {
+    // Non-blocking query failure
+  }
+  return false;
+};
+
+interface ActionProposalItemProps {
+  action: any;
+  conversationId?: string;
+}
+
+export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, conversationId: propConversationId }) => {
   const { user } = useAuth();
+  const context = useContext(MessageContext);
+  const conversationId = propConversationId || context.conversationId;
   const createTaskMutation = useCreateTask(user?.id);
   const createProjectMutation = useCreateProject(user?.id);
   const createGoalMutation = useCreateGoal(user?.id);
 
-  const [executed, setExecuted] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const actionKey = `auren_action_${user?.id || 'guest'}_${conversationId ? conversationId + '_' : ''}${action?.type}_${action?.title || action?.name || ''}_${action?.due_date || action?.target_date || ''}_${action?.priority || ''}`;
+
+  const [status, setStatus] = useState<ActionLifecycleStatus>(() => {
+    const saved = getStoredActionState(actionKey);
+    if (saved && saved.status) {
+      if (saved.status === 'executing') return 'failed'; // Reset interrupted in-flight execution
+      return saved.status;
+    }
+    return 'proposed';
+  });
+
+  const [errorMsg, setErrorMsg] = useState<string | null>(() => {
+    const saved = getStoredActionState(actionKey);
+    return saved?.error || null;
+  });
 
   if (!action || !action.type) return null;
 
-  const handleConfirm = async () => {
+  const handleExecute = async () => {
+    if (status === 'executing' || status === 'completed') {
+      return; // Idempotency guard: prevent duplicate concurrent or repeated clicks
+    }
+
     if (!user) {
-      setErrorMsg('Please sign in to save items to Life Management.');
+      const msg = 'Please sign in to save items to Life Management.';
+      setErrorMsg(msg);
+      setStatus('failed');
       return;
     }
+
+    // If recovering from a prior failure/timeout, check if entity already exists on server before creating duplicate!
+    if (status === 'failed') {
+      setStatus('executing');
+      const alreadyCreated = await checkExistingEntity(action);
+      if (alreadyCreated) {
+        setStatus('completed');
+        setErrorMsg(null);
+        persistActionState(actionKey, {
+          status: 'completed',
+          updatedAt: new Date().toISOString(),
+        });
+        return;
+      }
+    }
+
+    setStatus('executing');
     setErrorMsg(null);
+    persistActionState(actionKey, {
+      status: 'executing',
+      updatedAt: new Date().toISOString(),
+    });
+
+    let timedOut = false;
+    const timeoutTimer = setTimeout(async () => {
+      timedOut = true;
+      // Do not assume failure; verify if server created it despite slow connection
+      const exists = await checkExistingEntity(action);
+      if (exists) {
+        setStatus('completed');
+        setErrorMsg(null);
+        persistActionState(actionKey, {
+          status: 'completed',
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        const msg = 'Action request timed out. Retrying will verify existing records before creating.';
+        setStatus('failed');
+        setErrorMsg(msg);
+        persistActionState(actionKey, {
+          status: 'failed',
+          error: msg,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }, 15000);
+
     try {
+      let createdEntity: any = null;
       if (action.type === 'create_task') {
         const dueDate = action.due_date && String(action.due_date).trim() ? String(action.due_date).trim() : undefined;
-        await createTaskMutation.mutateAsync({
+        createdEntity = await createTaskMutation.mutateAsync({
           title: action.title || 'Untitled Task',
           priority: action.priority || 'medium',
           due_date: dueDate,
         });
       } else if (action.type === 'create_project') {
-        await createProjectMutation.mutateAsync({
+        createdEntity = await createProjectMutation.mutateAsync({
           name: action.name || action.title || 'Untitled Project',
           description: action.description,
         });
       } else if (action.type === 'create_goal') {
         const targetDate = action.target_date && String(action.target_date).trim() ? String(action.target_date).trim() : undefined;
-        await createGoalMutation.mutateAsync({
+        createdEntity = await createGoalMutation.mutateAsync({
           title: action.title || action.name || 'Untitled Goal',
           description: action.description,
           target_date: targetDate,
         });
       }
-      setExecuted(true);
+
+      clearTimeout(timeoutTimer);
+      setStatus('completed');
+      setErrorMsg(null);
+      persistActionState(actionKey, {
+        status: 'completed',
+        entityId: createdEntity?.id,
+        updatedAt: new Date().toISOString(),
+      });
     } catch (err: any) {
-      setErrorMsg(err.message || 'Action execution failed');
+      clearTimeout(timeoutTimer);
+      if (!timedOut) {
+        const msg = err.message || 'Action execution failed';
+        setStatus('failed');
+        setErrorMsg(msg);
+        persistActionState(actionKey, {
+          status: 'failed',
+          error: msg,
+          updatedAt: new Date().toISOString(),
+        });
+      }
     }
   };
 
@@ -176,7 +326,15 @@ const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action }) => {
           <Icon className={`w-4 h-4 ${meta.color}`} />
           <span className="text-xs font-semibold text-slate-200">{meta.label}</span>
         </div>
-        <span className="text-[10px] text-slate-400 font-mono">Requires confirmation</span>
+        <span className="text-[10px] text-slate-400 font-mono">
+          {status === 'completed'
+            ? 'Executed'
+            : status === 'executing'
+            ? 'Executing...'
+            : status === 'failed'
+            ? 'Execution failed'
+            : 'Requires confirmation'}
+        </span>
       </div>
 
       <div className="pl-6">
@@ -201,15 +359,33 @@ const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action }) => {
       )}
 
       <div className="pl-6 pt-1 flex items-center space-x-2">
-        {executed ? (
+        {status === 'completed' ? (
           <span className="flex items-center space-x-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-800/50">
-            <CheckCircle2 className="w-3.5 h-3.5" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             <span>Added to Life Management</span>
           </span>
+        ) : status === 'executing' ? (
+          <button
+            type="button"
+            disabled
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-700/60 text-white text-xs font-medium cursor-wait opacity-80"
+          >
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span>Creating {meta.label}...</span>
+          </button>
+        ) : status === 'failed' ? (
+          <button
+            type="button"
+            onClick={handleExecute}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium transition shadow-md shadow-rose-600/20"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry {meta.buttonText}</span>
+          </button>
         ) : (
           <button
             type="button"
-            onClick={handleConfirm}
+            onClick={handleExecute}
             disabled={
               createTaskMutation.isPending ||
               createProjectMutation.isPending ||
@@ -316,9 +492,16 @@ const FencedCodeBlock: React.FC<FencedCodeBlockProps> = ({ language, className, 
 interface MessageContentProps {
   content: string;
   role: 'user' | 'assistant' | 'system';
+  conversationId?: string;
+  messageId?: string;
 }
 
-export const MessageContent: React.FC<MessageContentProps> = ({ content, role }) => {
+export const MessageContent: React.FC<MessageContentProps> = ({
+  content,
+  role,
+  conversationId,
+  messageId,
+}) => {
   if (role === 'user') {
     return (
       <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-100">
@@ -328,76 +511,78 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, role })
   }
 
   return (
-    <div className="markdown-prose text-sm leading-relaxed text-slate-200">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[
-          rehypeKatex,
-          rehypeHighlight,
-          [rehypeSanitize, markdownSanitizeSchema],
-        ]}
-        components={{
-          pre: ({ children }) => <div className="my-2">{children}</div>,
-          code: ({ node, className, children, ...props }: any) => {
-            const match = /language-([a-zA-Z0-9_-]+)/.exec(className || '');
-            const isBlock = Boolean(match) || (typeof children === 'string' && children.includes('\n'));
-            if (isBlock) {
+    <MessageContext.Provider value={{ conversationId, messageId }}>
+      <div className="markdown-prose text-sm leading-relaxed text-slate-200">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[
+            rehypeKatex,
+            rehypeHighlight,
+            [rehypeSanitize, markdownSanitizeSchema],
+          ]}
+          components={{
+            pre: ({ children }) => <div className="my-2">{children}</div>,
+            code: ({ node, className, children, ...props }: any) => {
+              const match = /language-([a-zA-Z0-9_-]+)/.exec(className || '');
+              const isBlock = Boolean(match) || (typeof children === 'string' && children.includes('\n'));
+              if (isBlock) {
+                return (
+                  <FencedCodeBlock language={match ? match[1] : ''} className={className} {...props}>
+                    {children}
+                  </FencedCodeBlock>
+                );
+              }
               return (
-                <FencedCodeBlock language={match ? match[1] : ''} className={className} {...props}>
+                <code
+                  className="px-1.5 py-0.5 rounded bg-slate-800/80 text-amber-300 font-mono text-xs border border-slate-700/60"
+                  {...props}
+                >
                   {children}
-                </FencedCodeBlock>
+                </code>
               );
-            }
-            return (
-              <code
-                className="px-1.5 py-0.5 rounded bg-slate-800/80 text-amber-300 font-mono text-xs border border-slate-700/60"
+            },
+            a: ({ node, ...props }) => (
+              <a
                 {...props}
-              >
-                {children}
-              </code>
-            );
-          },
-          a: ({ node, ...props }) => (
-            <a
-              {...props}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition"
-            />
-          ),
-          h1: ({ node, ...props }) => (
-            <h1 className="text-lg font-bold text-white mt-4 mb-2 pb-1 border-b border-slate-800" {...props} />
-          ),
-          h2: ({ node, ...props }) => (
-            <h2 className="text-base font-semibold text-white mt-3 mb-1.5" {...props} />
-          ),
-          h3: ({ node, ...props }) => (
-            <h3 className="text-sm font-semibold text-slate-100 mt-2 mb-1" {...props} />
-          ),
-          p: ({ node, ...props }) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />,
-          ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2 space-y-1" {...props} />,
-          ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2 space-y-1" {...props} />,
-          li: ({ node, ...props }) => <li className="pl-0.5" {...props} />,
-          blockquote: ({ node, ...props }) => (
-            <blockquote
-              className="border-l-4 border-indigo-500/50 bg-slate-900/40 pl-3 py-1 my-2 italic text-slate-300 rounded-r"
-              {...props}
-            />
-          ),
-          table: ({ node, ...props }) => (
-            <div className="overflow-x-auto my-3 border border-slate-800 rounded-xl">
-              <table className="min-w-full divide-y divide-slate-800 text-xs" {...props} />
-            </div>
-          ),
-          thead: ({ node, ...props }) => <thead className="bg-slate-900/80 text-slate-300 font-semibold" {...props} />,
-          tbody: ({ node, ...props }) => <tbody className="divide-y divide-slate-800/60 bg-slate-950/40" {...props} />,
-          tr: ({ node, ...props }) => <tr className="hover:bg-slate-900/40 transition" {...props} />,
-          th: ({ node, ...props }) => <th className="px-3 py-2 text-left" {...props} />,
-          td: ({ node, ...props }) => <td className="px-3 py-2 text-slate-300" {...props} />,
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-    </div>
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition"
+              />
+            ),
+            h1: ({ node, ...props }) => (
+              <h1 className="text-lg font-bold text-white mt-4 mb-2 pb-1 border-b border-slate-800" {...props} />
+            ),
+            h2: ({ node, ...props }) => (
+              <h2 className="text-base font-semibold text-white mt-3 mb-1.5" {...props} />
+            ),
+            h3: ({ node, ...props }) => (
+              <h3 className="text-sm font-semibold text-slate-100 mt-2 mb-1" {...props} />
+            ),
+            p: ({ node, ...props }) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />,
+            ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2 space-y-1" {...props} />,
+            ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2 space-y-1" {...props} />,
+            li: ({ node, ...props }) => <li className="pl-0.5" {...props} />,
+            blockquote: ({ node, ...props }) => (
+              <blockquote
+                className="border-l-4 border-indigo-500/50 bg-slate-900/40 pl-3 py-1 my-2 italic text-slate-300 rounded-r"
+                {...props}
+              />
+            ),
+            table: ({ node, ...props }) => (
+              <div className="overflow-x-auto my-3 border border-slate-800 rounded-xl">
+                <table className="min-w-full divide-y divide-slate-800 text-xs" {...props} />
+              </div>
+            ),
+            thead: ({ node, ...props }) => <thead className="bg-slate-900/80 text-slate-300 font-semibold" {...props} />,
+            tbody: ({ node, ...props }) => <tbody className="divide-y divide-slate-800/60 bg-slate-950/40" {...props} />,
+            tr: ({ node, ...props }) => <tr className="hover:bg-slate-900/40 transition" {...props} />,
+            th: ({ node, ...props }) => <th className="px-3 py-2 text-left" {...props} />,
+            td: ({ node, ...props }) => <td className="px-3 py-2 text-slate-300" {...props} />,
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    </MessageContext.Provider>
   );
 };

@@ -413,7 +413,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                           : 'bg-slate-800/80 text-slate-200 border border-slate-700/60'
                       }`}
                     >
-                      <MessageContent content={msg.content} role={msg.role} />
+                      <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
                       {!isUser && (
                         <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-700/50 text-[11px] text-slate-400">
                           <button
@@ -451,7 +451,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                   </div>
                   <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl p-3.5 text-xs sm:text-sm leading-relaxed bg-slate-800/80 text-slate-200 border border-slate-700/60">
                     {streamingContent ? (
-                      <MessageContent content={streamingContent} role="assistant" />
+                      <MessageContent content={streamingContent} role="assistant" conversationId={activeConversationId || undefined} />
                     ) : (
                       <span className="inline-flex items-center space-x-1.5 text-slate-400 text-xs animate-pulse">
                         <span>AUREN is thinking</span>
