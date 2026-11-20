@@ -40,6 +40,7 @@ import { MessageContent } from '../../components/chat/MessageContent';
 import { RenameConversationModal } from '../../components/chat/RenameConversationModal';
 import { DeleteConversationModal } from '../../components/chat/DeleteConversationModal';
 import { ContextInspectorModal } from '../../components/chat/ContextInspectorModal';
+import { AuthModal } from '../../components/auth/AuthModal';
 
 interface ChatViewProps {
   conversationId?: string;
@@ -91,6 +92,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   const [isMobileThreadDrawerOpen, setIsMobileThreadDrawerOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [contextInspectorMessageId, setContextInspectorMessageId] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -129,6 +131,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
 
   const handleNewConversation = async () => {
     if (isStreaming) return;
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     try {
       const newConv = await createConversationMutation.mutateAsync('New Conversation');
       setMessages([]);
@@ -237,7 +243,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         errMsg.includes('413') ||
         errMsg.includes('401') ||
         errMsg.includes('access denied') ||
-        errMsg.includes('conflicting request parameters');
+        errMsg.includes('conflicting request parameters') ||
+        errMsg.includes('Failed to reach backend API') ||
+        errMsg.includes('Unable to connect') ||
+        errMsg.includes('AI service is unavailable') ||
+        errMsg.includes('unsupported_model_configuration');
 
       if (!isNonRetryable && attempt < MAX_RETRIES) {
         const nextAttempt = attempt + 1;
@@ -261,6 +271,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
     if (e) e.preventDefault();
     const trimmed = inputValue.trim();
     if (!trimmed || isStreaming) return;
+
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
 
     const idempotencyKey = `req-${crypto.randomUUID()}`;
     setInputValue('');
@@ -312,6 +327,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           <div className="p-6 text-center text-xs text-slate-500 flex items-center justify-center space-x-2">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
             <span>Loading threads...</span>
+          </div>
+        ) : !user ? (
+          <div className="p-6 text-center text-xs text-slate-500 font-normal space-y-2">
+            <p>Sign in to view your conversations.</p>
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="text-xs text-champagne-400 hover:text-champagne-300 font-medium underline"
+            >
+              Sign In
+            </button>
           </div>
         ) : conversations.length === 0 ? (
           <div className="p-6 text-center text-xs text-slate-500 font-normal">
@@ -427,6 +452,29 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
 
         {/* Message Stream Display */}
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-7 space-y-4 sm:space-y-6 scrollbar-thin">
+          {!user && (
+            <div className="p-4 rounded-xl bg-champagne-950/20 border border-champagne-400/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+              <div className="flex items-center space-x-3">
+                <div className="h-8 w-8 rounded-lg bg-champagne-400/10 border border-champagne-400/20 flex items-center justify-center text-champagne-300 flex-shrink-0">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-white">Private Authenticated Assistant</h4>
+                  <p className="text-slate-400 text-[11px] leading-relaxed">
+                    Sign in to chat with AUREN, access persistent dialogues, and leverage memory context.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(true)}
+                className="px-3.5 py-1.5 bg-champagne-400 hover:bg-champagne-300 text-slate-950 font-semibold rounded-lg text-xs transition flex-shrink-0 touch-target self-start sm:self-center"
+              >
+                Sign In / Register
+              </button>
+            </div>
+          )}
+
           {isLoadingMessages ? (
             <div className="h-full flex items-center justify-center text-slate-400 text-xs space-x-2">
               <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
@@ -633,6 +681,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         conversationId={activeConversationId || undefined}
         messageId={contextInspectorMessageId || undefined}
         userId={user?.id}
+      />
+
+      {/* Auth Modal for Unauthenticated Users */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
       />
     </div>
   );

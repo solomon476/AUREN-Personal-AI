@@ -4,7 +4,7 @@
 
 import { supabase } from '../lib/supabase';
 
-const API_BASE_URL =
+export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 export class ApiError extends Error {
@@ -44,10 +44,21 @@ async function request<T>(
     }
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    const isNetworkError =
+      err instanceof TypeError &&
+      (err.message.includes('fetch') || err.message.includes('NetworkError'));
+    const friendlyMsg = isNetworkError
+      ? `Unable to connect to AUREN backend API at ${API_BASE_URL}. Ensure the service is active and reachable.`
+      : err?.message || 'Network request failed';
+    throw new ApiError(0, friendlyMsg);
+  }
 
   if (!response.ok) {
     let errorDetail = `Request failed with status ${response.status}`;

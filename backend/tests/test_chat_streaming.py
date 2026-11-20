@@ -72,6 +72,7 @@ def configure_test_environment(monkeypatch):
     monkeypatch.setattr(settings, "SUPABASE_JWT_SECRET", TEST_JWT_SECRET)
     monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
     monkeypatch.setattr(settings, "LLM_MODEL", "gemini-2.5-flash-test")
+    monkeypatch.setattr(settings, "CHAT_REPOSITORY_TYPE", "sqlite")
     # Patch provider getter to spy provider
     monkeypatch.setattr(chat_service, "_get_provider", lambda: spy_provider)
 

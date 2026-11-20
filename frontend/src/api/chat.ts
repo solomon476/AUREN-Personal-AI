@@ -4,10 +4,7 @@
  */
 
 import { supabase } from '../lib/supabase';
-import { apiClient } from './client';
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+import { API_BASE_URL, apiClient } from './client';
 
 export interface Conversation {
   id: string;
@@ -81,16 +78,31 @@ export async function streamChat(
     }
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      message,
-      conversation_id: conversationId || null,
-      idempotency_key: resolvedIdempotencyKey,
-    }),
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        message,
+        conversation_id: conversationId || null,
+        idempotency_key: resolvedIdempotencyKey,
+      }),
+      signal,
+    });
+  } catch (err: any) {
+    if (signal?.aborted) {
+      throw err;
+    }
+    const isNetworkError =
+      err instanceof TypeError &&
+      (err.message.includes('fetch') || err.message.includes('NetworkError'));
+    const friendlyMsg = isNetworkError
+      ? `Failed to reach backend API at ${API_BASE_URL}. Verify backend service is deployed, online, and CORS is permitted.`
+      : err?.message || 'Chat request failed';
+    callbacks?.onError?.(friendlyMsg);
+    throw new Error(friendlyMsg);
+  }
 
   if (!response.ok) {
     let errorDetail = `Streaming request failed with status ${response.status}`;
@@ -139,23 +151,23 @@ export async function streamChat(
 
         if (!currentData) continue;
 
+        let parsed: any = null;
         try {
-          const parsed = JSON.parse(currentData);
-
-          if (currentEvent === 'metadata') {
-            callbacks?.onMetadata?.(parsed);
-          } else if (currentEvent === 'token') {
-            callbacks?.onToken?.(parsed.text || '');
-          } else if (currentEvent === 'done') {
-            callbacks?.onDone?.(parsed);
-          } else if (currentEvent === 'error') {
-            callbacks?.onError?.(parsed.detail || 'Stream error occurred');
-          }
+          parsed = JSON.parse(currentData);
         } catch {
           // Plain text fallback
-          if (currentEvent === 'token') {
-            callbacks?.onToken?.(currentData);
-          }
+        }
+
+        if (currentEvent === 'metadata' && parsed) {
+          callbacks?.onMetadata?.(parsed);
+        } else if (currentEvent === 'token') {
+          callbacks?.onToken?.(parsed?.text ?? currentData);
+        } else if (currentEvent === 'done' && parsed) {
+          callbacks?.onDone?.(parsed);
+        } else if (currentEvent === 'error') {
+          const errorMsg = parsed?.detail || currentData || 'Stream error occurred';
+          callbacks?.onError?.(errorMsg);
+          throw new Error(errorMsg);
         }
       }
     }
