@@ -1,7 +1,7 @@
 """Unified v1 API router consolidating all endpoints."""
 
 from fastapi import APIRouter
-from app.api.v1 import auth, chat, goals, health, memories, productivity, projects, tasks, search, reflection
+from app.api.v1 import auth, chat, goals, health, journal, memories, productivity, projects, tasks, search, reflection
 
 api_router = APIRouter()
 
@@ -16,3 +16,4 @@ api_router.include_router(goals.router)
 api_router.include_router(productivity.router)
 api_router.include_router(search.router)
 api_router.include_router(reflection.router)
+api_router.include_router(journal.router)

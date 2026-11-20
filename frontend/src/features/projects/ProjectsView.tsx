@@ -23,9 +23,11 @@ import {
   useUpdateProject,
   useProject,
 } from '../../hooks/useProductivity';
+import { useAuth } from '../../context/AuthContext';
 import { ProjectModal } from '../../components/productivity/ProjectModal';
 
 export const ProjectsView: React.FC = () => {
+  const { user } = useAuth();
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
@@ -39,13 +41,13 @@ export const ProjectsView: React.FC = () => {
     query: searchQuery || undefined,
     page,
     page_size: 20,
-  });
+  }, user?.id);
 
-  const { data: activeProjectDetail } = useProject(activeProjectId || undefined);
+  const { data: activeProjectDetail } = useProject(activeProjectId || undefined, user?.id);
 
-  const createProjectMutation = useCreateProject();
-  const updateProjectMutation = useUpdateProject();
-  const deleteProjectMutation = useDeleteProject();
+  const createProjectMutation = useCreateProject(user?.id);
+  const updateProjectMutation = useUpdateProject(user?.id);
+  const deleteProjectMutation = useDeleteProject(user?.id);
 
   const handleOpenCreate = () => {
     setEditingProject(null);
@@ -146,9 +148,16 @@ export const ProjectsView: React.FC = () => {
               Loading projects...
             </div>
           ) : error ? (
-            <div className="p-4 bg-red-950/40 border border-red-800/80 rounded-lg text-sm text-red-300 flex items-center space-x-2">
-              <AlertCircle className="w-5 h-5" />
-              <span>Failed to load projects. Please try again.</span>
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl text-center space-y-2">
+              <AlertCircle className="w-5 h-5 text-indigo-400 mx-auto" />
+              <div className="text-sm font-semibold text-slate-200">
+                {!user ? 'Sign In to Access Projects' : 'Failed to load projects'}
+              </div>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                {!user
+                  ? 'Sign in or register to organize initiatives into structured projects and track execution.'
+                  : 'Could not connect to the projects service. Please verify network connectivity and try again.'}
+              </p>
             </div>
           ) : projectsData?.items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 border border-dashed border-slate-800 rounded-xl p-8 text-center bg-slate-900/20">

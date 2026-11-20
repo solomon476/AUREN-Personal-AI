@@ -180,11 +180,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export function useAuth() {
+const defaultGuestAuth: AuthContextType = {
+  user: null,
+  session: null,
+  profile: null,
+  isLoading: false,
+  error: null,
+  isConfigured: false,
+  signIn: async () => ({ success: false, error: 'Auth not initialized' }),
+  signUp: async () => ({ success: false, error: 'Auth not initialized' }),
+  signOut: async () => {},
+  refreshProfile: async () => {},
+};
+
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  return context || defaultGuestAuth;
 }
 

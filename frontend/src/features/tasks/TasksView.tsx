@@ -28,6 +28,7 @@ import {
   useUpdateTask,
 } from '../../hooks/useProductivity';
 import { TaskModal } from '../../components/productivity/TaskModal';
+import { useAuth } from '../../context/AuthContext';
 
 const PRIORITY_BADGES: Record<TaskPriority, { label: string; color: string }> = {
   low: { label: 'Low', color: 'bg-slate-800 text-slate-300 border-slate-700' },
@@ -37,6 +38,7 @@ const PRIORITY_BADGES: Record<TaskPriority, { label: string; color: string }> = 
 };
 
 export const TasksView: React.FC = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [selectedPriority, setSelectedPriority] = useState<string>('');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -46,7 +48,7 @@ export const TasksView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
-  const { data: projectsData } = useProjects({ page_size: 100 });
+  const { data: projectsData } = useProjects({ page_size: 100 }, user?.id);
   const { data: tasksData, isLoading, error } = useTasks({
     status: activeTab === 'all' ? undefined : activeTab,
     priority: selectedPriority || undefined,
@@ -54,12 +56,12 @@ export const TasksView: React.FC = () => {
     query: searchQuery || undefined,
     page,
     page_size: 25,
-  });
+  }, user?.id);
 
-  const createTaskMutation = useCreateTask();
-  const updateTaskMutation = useUpdateTask();
-  const changeStatusMutation = useChangeTaskStatus();
-  const deleteTaskMutation = useDeleteTask();
+  const createTaskMutation = useCreateTask(user?.id);
+  const updateTaskMutation = useUpdateTask(user?.id);
+  const changeStatusMutation = useChangeTaskStatus(user?.id);
+  const deleteTaskMutation = useDeleteTask(user?.id);
 
   const handleOpenCreate = () => {
     setEditingTask(null);
@@ -213,9 +215,16 @@ export const TasksView: React.FC = () => {
             Loading tasks...
           </div>
         ) : error ? (
-          <div className="p-4 bg-red-950/40 border border-red-800/80 rounded-lg text-sm text-red-300 flex items-center space-x-2">
-            <AlertCircle className="w-5 h-5" />
-            <span>Failed to load tasks. Please try again.</span>
+          <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl text-center space-y-2">
+            <AlertCircle className="w-5 h-5 text-indigo-400 mx-auto" />
+            <div className="text-sm font-semibold text-slate-200">
+              {!user ? 'Sign In to Access Tasks' : 'Failed to load tasks'}
+            </div>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              {!user
+                ? 'Sign in or register to manage your personal tasks, due dates, and priorities.'
+                : 'Could not connect to the tasks service. Please verify network connectivity and try again.'}
+            </p>
           </div>
         ) : tasksData?.items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 border border-dashed border-slate-800 rounded-xl p-8 text-center bg-slate-900/20">

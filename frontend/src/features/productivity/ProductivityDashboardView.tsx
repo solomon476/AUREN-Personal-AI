@@ -18,9 +18,11 @@ import {
 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useProductivityDashboard } from '../../hooks/useProductivity';
+import { useAuth } from '../../context/AuthContext';
 
 export const ProductivityDashboardView: React.FC = () => {
-  const { data: dashboard, isLoading, error } = useProductivityDashboard();
+  const { user } = useAuth();
+  const { data: dashboard, isLoading, error } = useProductivityDashboard(user?.id);
 
   if (isLoading) {
     return (
@@ -34,8 +36,16 @@ export const ProductivityDashboardView: React.FC = () => {
   if (error || !dashboard) {
     return (
       <div className="p-6 bg-slate-950 text-slate-100 flex-1">
-        <div className="p-4 bg-red-950/40 border border-red-800/80 rounded-xl text-sm text-red-300">
-          Failed to load productivity metrics.
+        <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-xl text-center space-y-2 max-w-lg mx-auto mt-12">
+          <AlertTriangle className="w-6 h-6 text-indigo-400 mx-auto" />
+          <div className="text-sm font-semibold text-slate-200">
+            {!user ? 'Sign In to View Productivity Metrics' : 'Productivity Metrics Unavailable'}
+          </div>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            {!user
+              ? 'Sign in or register an account to track execution velocity, active task breakdowns, and goal progress.'
+              : 'Unable to retrieve your productivity overview. Please verify your connection or try again later.'}
+          </p>
         </div>
       </div>
     );

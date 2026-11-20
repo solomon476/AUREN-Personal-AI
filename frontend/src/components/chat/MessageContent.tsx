@@ -1,7 +1,8 @@
 /**
  * Secure Rich Markdown and Code Rendering Component.
  * Supports Markdown, GitHub Flavored Markdown (GFM), Syntax Highlighting,
- * Mathematical Notation (KaTeX), and Strict HTML Sanitization.
+ * Mathematical Notation (KaTeX), Strict HTML Sanitization,
+ * and Interactive Assistant Action Proposal Cards.
  */
 
 import React, { useState } from 'react';
@@ -11,7 +12,17 @@ import remarkMath from 'remark-math';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import { Check, Copy } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  CheckSquare,
+  FolderKanban,
+  Target,
+  Plus,
+  CheckCircle2,
+} from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { useCreateGoal, useCreateProject, useCreateTask } from '../../hooks/useProductivity';
 
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github-dark.css';
@@ -69,6 +80,153 @@ export const markdownSanitizeSchema = {
   },
 };
 
+interface ActionProposalCardProps {
+  payloadStr: string;
+}
+
+const ActionProposalCard: React.FC<ActionProposalCardProps> = ({ payloadStr }) => {
+  const { user } = useAuth();
+  const createTaskMutation = useCreateTask(user?.id);
+  const createProjectMutation = useCreateProject(user?.id);
+  const createGoalMutation = useCreateGoal(user?.id);
+
+  const [executed, setExecuted] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  let action: any = null;
+  try {
+    action = JSON.parse(payloadStr.trim());
+  } catch {
+    return null;
+  }
+
+  if (!action || !action.type) return null;
+
+  const handleConfirm = async () => {
+    setErrorMsg(null);
+    try {
+      if (action.type === 'create_task') {
+        await createTaskMutation.mutateAsync({
+          title: action.title || 'Untitled Task',
+          priority: action.priority || 'medium',
+          due_date: action.due_date,
+        });
+      } else if (action.type === 'create_project') {
+        await createProjectMutation.mutateAsync({
+          name: action.name || action.title || 'Untitled Project',
+          description: action.description,
+        });
+      } else if (action.type === 'create_goal') {
+        await createGoalMutation.mutateAsync({
+          title: action.title || action.name || 'Untitled Goal',
+          description: action.description,
+          target_date: action.target_date,
+        });
+      }
+      setExecuted(true);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Action execution failed');
+    }
+  };
+
+  const getActionMeta = () => {
+    switch (action.type) {
+      case 'create_task':
+        return {
+          icon: CheckSquare,
+          label: 'Task Proposal',
+          color: 'text-indigo-400',
+          border: 'border-indigo-800/60',
+          bg: 'bg-indigo-950/30',
+          buttonText: 'Add to Tasks',
+          title: action.title,
+        };
+      case 'create_project':
+        return {
+          icon: FolderKanban,
+          label: 'Project Proposal',
+          color: 'text-emerald-400',
+          border: 'border-emerald-800/60',
+          bg: 'bg-emerald-950/30',
+          buttonText: 'Create Project',
+          title: action.name || action.title,
+        };
+      case 'create_goal':
+        return {
+          icon: Target,
+          label: 'Goal Proposal',
+          color: 'text-purple-400',
+          border: 'border-purple-800/60',
+          bg: 'bg-purple-950/30',
+          buttonText: 'Set Goal',
+          title: action.title || action.name,
+        };
+      default:
+        return null;
+    }
+  };
+
+  const meta = getActionMeta();
+  if (!meta) return null;
+  const Icon = meta.icon;
+
+  return (
+    <div className={`my-3 p-3.5 rounded-xl border ${meta.border} ${meta.bg} space-y-2.5 max-w-lg`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Icon className={`w-4 h-4 ${meta.color}`} />
+          <span className="text-xs font-semibold text-slate-200">{meta.label}</span>
+        </div>
+        <span className="text-[10px] text-slate-400 font-mono">Requires confirmation</span>
+      </div>
+
+      <div className="pl-6">
+        <span className="text-xs font-medium text-slate-100 block">{meta.title}</span>
+        {action.priority && (
+          <span className="inline-block mt-1 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+            Priority: {action.priority}
+          </span>
+        )}
+        {action.due_date && (
+          <span className="inline-block ml-2 text-[10px] text-slate-400">
+            Due: {action.due_date}
+          </span>
+        )}
+        {action.description && (
+          <p className="text-[11px] text-slate-400 mt-1">{action.description}</p>
+        )}
+      </div>
+
+      {errorMsg && (
+        <div className="text-[11px] text-rose-400 pl-6">{errorMsg}</div>
+      )}
+
+      <div className="pl-6 pt-1 flex items-center space-x-2">
+        {executed ? (
+          <span className="flex items-center space-x-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-800/50">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Added to Life Management</span>
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={
+              createTaskMutation.isPending ||
+              createProjectMutation.isPending ||
+              createGoalMutation.isPending
+            }
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 disabled:opacity-50"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{meta.buttonText}</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 interface FencedCodeBlockProps {
   language?: string;
   className?: string;
@@ -78,6 +236,11 @@ interface FencedCodeBlockProps {
 const FencedCodeBlock: React.FC<FencedCodeBlockProps> = ({ language, className, children, ...props }) => {
   const [copied, setCopied] = useState(false);
   const codeString = String(children).replace(/\n$/, '');
+
+  // Check if this is an interactive AUREN action proposal
+  if (language === 'auren-action' || language === 'auren_action') {
+    return <ActionProposalCard payloadStr={codeString} />;
+  }
 
   const handleCopy = async () => {
     try {
@@ -148,7 +311,7 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, role })
         components={{
           pre: ({ children }) => <div className="my-2">{children}</div>,
           code: ({ node, className, children, ...props }: any) => {
-            const match = /language-(\w+)/.exec(className || '');
+            const match = /language-([a-zA-Z0-9_-]+)/.exec(className || '');
             const isBlock = Boolean(match) || (typeof children === 'string' && children.includes('\n'));
             if (isBlock) {
               return (

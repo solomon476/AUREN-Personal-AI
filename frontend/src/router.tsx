@@ -1,6 +1,7 @@
 /**
  * Application Routing Architecture using TanStack Router.
- * Establishes typed routes, layout nesting, bookmarkable conversation URLs, and roadmap destinations.
+ * Establishes typed routes, layout nesting, bookmarkable URLs,
+ * and unified command center integration across all six product areas.
  */
 
 import {
@@ -9,11 +10,8 @@ import {
   createRootRoute,
   redirect,
 } from '@tanstack/react-router';
-import {
-  BookOpen,
-  Settings,
-} from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
+import { HomeView } from './features/home/HomeView';
 import { ChatView } from './features/chat/ChatView';
 import { SystemView } from './features/system/SystemView';
 import { MemoryView } from './features/memory/MemoryView';
@@ -23,7 +21,8 @@ import { GoalsView } from './features/goals/GoalsView';
 import { ProductivityDashboardView } from './features/productivity/ProductivityDashboardView';
 import { OmnisearchView } from './features/search/OmnisearchView';
 import { ReflectionView } from './features/reflection/ReflectionView';
-import { SectionPlaceholder } from './components/placeholders/SectionPlaceholder';
+import { JournalView } from './features/journal/JournalView';
+import { SettingsView } from './features/settings/SettingsView';
 import { NotFound } from './components/common/NotFound';
 
 // Root Application Route with Shared Shell Layout
@@ -32,7 +31,7 @@ export const rootRoute = createRootRoute({
   notFoundComponent: NotFound,
 });
 
-// Index Route: Redirects to /chat
+// Index Route: Redirects to /chat (Assistant conversational center)
 export const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -41,133 +40,107 @@ export const indexRoute = createRoute({
   },
 });
 
-// Active Chat View (New Dialogue or Default)
+// Area 1: Home — Personal Command Center (/home)
+export const homeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/home',
+  component: HomeView,
+});
+
+// Area 2: Assistant — Central AI Intelligence (/chat and /chat/$conversationId)
 export const chatRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/chat',
   component: ChatView,
 });
 
-// Specific Conversation Route (/chat/$conversationId)
 export const conversationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/chat/$conversationId',
   component: ChatView,
 });
 
-// System & Database Health Route
-export const systemRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/system',
-  component: SystemView,
-});
-
-// Long-term Memory Explorer & Epistemic Verification (Phase 3C.3)
+// Area 3: Memory — Personal Knowledge and Context (/memories)
 export const memoriesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/memories',
   component: MemoryView,
 });
 
-// Tasks & Timetable Management (Phase 3C.4)
+// Area 4: Life Management — Tasks, Projects, and Goals
 export const tasksRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tasks',
   component: TasksView,
 });
 
-// Projects Workspace Management (Phase 3C.4)
 export const projectsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/projects',
   component: ProjectsView,
 });
 
-// Strategic Goals & Milestones Management (Phase 3C.4)
 export const goalsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/goals',
   component: GoalsView,
 });
 
-// Productivity Overview Dashboard (Phase 3C.4)
 export const productivityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/productivity',
   component: ProductivityDashboardView,
 });
 
-// Omnisearch — Phase 3C.5
-export const searchRoute = createRoute({
+// Area 5: Reflection & Journal — Private Journal and Reflective Intelligence
+export const journalRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/search',
-  component: OmnisearchView,
+  path: '/journal',
+  component: JournalView,
 });
 
-// Reflective Intelligence — Phase 3C.5
 export const reflectionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/reflection',
   component: ReflectionView,
 });
 
-// Private Journaling Placeholder (Phase 3C.5)
-export const journalRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/journal',
-  component: () => (
-    <SectionPlaceholder
-      title="Private Journaling & Moods"
-      icon={BookOpen}
-      badge="Consent Protected"
-      phase="Phase 3C.5"
-      description="Private daily reflections with mood analysis and cryptographic consent guarantees."
-      backendStatus="Active: PostgreSQL journal_entries table with RFC 8785 canonical JSON and HMAC signing"
-      plannedFeatures={[
-        'Distraction-free Markdown Reflection Editor',
-        'Mood & Sentiment Trend Tracking',
-        'Private Epistemic Reflections',
-      ]}
-    />
-  ),
-});
-
-// Settings Placeholder
+// Area 6: Settings — Privacy, Preferences and Control (/settings)
 export const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
-  component: () => (
-    <SectionPlaceholder
-      title="Settings & Preferences"
-      icon={Settings}
-      badge="Configuration"
-      phase="Phase 3C.2 / 3C.3"
-      description="Manage AI persona, model preferences, Supabase credentials, and data privacy settings."
-      backendStatus="Active: profiles table with user metadata and preferences"
-      plannedFeatures={[
-        'LLM Provider & Model Selection',
-        'Memory Retention & Privacy Policies',
-        'Data Export & Account Management',
-      ]}
-    />
-  ),
+  component: SettingsView,
+});
+
+// Search & System Observability
+export const searchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/search',
+  component: OmnisearchView,
+});
+
+export const systemRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/system',
+  component: SystemView,
 });
 
 // Route Tree Definition
 export const routeTree = rootRoute.addChildren([
   indexRoute,
+  homeRoute,
   chatRoute,
   conversationRoute,
-  systemRoute,
   memoriesRoute,
   tasksRoute,
   projectsRoute,
   goalsRoute,
   productivityRoute,
-  searchRoute,
-  reflectionRoute,
   journalRoute,
+  reflectionRoute,
   settingsRoute,
+  searchRoute,
+  systemRoute,
 ]);
 
 export function createAppRouter() {

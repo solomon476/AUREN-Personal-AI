@@ -24,9 +24,11 @@ import {
   useGoals,
   useUpdateGoal,
 } from '../../hooks/useProductivity';
+import { useAuth } from '../../context/AuthContext';
 import { GoalModal } from '../../components/productivity/GoalModal';
 
 export const GoalsView: React.FC = () => {
+  const { user } = useAuth();
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
@@ -40,13 +42,13 @@ export const GoalsView: React.FC = () => {
     query: searchQuery || undefined,
     page,
     page_size: 20,
-  });
+  }, user?.id);
 
-  const { data: activeGoalDetail } = useGoal(activeGoalId || undefined);
+  const { data: activeGoalDetail } = useGoal(activeGoalId || undefined, user?.id);
 
-  const createGoalMutation = useCreateGoal();
-  const updateGoalMutation = useUpdateGoal();
-  const deleteGoalMutation = useDeleteGoal();
+  const createGoalMutation = useCreateGoal(user?.id);
+  const updateGoalMutation = useUpdateGoal(user?.id);
+  const deleteGoalMutation = useDeleteGoal(user?.id);
 
   const handleOpenCreate = () => {
     setEditingGoal(null);
@@ -146,9 +148,16 @@ export const GoalsView: React.FC = () => {
               Loading goals...
             </div>
           ) : error ? (
-            <div className="p-4 bg-red-950/40 border border-red-800/80 rounded-lg text-sm text-red-300 flex items-center space-x-2">
-              <AlertCircle className="w-5 h-5" />
-              <span>Failed to load goals. Please try again.</span>
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl text-center space-y-2">
+              <AlertCircle className="w-5 h-5 text-indigo-400 mx-auto" />
+              <div className="text-sm font-semibold text-slate-200">
+                {!user ? 'Sign In to Access Goals' : 'Failed to load goals'}
+              </div>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                {!user
+                  ? 'Sign in or register to track long-term milestones, objectives, and execution progress.'
+                  : 'Could not connect to the goals service. Please verify network connectivity and try again.'}
+              </p>
             </div>
           ) : goalsData?.items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 border border-dashed border-slate-800 rounded-xl p-8 text-center bg-slate-900/20">
