@@ -173,18 +173,18 @@ export const JournalView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden text-slate-100">
+    <div className="flex-1 flex flex-col h-full bg-[#07080c] overflow-hidden text-slate-100">
       {/* Top Banner & Privacy Invariant Header */}
-      <div className="px-6 py-4.5 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="px-6 py-4.5 border-b border-white/[0.06] bg-[#0e1017]/70 backdrop-blur-md flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-3.5">
-            <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 shadow-sm">
+            <div className="p-2.5 rounded-xl bg-champagne-500/10 border border-champagne-500/20 text-champagne-400 shadow-sm">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-bold tracking-tight text-slate-100">Private Journaling &amp; Reflection</h1>
-                <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                <h1 className="text-xl font-bold tracking-tight text-white">Private Journaling &amp; Reflection</h1>
+                <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded bg-graphite-800/90 text-champagne-300 border border-champagne-500/20">
                   Quarantined Storage
                 </span>
               </div>
@@ -196,7 +196,7 @@ export const JournalView: React.FC = () => {
         </div>
 
         {/* Cryptographic Privacy Assurance Badge */}
-        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs shadow-sm">
+        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs shadow-sm">
           <Lock className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
           <span className="font-mono text-[11px]">Consent Protected: Cryptographically isolated from AI chat retrieval</span>
         </div>
@@ -205,12 +205,12 @@ export const JournalView: React.FC = () => {
       {/* Main Workspace Body */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Column: Entries List & Filters (Hidden on mobile when actively editing or viewing an entry) */}
-        <div className={`${isEditing || selectedEntry ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 border-r border-slate-800/80 flex-col bg-slate-950`}>
+        <div className={`${isEditing || selectedEntry ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 border-r border-white/[0.06] flex-col bg-[#07080c]`}>
           {/* Action Bar */}
-          <div className="p-4 border-b border-slate-800/80 space-y-3">
+          <div className="p-4 border-b border-white/[0.06] space-y-3 bg-[#0e1017]/30">
             <button
               onClick={() => handleOpenNewEntry()}
-              className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold text-xs transition shadow-md shadow-indigo-600/20"
+              className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold text-xs transition shadow-md shadow-indigo-600/20 cursor-pointer touch-target min-h-[42px]"
             >
               <Plus className="w-4 h-4" />
               <span>Write Reflection</span>
@@ -224,7 +224,7 @@ export const JournalView: React.FC = () => {
                 placeholder="Search reflections..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl pl-9 pr-3.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-champagne-500/50 transition"
               />
             </div>
 
@@ -232,10 +232,10 @@ export const JournalView: React.FC = () => {
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] scrollbar-none">
               <button
                 onClick={() => setSelectedMood('')}
-                className={`px-2.5 py-1 rounded-lg font-medium border transition ${
+                className={`px-2.5 py-1 rounded-lg font-medium border transition cursor-pointer ${
                   selectedMood === ''
-                    ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-sm'
-                    : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/60'
+                    ? 'bg-white/[0.08] text-white border-white/[0.12] shadow-sm'
+                    : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.04]'
                 }`}
               >
                 All
@@ -244,10 +244,10 @@ export const JournalView: React.FC = () => {
                 <button
                   key={m.value}
                   onClick={() => setSelectedMood(selectedMood === m.value ? '' : m.value)}
-                  className={`px-2 py-1 rounded-lg font-medium border whitespace-nowrap transition ${
+                  className={`px-2 py-1 rounded-lg font-medium border whitespace-nowrap transition cursor-pointer ${
                     selectedMood === m.value
                       ? m.color
-                      : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/60'
+                      : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.04]'
                   }`}
                 >
                   {m.label}
@@ -257,10 +257,10 @@ export const JournalView: React.FC = () => {
           </div>
 
           {/* Entries Feed */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto divide-y divide-white/[0.04] scrollbar-thin">
             {!user ? (
               <div className="p-8 text-center space-y-3">
-                <Lock className="w-8 h-8 text-indigo-400 mx-auto" />
+                <Lock className="w-8 h-8 text-champagne-400 mx-auto" />
                 <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
                   Sign in to create, browse, and sync your private reflection journal with cryptographic guarantees.
@@ -290,8 +290,8 @@ export const JournalView: React.FC = () => {
                     onClick={() => handleSelectEntry(entry)}
                     className={`p-4 cursor-pointer transition select-none ${
                       isSelected
-                        ? 'bg-slate-900/90 border-l-2 border-l-indigo-500 shadow-sm'
-                        : 'hover:bg-slate-900/40'
+                        ? 'bg-[#0e1017] border-l-2 border-l-champagne-400 shadow-sm'
+                        : 'hover:bg-white/[0.02]'
                     }`}
                   >
                     <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5">
@@ -316,7 +316,7 @@ export const JournalView: React.FC = () => {
                         {entry.tags.slice(0, 3).map((tag, idx) => (
                           <span
                             key={idx}
-                            className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-mono"
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-[#07080c] text-slate-400 border border-white/[0.06] font-mono"
                           >
                             #{tag}
                           </span>
@@ -330,11 +330,11 @@ export const JournalView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Writing & Reflection Workspace (Full width on mobile when writing/reading, hidden when browsing list) */}
-        <div className={`${!isEditing && !selectedEntry ? 'hidden md:flex' : 'flex'} flex-1 flex-col bg-slate-950 overflow-hidden`}>
+        {/* Right Column: Writing & Reflection Workspace */}
+        <div className={`${!isEditing && !selectedEntry ? 'hidden md:flex' : 'flex'} flex-1 flex-col bg-[#07080c] overflow-hidden`}>
           {isEditing ? (
             <form onSubmit={handleSaveEntry} className="flex-1 flex flex-col h-full overflow-hidden p-3.5 sm:p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
                 <div className="flex items-center space-x-2">
                   <button
                     type="button"
@@ -344,26 +344,26 @@ export const JournalView: React.FC = () => {
                         setEditingEntryId(null);
                       }
                     }}
-                    className="md:hidden flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:text-white touch-target mr-1"
+                    className="md:hidden flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-[#0e1017] border border-white/[0.08] text-xs text-slate-300 hover:text-white touch-target mr-1 cursor-pointer"
                     aria-label="Back to reflections"
                   >
                     <ChevronLeft className="w-4 h-4 text-slate-400" />
                     <span>Back</span>
                   </button>
-                  <Edit3 className="w-4 h-4 text-indigo-400" />
+                  <Edit3 className="w-4 h-4 text-champagne-400" />
                   <span className="text-sm font-semibold text-slate-200">
                     {editingEntryId ? 'Edit Reflection' : 'New Reflection'}
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
                   {/* Write vs Preview Toggle */}
-                  <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 mr-2">
+                  <div className="flex items-center bg-[#0e1017] border border-white/[0.08] rounded-xl p-0.5 mr-2">
                     <button
                       type="button"
                       onClick={() => setEditorTab('write')}
-                      className={`px-3 py-1 text-xs font-medium rounded-lg transition ${
+                      className={`px-3 py-1 text-xs font-medium rounded-lg transition cursor-pointer ${
                         editorTab === 'write'
-                          ? 'bg-indigo-600 text-white shadow-sm'
+                          ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
@@ -372,9 +372,9 @@ export const JournalView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setEditorTab('preview')}
-                      className={`px-3 py-1 text-xs font-medium rounded-lg transition flex items-center space-x-1.5 ${
+                      className={`px-3 py-1 text-xs font-medium rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                         editorTab === 'preview'
-                          ? 'bg-indigo-600 text-white shadow-sm'
+                          ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
@@ -391,14 +391,14 @@ export const JournalView: React.FC = () => {
                         setEditingEntryId(null);
                       }
                     }}
-                    className="px-3.5 py-1.5 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-xs transition"
+                    className="px-3.5 py-1.5 rounded-xl border border-white/[0.08] hover:bg-white/[0.06] text-slate-400 hover:text-slate-200 text-xs transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={createMutation.isPending || updateMutation.isPending || !content.trim()}
-                    className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 disabled:opacity-50"
+                    className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
                     <span>Save</span>
@@ -407,8 +407,8 @@ export const JournalView: React.FC = () => {
               </div>
 
               {statusMessage && (
-                <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-800/60 text-xs text-indigo-200 flex items-center space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200 flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-champagne-400" />
                   <span>{statusMessage}</span>
                 </div>
               )}
@@ -421,7 +421,7 @@ export const JournalView: React.FC = () => {
                     placeholder="Reflection title (optional)..."
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                    className="w-full bg-[#0e1017]/70 border border-white/[0.08] rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-champagne-500/50 transition"
                   />
                 </div>
                 <div>
@@ -429,7 +429,7 @@ export const JournalView: React.FC = () => {
                     type="date"
                     value={entryDate}
                     onChange={(e) => setEntryDate(e.target.value)}
-                    className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition font-mono"
+                    className="w-full bg-[#0e1017]/70 border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-300 focus:outline-none focus:border-champagne-500/50 transition font-mono"
                   />
                 </div>
               </div>
@@ -442,7 +442,7 @@ export const JournalView: React.FC = () => {
                   <select
                     value={mood}
                     onChange={(e) => setMood(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+                    className="bg-[#0e1017] border border-white/[0.08] rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-champagne-500/50 transition"
                   >
                     {MOOD_OPTIONS.map((m) => (
                       <option key={m.value} value={m.value}>
@@ -459,7 +459,7 @@ export const JournalView: React.FC = () => {
                     placeholder="Tags (comma separated, e.g. strategy, health)"
                     value={tagsInput}
                     onChange={(e) => setTagsInput(e.target.value)}
-                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                    className="flex-1 bg-[#0e1017] border border-white/[0.08] rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-champagne-500/50 transition"
                   />
                 </div>
               </div>
@@ -471,10 +471,10 @@ export const JournalView: React.FC = () => {
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
                     placeholder="Begin your reflection... Markdown formatting supported."
-                    className="w-full flex-1 bg-slate-900/40 border border-slate-800 rounded-2xl p-4.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none font-sans leading-relaxed"
+                    className="w-full flex-1 bg-[#0e1017]/40 border border-white/[0.08] rounded-2xl p-4.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-champagne-500/40 resize-none font-sans leading-relaxed"
                   />
                 ) : (
-                  <div className="w-full flex-1 bg-slate-900/40 border border-slate-800 rounded-2xl p-6 overflow-y-auto">
+                  <div className="w-full flex-1 bg-[#0e1017]/40 border border-white/[0.08] rounded-2xl p-6 overflow-y-auto">
                     {content.trim() ? (
                       <MessageContent content={content} role="assistant" />
                     ) : (
@@ -494,14 +494,14 @@ export const JournalView: React.FC = () => {
                     setSelectedEntry(null);
                     setIsEditing(false);
                   }}
-                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:text-white touch-target"
+                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-[#0e1017] border border-white/[0.08] text-xs text-slate-300 hover:text-white touch-target cursor-pointer"
                   aria-label="Back to reflections"
                 >
                   <ChevronLeft className="w-4 h-4 text-slate-400" />
                   <span>Back to Reflections</span>
                 </button>
               </div>
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
+              <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
                 <div>
                   <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 mb-1.5">
                     <div className="flex items-center space-x-1.5 font-mono">
@@ -511,29 +511,29 @@ export const JournalView: React.FC = () => {
                     {selectedEntry.mood && (
                       <>
                         <span>•</span>
-                        <span className="capitalize text-indigo-400 font-medium">{selectedEntry.mood}</span>
+                        <span className="capitalize text-champagne-400 font-medium">{selectedEntry.mood}</span>
                       </>
                     )}
                     {selectedEntry.integrity_verified === true && (
-                      <span className="flex items-center space-x-1 text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-md font-mono">
+                      <span className="flex items-center space-x-1 text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md font-mono">
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                         <span>RFC 8785 HMAC Verified</span>
                       </span>
                     )}
                     {selectedEntry.integrity_verified === false && (
-                      <span className="flex items-center space-x-1 text-[10px] text-rose-400 bg-rose-950/60 border border-rose-800/60 px-2 py-0.5 rounded-md font-mono">
+                      <span className="flex items-center space-x-1 text-[10px] text-rose-400 bg-rose-950/60 border border-rose-500/30 px-2 py-0.5 rounded-md font-mono">
                         <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
                         <span>Integrity Failed</span>
                       </span>
                     )}
                     {selectedEntry.integrity_verified === null && (
-                      <span className="flex items-center space-x-1 text-[10px] text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md font-mono">
+                      <span className="flex items-center space-x-1 text-[10px] text-slate-400 bg-graphite-800 border border-white/[0.08] px-2 py-0.5 rounded-md font-mono">
                         <Shield className="w-3.5 h-3.5 text-slate-400" />
                         <span>Unsigned (Legacy)</span>
                       </span>
                     )}
                   </div>
-                  <h2 className="text-lg font-bold text-slate-100 tracking-tight">
+                  <h2 className="text-lg font-bold text-white tracking-tight">
                     {selectedEntry.title || 'Untitled Reflection'}
                   </h2>
                 </div>
@@ -542,7 +542,7 @@ export const JournalView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleStartEdit(selectedEntry)}
-                    className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20"
+                    className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 cursor-pointer"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                     <span>Edit</span>
@@ -550,7 +550,7 @@ export const JournalView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleDeleteEntry(selectedEntry.id)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition text-xs border border-slate-800"
+                    className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-white/[0.06] transition text-xs border border-white/[0.08] cursor-pointer"
                     title="Delete Entry"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -558,7 +558,7 @@ export const JournalView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedEntry(null)}
-                    className="px-3.5 py-1.5 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-xs transition"
+                    className="px-3.5 py-1.5 rounded-xl border border-white/[0.08] hover:bg-white/[0.06] text-slate-400 hover:text-slate-200 text-xs transition cursor-pointer"
                   >
                     Close
                   </button>
@@ -570,7 +570,7 @@ export const JournalView: React.FC = () => {
                   {selectedEntry.tags.map((tag, idx) => (
                     <span
                       key={idx}
-                      className="text-[10px] px-2 py-0.5 rounded-md bg-slate-900 text-slate-300 border border-slate-800 font-mono"
+                      className="text-[10px] px-2 py-0.5 rounded-md bg-[#0e1017] text-champagne-300 border border-white/[0.08] font-mono"
                     >
                       #{tag}
                     </span>
@@ -580,7 +580,7 @@ export const JournalView: React.FC = () => {
 
               {/* Rendered Markdown Body */}
               <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
-                <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-800/80 leading-relaxed text-sm shadow-subtle-elevation">
+                <div className="p-6 rounded-2xl bg-[#0e1017]/50 border border-white/[0.06] leading-relaxed text-sm shadow-subtle-elevation">
                   <MessageContent content={selectedEntry.content} role="assistant" />
                 </div>
               </div>
@@ -588,12 +588,12 @@ export const JournalView: React.FC = () => {
           ) : (
             /* Focused Welcome / Reflection Prompts Screen */
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-xl mx-auto space-y-6">
-              <div className="p-3.5 rounded-2xl bg-gradient-to-tr from-purple-600/20 to-indigo-600/20 border border-purple-500/20 text-purple-400 shadow-sm">
+              <div className="p-3.5 rounded-2xl bg-champagne-500/10 border border-champagne-500/20 text-champagne-400 shadow-sm">
                 <BookOpen className="w-8 h-8" />
               </div>
 
               <div className="space-y-2">
-                <h2 className="text-lg font-bold text-slate-100 tracking-tight">Daily Reflection &amp; Contemplation</h2>
+                <h2 className="text-lg font-bold text-white tracking-tight">Daily Reflection &amp; Contemplation</h2>
                 <p className="text-xs text-slate-400 leading-relaxed max-w-md">
                   Take a quiet moment to record your thoughts, decisions, and mindset. Your reflections are strictly isolated and never used to generate conversational memories without explicit consent.
                 </p>
@@ -601,8 +601,8 @@ export const JournalView: React.FC = () => {
 
               {/* Reflection Prompts Cards */}
               <div className="w-full space-y-2 text-left">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5 font-mono">
-                  <Sparkles className="w-3 h-3 text-indigo-400" />
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-champagne-400 flex items-center space-x-1.5 font-mono">
+                  <Sparkles className="w-3 h-3 text-champagne-400" />
                   <span>Inspiration Prompts for Today</span>
                 </p>
                 <div className="space-y-2">
@@ -610,10 +610,10 @@ export const JournalView: React.FC = () => {
                     <button
                       key={idx}
                       onClick={() => handleOpenNewEntry(prompt)}
-                      className="w-full text-left p-3.5 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700/90 text-xs text-slate-300 transition-all duration-150 flex items-center justify-between group shadow-subtle-elevation"
+                      className="w-full text-left p-3.5 rounded-xl bg-[#0e1017]/70 hover:bg-[#0e1017]/95 border border-white/[0.06] hover:border-champagne-500/30 text-xs text-slate-300 transition-all duration-150 flex items-center justify-between group shadow-subtle-elevation cursor-pointer"
                     >
                       <span className="leading-relaxed pr-3">{prompt}</span>
-                      <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 flex-shrink-0 transition" />
+                      <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-champagne-400 flex-shrink-0 transition" />
                     </button>
                   ))}
                 </div>
@@ -621,7 +621,7 @@ export const JournalView: React.FC = () => {
 
               <button
                 onClick={() => handleOpenNewEntry()}
-                className="flex items-center space-x-2 py-2.5 px-5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-medium text-xs transition shadow-lg shadow-indigo-600/20"
+                className="flex items-center space-x-2 py-2.5 px-5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-medium text-xs transition shadow-lg shadow-indigo-600/20 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Start Blank Reflection</span>

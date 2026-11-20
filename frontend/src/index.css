@@ -6,9 +6,11 @@
   :root {
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     color-scheme: dark;
-    --auren-bg: #08090d;
-    --auren-surface: #0f1118;
-    --auren-border: #1e2333;
+    --auren-bg: #07080c;
+    --auren-surface: #0e1017;
+    --auren-elevated: #141722;
+    --auren-border: #1c2130;
+    --auren-champagne: #d7ba83;
   }
 
   body {
@@ -20,8 +22,8 @@
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -29,12 +31,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.15);
+  background: rgba(148, 163, 184, 0.16);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.3);
+  background: rgba(148, 163, 184, 0.32);
 }
 
 /* ========================================================================= */
@@ -43,7 +45,7 @@
 
 html[data-theme="obsidian"] body,
 html[data-theme="obsidian"] .bg-slate-950 {
-  background-color: #000000 !important;
+  background-color: #030406 !important;
 }
 html[data-theme="obsidian"] .bg-slate-900,
 html[data-theme="obsidian"] .bg-slate-900\/80,
@@ -52,16 +54,16 @@ html[data-theme="obsidian"] .bg-slate-900\/60,
 html[data-theme="obsidian"] .bg-slate-900\/50,
 html[data-theme="obsidian"] .bg-slate-900\/40,
 html[data-theme="obsidian"] .bg-slate-900\/30 {
-  background-color: #0a0a0a !important;
+  background-color: #080a0f !important;
 }
 html[data-theme="obsidian"] .border-slate-800,
 html[data-theme="obsidian"] .border-slate-800\/80,
 html[data-theme="obsidian"] .border-slate-800\/60 {
-  border-color: #1a1a1a !important;
+  border-color: #151824 !important;
 }
 html[data-theme="obsidian"] .hover\:bg-slate-800:hover,
 html[data-theme="obsidian"] .hover\:bg-slate-900:hover {
-  background-color: #141414 !important;
+  background-color: #10131d !important;
 }
 
 html[data-theme="midnight"] body,
@@ -87,13 +89,50 @@ html[data-theme="midnight"] .hover\:bg-slate-900:hover {
   background-color: #171f45 !important;
 }
 
-/* Subtle Ambient Glow Utilities */
+/* Ambient Glow & Micro-Texture Utilities */
 .ambient-glow-indigo {
-  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.09) 0%, transparent 70%);
 }
 
 .ambient-glow-champagne {
-  background: radial-gradient(circle at 50% 0%, rgba(202, 163, 94, 0.06) 0%, transparent 65%);
+  background: radial-gradient(circle at 50% 0%, rgba(215, 186, 131, 0.08) 0%, transparent 65%);
+}
+
+.ambient-glow-emerald {
+  background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 65%);
+}
+
+/* Card & Surface Elevation Classes */
+.auren-card {
+  background: rgba(14, 16, 23, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auren-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(17, 20, 28, 0.75);
+}
+
+.auren-glass {
+  background: rgba(10, 12, 17, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.auren-badge-champagne {
+  background: rgba(215, 186, 131, 0.12);
+  color: #e6d4b0;
+  border: 1px solid rgba(215, 186, 131, 0.3);
+}
+
+.auren-badge-indigo {
+  background: rgba(99, 102, 241, 0.12);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.3);
 }
 
 /* Mobile Safe Area & Touch Target Utilities */
@@ -105,7 +144,7 @@ html[data-theme="midnight"] .hover\:bg-slate-900:hover {
 }
 
 .pb-safe {
-  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
 }
 
 .pt-safe {
@@ -119,4 +158,16 @@ html[data-theme="midnight"] .hover\:bg-slate-900:hover {
 .touch-target {
   min-height: 44px;
   min-width: 44px;
+}
+
+/* Reduced Motion Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

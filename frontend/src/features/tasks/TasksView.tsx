@@ -33,10 +33,10 @@ import { TaskModal } from '../../components/productivity/TaskModal';
 import { useAuth } from '../../context/AuthContext';
 
 const PRIORITY_BADGES: Record<TaskPriority, { label: string; color: string }> = {
-  low: { label: 'Low', color: 'bg-slate-800/80 text-slate-300 border-slate-700' },
-  medium: { label: 'Medium', color: 'bg-indigo-950/70 text-indigo-300 border-indigo-800/40' },
-  high: { label: 'High', color: 'bg-amber-950/70 text-amber-300 border-amber-800/40' },
-  urgent: { label: 'Urgent', color: 'bg-rose-950/70 text-rose-300 border-rose-800/40' },
+  low: { label: 'Low', color: 'bg-graphite-800/80 text-slate-300 border-white/[0.08]' },
+  medium: { label: 'Medium', color: 'bg-indigo-950/70 text-indigo-300 border-indigo-500/30' },
+  high: { label: 'High', color: 'bg-champagne-500/10 text-champagne-300 border-champagne-500/30' },
+  urgent: { label: 'Urgent', color: 'bg-rose-950/70 text-rose-300 border-rose-500/30' },
 };
 
 export const TasksView: React.FC = () => {
@@ -111,16 +111,21 @@ export const TasksView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden text-slate-100">
+    <div className="flex-1 flex flex-col h-full bg-[#07080c] overflow-hidden text-slate-100">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between p-4 sm:p-6 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur gap-3 sm:gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between p-4 sm:p-6 border-b border-white/[0.06] bg-[#0e1017]/70 backdrop-blur-md gap-3 sm:gap-4">
         <div>
           <div className="flex items-center space-x-3.5">
-            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-sm">
+            <div className="p-2.5 rounded-xl bg-champagne-500/10 border border-champagne-500/20 text-champagne-400 shadow-sm">
               <CheckSquare className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-100">Tasks &amp; Timetable</h1>
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl font-bold tracking-tight text-white">Tasks &amp; Timetable</h1>
+                <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded bg-graphite-800/90 text-champagne-300 border border-champagne-500/20">
+                  Life Operations
+                </span>
+              </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 Personal task tracking with priority tiers, project binding, and deadline awareness.
               </p>
@@ -130,7 +135,7 @@ export const TasksView: React.FC = () => {
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center justify-center space-x-2 px-4 py-2.5 min-h-[44px] bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-indigo-600/20 self-start md:self-auto"
+          className="flex items-center justify-center space-x-2 px-4 py-2.5 min-h-[44px] bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-indigo-600/20 self-start md:self-auto touch-target cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>New Task</span>
@@ -138,9 +143,9 @@ export const TasksView: React.FC = () => {
       </div>
 
       {/* Filter and Tab Bar */}
-      <div className="p-4 sm:p-6 pb-2 space-y-3 sm:space-y-4">
+      <div className="p-4 sm:p-6 pb-2 space-y-3 sm:space-y-4 border-b border-white/[0.06] bg-[#0e1017]/30">
         {/* Status Tabs */}
-        <div className="flex items-center space-x-2 border-b border-slate-800/80 pb-3 overflow-x-auto scrollbar-none">
+        <div className="flex items-center space-x-2 pb-2 overflow-x-auto scrollbar-none">
           {[
             { id: 'all', label: 'All Tasks' },
             { id: 'todo', label: 'To Do' },
@@ -154,10 +159,10 @@ export const TasksView: React.FC = () => {
                 setActiveTab(tab.id);
                 setPage(1);
               }}
-              className={`px-3.5 py-2 min-h-[38px] rounded-xl text-xs font-medium transition-all duration-150 whitespace-nowrap flex items-center ${
+              className={`px-3.5 py-2 min-h-[38px] rounded-xl text-xs font-medium transition-all duration-150 whitespace-nowrap flex items-center cursor-pointer ${
                 activeTab === tab.id
-                  ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
+                  ? 'bg-champagne-500/10 text-champagne-300 border border-champagne-500/30 shadow-sm font-semibold'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent'
               }`}
             >
               {tab.label}
@@ -177,7 +182,7 @@ export const TasksView: React.FC = () => {
                 setPage(1);
               }}
               placeholder="Search tasks..."
-              className="w-full pl-10 pr-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition min-h-[42px]"
+              className="w-full pl-10 pr-3.5 py-2.5 bg-[#07080c] border border-white/[0.08] rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-champagne-500/50 transition min-h-[42px]"
             />
           </div>
 
@@ -188,7 +193,7 @@ export const TasksView: React.FC = () => {
                 setSelectedPriority(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition min-h-[42px]"
+              className="w-full px-3.5 py-2.5 bg-[#07080c] border border-white/[0.08] rounded-xl text-xs text-slate-300 focus:outline-none focus:border-champagne-500/50 transition min-h-[42px]"
             >
               <option value="">All Priorities</option>
               <option value="urgent">Urgent</option>
@@ -205,7 +210,7 @@ export const TasksView: React.FC = () => {
                 setSelectedProjectId(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition min-h-[42px]"
+              className="w-full px-3.5 py-2.5 bg-[#07080c] border border-white/[0.08] rounded-xl text-xs text-slate-300 focus:outline-none focus:border-champagne-500/50 transition min-h-[42px]"
             >
               <option value="">All Projects</option>
               {projectsData?.items.map((p) => (
@@ -222,12 +227,12 @@ export const TasksView: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 scrollbar-thin">
         {isLoading ? (
           <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
-            <Clock className="w-5 h-5 animate-spin mr-2 text-indigo-400" />
+            <Clock className="w-5 h-5 animate-spin mr-2 text-champagne-400" />
             Loading tasks...
           </div>
         ) : error ? (
-          <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-center space-y-2 shadow-sm">
-            <AlertCircle className="w-5 h-5 text-indigo-400 mx-auto" />
+          <div className="p-5 bg-[#0e1017]/60 border border-white/[0.08] rounded-2xl text-center space-y-2 shadow-sm">
+            <AlertCircle className="w-5 h-5 text-champagne-400 mx-auto" />
             <div className="text-sm font-semibold text-slate-200">
               {!user ? 'Sign In to Access Tasks' : 'Failed to load tasks'}
             </div>
@@ -238,7 +243,7 @@ export const TasksView: React.FC = () => {
             </p>
           </div>
         ) : tasksData?.items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 border border-dashed border-slate-800/80 rounded-2xl p-8 text-center bg-slate-900/20">
+          <div className="flex flex-col items-center justify-center h-64 border border-dashed border-white/[0.08] rounded-2xl p-8 text-center bg-[#0e1017]/20">
             <CheckSquare className="w-12 h-12 text-slate-600 mb-3" />
             <h3 className="text-sm font-semibold text-slate-300">No tasks found</h3>
             <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4">
@@ -248,7 +253,7 @@ export const TasksView: React.FC = () => {
             </p>
             <button
               onClick={handleOpenCreate}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition-colors border border-slate-700"
+              className="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-slate-200 text-xs font-medium rounded-xl transition-colors border border-white/[0.08] cursor-pointer"
             >
               Create Task
             </button>
@@ -264,22 +269,22 @@ export const TasksView: React.FC = () => {
                   key={task.id}
                   className={`group flex items-start justify-between p-4 rounded-2xl border transition-all duration-200 shadow-subtle-elevation ${
                     task.status === 'completed'
-                      ? 'bg-slate-900/30 border-slate-800/50 opacity-70'
+                      ? 'bg-[#0e1017]/30 border-white/[0.04] opacity-70'
                       : overdue
                       ? 'bg-rose-950/15 border-rose-900/40 hover:border-rose-800/80'
-                      : 'bg-slate-900/70 border-slate-800/80 hover:border-slate-700/90 hover:bg-slate-900'
+                      : 'bg-[#0e1017]/70 border-white/[0.06] hover:border-champagne-500/30 hover:bg-[#0e1017]/95'
                   }`}
                 >
                   <div className="flex items-start space-x-3.5 flex-1 min-w-0">
                     <button
                       onClick={() => handleToggleComplete(task)}
-                      className="p-2 -m-1.5 touch-target flex items-center justify-center text-slate-500 hover:text-indigo-400 transition-colors flex-shrink-0"
+                      className="p-2 -m-1.5 touch-target flex items-center justify-center text-slate-500 hover:text-champagne-400 transition-colors flex-shrink-0 cursor-pointer"
                       aria-label={task.status === 'completed' ? 'Mark incomplete' : 'Mark completed'}
                     >
                       {task.status === 'completed' ? (
                         <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                       ) : (
-                        <Circle className="w-5 h-5 hover:text-indigo-400" />
+                        <Circle className="w-5 h-5 hover:text-champagne-400" />
                       )}
                     </button>
 
@@ -319,8 +324,8 @@ export const TasksView: React.FC = () => {
                       {/* Metadata Badges */}
                       <div className="flex items-center space-x-3 mt-2 text-[11px] text-slate-400 flex-wrap gap-y-1">
                         {task.project_name && (
-                          <span className="flex items-center text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/50 font-medium">
-                            <FolderKanban className="w-3 h-3 mr-1 text-indigo-400" />
+                          <span className="flex items-center text-slate-300 bg-[#07080c] px-2 py-0.5 rounded-md border border-white/[0.08] font-medium">
+                            <FolderKanban className="w-3 h-3 mr-1 text-champagne-400" />
                             {task.project_name}
                           </span>
                         )}
@@ -355,14 +360,14 @@ export const TasksView: React.FC = () => {
                   <div className="flex items-center space-x-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity ml-2 sm:ml-3 flex-shrink-0">
                     <button
                       onClick={() => handleOpenEdit(task)}
-                      className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors touch-target flex items-center justify-center"
+                      className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors touch-target flex items-center justify-center cursor-pointer"
                       title="Edit task"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(task)}
-                      className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors touch-target flex items-center justify-center"
+                      className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-white/[0.06] transition-colors touch-target flex items-center justify-center cursor-pointer"
                       title="Delete task"
                     >
                       <Trash2 className="w-4 h-4" />

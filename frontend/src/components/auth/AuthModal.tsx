@@ -1,9 +1,10 @@
 /**
  * Authentication Modal Dialog for Login and Account Registration.
+ * Elevated with AUREN Obsidian & Champagne Design System.
  */
 
 import React, { useState } from 'react';
-import { X, Lock, Mail, User, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Lock, Mail, User, AlertCircle, Loader2, Sparkles, ArrowRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 interface AuthModalProps {
@@ -70,30 +71,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200"
+        className="relative w-full max-w-md bg-slate-900/95 border border-slate-800/90 rounded-2xl shadow-modal-elevation overflow-hidden p-6 sm:p-8 animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
       >
+        {/* Ambient Top Glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-24 bg-indigo-500/10 blur-2xl pointer-events-none rounded-full" />
+
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white transition p-1 rounded-lg hover:bg-slate-800"
+          className="absolute top-4 right-4 text-slate-400 hover:text-white transition p-1.5 rounded-xl hover:bg-slate-800/80 touch-target flex items-center justify-center"
           aria-label="Close"
         >
-          <X className="h-5 w-5" />
+          <X className="h-4 w-4" />
         </button>
 
         {/* Modal Header */}
-        <div className="text-center space-y-1 mb-6">
-          <div className="inline-flex h-10 w-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 items-center justify-center text-indigo-400 mb-2">
-            <Lock className="h-5 w-5" />
+        <div className="text-center space-y-1.5 mb-6 relative">
+          <div className="inline-flex h-11 w-11 rounded-xl bg-gradient-to-tr from-indigo-950 to-slate-900 border border-indigo-500/30 items-center justify-center text-indigo-400 mb-2 shadow-glow-indigo">
+            <Lock className="h-5 w-5 text-indigo-400" />
           </div>
-          <h3 className="text-xl font-bold text-white">
+          <h3 className="text-xl font-bold tracking-tight text-white">
             {mode === 'signin' ? 'Welcome Back to AUREN' : 'Create Your AUREN Account'}
           </h3>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 leading-relaxed">
             {mode === 'signin'
               ? 'Access your private memory, tasks, and personal assistant.'
               : 'Start your private personal intelligence workspace.'}
@@ -101,28 +105,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {!isConfigured && (
-          <div className="mb-4 p-3 rounded-lg bg-amber-950/40 border border-amber-800/50 flex items-start space-x-2 text-xs text-amber-300">
-            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold">Supabase Configuration Required</p>
-              <p className="text-amber-400/80 mt-0.5">
-                Set <code className="font-mono bg-slate-950 px-1 py-0.5 rounded">VITE_SUPABASE_URL</code> and{' '}
-                <code className="font-mono bg-slate-950 px-1 py-0.5 rounded">VITE_SUPABASE_ANON_KEY</code> in{' '}
-                <code className="font-mono">frontend/.env</code> to enable live authentication.
-              </p>
+          <div className="mb-5 p-3.5 rounded-xl bg-amber-950/30 border border-amber-800/50 space-y-2 text-xs text-amber-200">
+            <div className="flex items-start space-x-2.5">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-400" />
+              <div>
+                <p className="font-semibold text-amber-300">Supabase Configuration Required</p>
+                <p className="text-amber-400/80 mt-0.5 leading-relaxed text-[11px]">
+                  Set <code className="font-mono bg-slate-950/80 px-1 py-0.5 rounded border border-amber-800/40">VITE_SUPABASE_URL</code> and{' '}
+                  <code className="font-mono bg-slate-950/80 px-1 py-0.5 rounded border border-amber-800/40">VITE_SUPABASE_ANON_KEY</code> in{' '}
+                  <code className="font-mono text-amber-200">frontend/.env</code> to enable live authentication.
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full mt-2 py-1.5 px-3 rounded-lg bg-amber-900/30 hover:bg-amber-900/50 border border-amber-700/40 text-[11px] font-medium text-amber-200 flex items-center justify-center space-x-1.5 transition"
+            >
+              <span>Continue Exploring in Guest Mode</span>
+              <ArrowRight className="w-3 h-3 text-amber-300" />
+            </button>
           </div>
         )}
 
         {errorMessage && (
-          <div className="mb-4 p-3 rounded-lg bg-rose-950/40 border border-rose-800/50 flex items-start space-x-2 text-xs text-rose-300">
-            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-            <p>{errorMessage}</p>
+          <div className="mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-800/50 flex items-start space-x-2 text-xs text-rose-300 animate-in fade-in">
+            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-rose-400" />
+            <p className="leading-relaxed">{errorMessage}</p>
           </div>
         )}
 
         {successNotice && (
-          <div className="mb-4 p-3 rounded-lg bg-emerald-950/40 border border-emerald-800/50 text-xs text-emerald-300">
+          <div className="mb-4 p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/50 text-xs text-emerald-300 flex items-center space-x-2 animate-in fade-in">
+            <Sparkles className="h-4 w-4 text-emerald-400 flex-shrink-0" />
             <p>{successNotice}</p>
           </div>
         )}
@@ -139,7 +154,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   placeholder="Solomon Yamal"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+                  className="w-full pl-9 pr-3 py-2.5 text-xs sm:text-sm bg-slate-950/90 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/50 transition"
                 />
               </div>
             </div>
@@ -155,7 +170,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 placeholder="you@domain.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+                className="w-full pl-9 pr-3 py-2.5 text-xs sm:text-sm bg-slate-950/90 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/50 transition"
               />
             </div>
           </div>
@@ -170,7 +185,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+                className="w-full pl-9 pr-3 py-2.5 text-xs sm:text-sm bg-slate-950/90 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/50 transition"
               />
             </div>
           </div>
@@ -178,7 +193,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="submit"
             disabled={isSubmitting || !isConfigured}
-            className="w-full mt-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold shadow-lg shadow-indigo-600/30 transition flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full mt-3 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-lg shadow-indigo-600/30 transition flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.99]"
           >
             {isSubmitting ? (
               <>
@@ -192,7 +207,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </form>
 
         {/* Switch Mode Footer */}
-        <div className="mt-6 pt-4 border-t border-slate-800 text-center text-xs text-slate-400">
+        <div className="mt-6 pt-4 border-t border-slate-800/80 text-center text-xs text-slate-400">
           {mode === 'signin' ? (
             <p>
               Don't have an account yet?{' '}
@@ -202,9 +217,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   setMode('signup');
                   setErrorMessage(null);
                 }}
-                className="text-indigo-400 hover:text-indigo-300 font-semibold transition"
+                className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2 transition"
               >
-                Sign Up
+                Create one now
               </button>
             </p>
           ) : (
@@ -216,9 +231,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   setMode('signin');
                   setErrorMessage(null);
                 }}
-                className="text-indigo-400 hover:text-indigo-300 font-semibold transition"
+                className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2 transition"
               >
-                Sign In
+                Sign in here
               </button>
             </p>
           )}
@@ -227,4 +242,3 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     </div>
   );
 };
-

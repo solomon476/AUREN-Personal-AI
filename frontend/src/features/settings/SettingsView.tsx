@@ -107,17 +107,17 @@ export const SettingsView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden text-slate-100">
+    <div className="flex-1 flex flex-col h-full bg-[#07080c] overflow-hidden text-slate-100">
       {/* Top Banner */}
-      <div className="px-6 py-4.5 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur flex items-center justify-between">
+      <div className="px-6 py-4.5 border-b border-white/[0.06] bg-[#0e1017]/70 backdrop-blur-md flex items-center justify-between">
         <div className="flex items-center space-x-3.5">
-          <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80 text-slate-300 shadow-sm">
+          <div className="p-2.5 rounded-xl bg-champagne-500/10 border border-champagne-500/20 text-champagne-400 shadow-sm">
             <Settings className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-xl font-bold tracking-tight text-slate-100">Settings &amp; Preferences</h1>
-              <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+              <h1 className="text-xl font-bold tracking-tight text-white">Settings &amp; Preferences</h1>
+              <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded bg-graphite-800/90 text-champagne-300 border border-champagne-500/20">
                 AUREN Configuration
               </span>
             </div>
@@ -131,52 +131,52 @@ export const SettingsView: React.FC = () => {
       {/* Main Container */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Navigation Tabs (Horizontal scroll strip on mobile, vertical sidebar on desktop) */}
-        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-800/80 p-2.5 sm:p-4 flex flex-row overflow-x-auto scrollbar-none md:flex-col gap-1.5 sm:space-y-1.5 bg-slate-950 flex-shrink-0">
+        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/[0.06] p-2.5 sm:p-4 flex flex-row overflow-x-auto scrollbar-none md:flex-col gap-1.5 sm:space-y-1.5 bg-[#07080c] flex-shrink-0">
           <button
             onClick={() => setActiveTab('profile')}
-            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target ${
+            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target cursor-pointer ${
               activeTab === 'profile'
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/70'
+                ? 'bg-white/[0.08] text-white border border-white/[0.12] shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
-            <User className="w-4 h-4" />
+            <User className="w-4 h-4 text-champagne-400" />
             <span>Profile &amp; Account</span>
           </button>
 
           <button
             onClick={() => setActiveTab('ai')}
-            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target ${
+            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target cursor-pointer ${
               activeTab === 'ai'
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/70'
+                ? 'bg-white/[0.08] text-white border border-white/[0.12] shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
-            <Bot className="w-4 h-4" />
+            <Bot className="w-4 h-4 text-champagne-400" />
             <span>AI Model &amp; Tone</span>
           </button>
 
           <button
             onClick={() => setActiveTab('memory')}
-            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target ${
+            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target cursor-pointer ${
               activeTab === 'memory'
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/70'
+                ? 'bg-white/[0.08] text-white border border-white/[0.12] shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
-            <Brain className="w-4 h-4" />
+            <Brain className="w-4 h-4 text-champagne-400" />
             <span>Memory &amp; Privacy</span>
           </button>
 
           <button
             onClick={() => setActiveTab('data')}
-            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target ${
+            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target cursor-pointer ${
               activeTab === 'data'
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/70'
+                ? 'bg-white/[0.08] text-white border border-white/[0.12] shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
-            <Database className="w-4 h-4" />
+            <Database className="w-4 h-4 text-champagne-400" />
             <span>Data Management &amp; Export</span>
           </button>
         </div>
@@ -185,8 +185,8 @@ export const SettingsView: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-3xl scrollbar-thin">
           <form onSubmit={handleSave} className="space-y-6">
             {saveStatus && (
-              <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-800/60 text-xs text-indigo-200 flex items-center space-x-2">
-                <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+              <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200 flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 text-champagne-400" />
                 <span>{saveStatus}</span>
               </div>
             )}
@@ -194,8 +194,8 @@ export const SettingsView: React.FC = () => {
             {/* PROFILE TAB */}
             {activeTab === 'profile' && (
               <div className="space-y-5">
-                <div className="border-b border-slate-800/80 pb-3">
-                  <h2 className="text-sm font-semibold text-slate-100">User Identity &amp; Profile</h2>
+                <div className="border-b border-white/[0.06] pb-3">
+                  <h2 className="text-sm font-semibold text-white">User Identity &amp; Profile</h2>
                   <p className="text-xs text-slate-400">Manage your display identity and account credentials.</p>
                 </div>
 
@@ -206,7 +206,7 @@ export const SettingsView: React.FC = () => {
                       type="text"
                       disabled
                       value={user?.id || profile?.id || 'Not authenticated'}
-                      className="w-full bg-slate-900/40 border border-slate-800/80 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-400 select-all"
+                      className="w-full bg-[#0e1017]/50 border border-white/[0.06] rounded-xl px-3.5 py-2 text-xs font-mono text-slate-400 select-all"
                     />
                   </div>
 
@@ -216,7 +216,7 @@ export const SettingsView: React.FC = () => {
                       type="email"
                       disabled
                       value={user?.email || profile?.email || ''}
-                      className="w-full bg-slate-900/40 border border-slate-800/80 rounded-xl px-3.5 py-2 text-xs text-slate-300"
+                      className="w-full bg-[#0e1017]/50 border border-white/[0.06] rounded-xl px-3.5 py-2 text-xs text-slate-300"
                     />
                   </div>
 
@@ -227,7 +227,7 @@ export const SettingsView: React.FC = () => {
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="Your name..."
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                      className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-champagne-500/50 transition"
                     />
                   </div>
 
@@ -238,7 +238,7 @@ export const SettingsView: React.FC = () => {
                       value={avatarUrl}
                       onChange={(e) => setAvatarUrl(e.target.value)}
                       placeholder="https://..."
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                      className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-champagne-500/50 transition"
                     />
                   </div>
 
@@ -247,7 +247,7 @@ export const SettingsView: React.FC = () => {
                     <select
                       value={theme}
                       onChange={(e) => setTheme(e.target.value as ThemeMode)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+                      className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-champagne-500/50 transition"
                     >
                       <option value="dark">Dark Slate (Default)</option>
                       <option value="midnight">Midnight Indigo (Deep Contrast)</option>
@@ -258,9 +258,9 @@ export const SettingsView: React.FC = () => {
 
                 {/* Session Management */}
                 {user && (
-                  <div className="pt-4 border-t border-slate-800/80 space-y-3">
+                  <div className="pt-4 border-t border-white/[0.06] space-y-3">
                     <h3 className="text-xs font-semibold text-slate-300">Active Session</h3>
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-[#0e1017]/70 border border-white/[0.06]">
                       <div>
                         <span className="text-xs text-slate-200 block font-medium">Logged in as {user.email}</span>
                         <span className="text-[10px] text-slate-500 font-mono">Role: {user.role || 'authenticated'}</span>
@@ -268,7 +268,7 @@ export const SettingsView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => signOut()}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 hover:border-rose-800/40 text-slate-300 text-xs font-medium transition border border-slate-700"
+                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-rose-950/60 hover:text-rose-300 hover:border-rose-800/40 text-slate-300 text-xs font-medium transition border border-white/[0.08] cursor-pointer"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         <span>Sign Out</span>
@@ -282,8 +282,8 @@ export const SettingsView: React.FC = () => {
             {/* AI MODEL TAB */}
             {activeTab === 'ai' && (
               <div className="space-y-5">
-                <div className="border-b border-slate-800/80 pb-3">
-                  <h2 className="text-sm font-semibold text-slate-100">AI Model &amp; Communication Preferences</h2>
+                <div className="border-b border-white/[0.06] pb-3">
+                  <h2 className="text-sm font-semibold text-white">AI Model &amp; Communication Preferences</h2>
                   <p className="text-xs text-slate-400">Control how AUREN reasons, analyzes, and responds.</p>
                 </div>
 
@@ -293,7 +293,7 @@ export const SettingsView: React.FC = () => {
                     <select
                       value={aiModel}
                       onChange={(e) => setAiModel(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+                      className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-champagne-500/50 transition"
                     >
                       <option value="gemini-2.5-flash">Google Gemini 2.5 Flash (Fast, High Intelligence, Native)</option>
                       <option value="gemini-2.5-pro">Google Gemini 2.5 Pro (Deep Reasoning &amp; Complex Analysis)</option>
@@ -312,7 +312,7 @@ export const SettingsView: React.FC = () => {
                     <select
                       value={aiTone}
                       onChange={(e) => setAiTone(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+                      className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-champagne-500/50 transition"
                     >
                       <option value="concise">Concise &amp; Direct (Clear, structured, minimal fluff)</option>
                       <option value="thoughtful">Thoughtful &amp; Socratic (Probing questions, reflective)</option>
@@ -330,7 +330,7 @@ export const SettingsView: React.FC = () => {
                       onChange={(e) => setAiCustomInstructions(e.target.value)}
                       placeholder="Specific preferences, goals, or instructions you want AUREN to always keep in mind..."
                       rows={4}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 leading-relaxed transition"
+                      className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl p-3.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-champagne-500/50 leading-relaxed transition"
                     />
                   </div>
                 </div>
@@ -340,13 +340,13 @@ export const SettingsView: React.FC = () => {
             {/* MEMORY & PRIVACY TAB */}
             {activeTab === 'memory' && (
               <div className="space-y-5">
-                <div className="border-b border-slate-800/80 pb-3">
-                  <h2 className="text-sm font-semibold text-slate-100">Memory &amp; Privacy Policies</h2>
+                <div className="border-b border-white/[0.06] pb-3">
+                  <h2 className="text-sm font-semibold text-white">Memory &amp; Privacy Policies</h2>
                   <p className="text-xs text-slate-400">Configure what AUREN remembers and inspect security invariants.</p>
                 </div>
 
                 <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                  <div className="p-4 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] flex items-center justify-between">
                     <div>
                       <span className="text-xs font-semibold text-slate-200 block">Automatic Memory Extraction</span>
                       <span className="text-[11px] text-slate-400">
@@ -357,14 +357,14 @@ export const SettingsView: React.FC = () => {
                       type="checkbox"
                       checked={memoryAutoExtraction}
                       onChange={(e) => setMemoryAutoExtraction(e.target.checked)}
-                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 bg-slate-950 border-slate-700"
+                      className="w-4 h-4 rounded text-champagne-500 focus:ring-champagne-500 bg-[#07080c] border-white/[0.1]"
                     />
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
                       <span>Minimum Extraction Confidence</span>
-                      <span className="font-mono text-indigo-400">{Math.round(memoryMinConfidence * 100)}%</span>
+                      <span className="font-mono text-champagne-400 font-semibold">{Math.round(memoryMinConfidence * 100)}%</span>
                     </div>
                     <input
                       type="range"
@@ -373,14 +373,14 @@ export const SettingsView: React.FC = () => {
                       step={0.05}
                       value={memoryMinConfidence}
                       onChange={(e) => setMemoryMinConfidence(parseFloat(e.target.value))}
-                      className="w-full accent-indigo-500"
+                      className="w-full accent-champagne-500"
                     />
                     <span className="text-[10px] text-slate-500">
                       Inferences with confidence below this threshold are quarantined for explicit review.
                     </span>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-900/40 text-emerald-300 space-y-2">
+                  <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-emerald-300 space-y-2">
                     <div className="flex items-center space-x-2 text-xs font-semibold">
                       <Lock className="w-4 h-4 text-emerald-400" />
                       <span>Cryptographic Isolation &amp; Integrity</span>
@@ -396,15 +396,15 @@ export const SettingsView: React.FC = () => {
             {/* DATA MANAGEMENT TAB */}
             {activeTab === 'data' && (
               <div className="space-y-5">
-                <div className="border-b border-slate-800/80 pb-3">
-                  <h2 className="text-sm font-semibold text-slate-100">Data Management &amp; Portability</h2>
+                <div className="border-b border-white/[0.06] pb-3">
+                  <h2 className="text-sm font-semibold text-white">Data Management &amp; Portability</h2>
                   <p className="text-xs text-slate-400">Download all your personal data in open, structured JSON format.</p>
                 </div>
 
                 <div className="space-y-4">
-                  <div className="p-4.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                  <div className="p-4.5 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] space-y-3">
                     <div className="flex items-center space-x-2">
-                      <Download className="w-4 h-4 text-indigo-400" />
+                      <Download className="w-4 h-4 text-champagne-400" />
                       <span className="text-xs font-semibold text-slate-200">Complete Personal Data Export</span>
                     </div>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
@@ -414,42 +414,42 @@ export const SettingsView: React.FC = () => {
                       type="button"
                       disabled={exportDataMutation.isPending}
                       onClick={handleExportData}
-                      className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-medium transition border border-slate-700 disabled:opacity-50"
+                      className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-slate-100 text-xs font-medium transition border border-white/[0.08] disabled:opacity-50 cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
                       <span>Export All Data (JSON)</span>
                     </button>
                     {exportStatus && (
-                      <p className="text-xs text-indigo-300 font-mono">{exportStatus}</p>
+                      <p className="text-xs text-champagne-300 font-mono">{exportStatus}</p>
                     )}
                   </div>
 
-                  <div className="p-4.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                  <div className="p-4.5 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] space-y-3">
                     <div className="flex items-center space-x-2">
                       <Cpu className="w-4 h-4 text-emerald-400" />
                       <span className="text-xs font-semibold text-slate-200">System Integrations &amp; Infrastructure</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+                      <div className="p-2.5 rounded-xl bg-[#07080c] border border-white/[0.06]">
                         <span className="text-[10px] text-slate-500 block uppercase font-mono">Database</span>
                         <span className="text-slate-200 font-medium">PostgreSQL &amp; Supabase RLS</span>
                       </div>
-                      <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+                      <div className="p-2.5 rounded-xl bg-[#07080c] border border-white/[0.06]">
                         <span className="text-[10px] text-slate-500 block uppercase font-mono">AI Model</span>
                         <span className="text-slate-200 font-medium">{aiModel}</span>
                       </div>
-                      <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+                      <div className="p-2.5 rounded-xl bg-[#07080c] border border-white/[0.06]">
                         <span className="text-[10px] text-slate-500 block uppercase font-mono">Retrieval</span>
                         <span className="text-slate-200 font-medium">Hybrid Lexical &amp; HNSW</span>
                       </div>
-                      <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+                      <div className="p-2.5 rounded-xl bg-[#07080c] border border-white/[0.06]">
                         <span className="text-[10px] text-slate-500 block uppercase font-mono">Local Storage</span>
                         <span className="text-slate-200 font-medium">SQLite WAL Engine</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-slate-900/30 border border-slate-800/60 space-y-1">
+                  <div className="p-4 rounded-xl bg-[#0e1017]/40 border border-white/[0.04] space-y-1">
                     <span className="text-xs font-semibold text-slate-300">Session Security</span>
                     <p className="text-[11px] text-slate-500">
                       Authenticated via Supabase JWT with Row Level Security (RLS) enforcement at the PostgreSQL database level.
@@ -461,11 +461,11 @@ export const SettingsView: React.FC = () => {
 
             {/* Save Button */}
             {activeTab !== 'data' && (
-              <div className="pt-4 border-t border-slate-800/80 flex justify-end">
+              <div className="pt-4 border-t border-white/[0.06] flex justify-end">
                 <button
                   type="submit"
                   disabled={updateProfileMutation.isPending}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold transition shadow-md shadow-indigo-600/20 disabled:opacity-50"
+                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold transition shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   <span>Save Changes</span>

@@ -53,16 +53,21 @@ export const ProductivityDashboardView: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-y-auto text-slate-100 p-6 space-y-6 scrollbar-thin">
+    <div className="flex-1 flex flex-col h-full bg-[#07080c] overflow-y-auto text-slate-100 p-6 space-y-6 scrollbar-thin">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-slate-800/80">
+      <div className="flex items-center justify-between pb-4 border-b border-white/[0.06]">
         <div>
           <div className="flex items-center space-x-3.5">
-            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-sm">
+            <div className="p-2.5 rounded-xl bg-champagne-500/10 border border-champagne-500/20 text-champagne-400 shadow-sm">
               <LayoutDashboard className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-100">Productivity Overview</h1>
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl font-bold tracking-tight text-white">Productivity Overview</h1>
+                <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded bg-graphite-800/90 text-champagne-300 border border-champagne-500/20">
+                  Telemetry
+                </span>
+              </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 Real-time status of your active commitments, upcoming deadlines, and strategic execution.
               </p>
@@ -73,19 +78,19 @@ export const ProductivityDashboardView: React.FC = () => {
 
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-        <div className="p-4.5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-subtle-elevation">
+        <div className="p-4.5 rounded-2xl bg-[#0e1017]/70 border border-white/[0.06] shadow-subtle-elevation">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Active Tasks</span>
-            <CheckSquare className="w-4 h-4 text-indigo-400" />
+            <CheckSquare className="w-4 h-4 text-champagne-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-100">{dashboard.active_tasks_count}</div>
+          <div className="text-2xl font-bold text-white font-mono">{dashboard.active_tasks_count}</div>
           <span className="text-[10px] text-slate-500">To do &amp; in progress</span>
         </div>
 
         <div className={`p-4.5 rounded-2xl border shadow-subtle-elevation ${
           dashboard.overdue_tasks_count > 0
             ? 'bg-rose-950/20 border-rose-900/50 text-rose-300'
-            : 'bg-slate-900/70 border-slate-800/80'
+            : 'bg-[#0e1017]/70 border-white/[0.06]'
         }`}>
           <div className="flex items-center justify-between text-xs mb-1.5">
             <span className={dashboard.overdue_tasks_count > 0 ? 'text-rose-400 font-medium' : 'text-slate-400'}>
@@ -93,34 +98,34 @@ export const ProductivityDashboardView: React.FC = () => {
             </span>
             <AlertTriangle className={`w-4 h-4 ${dashboard.overdue_tasks_count > 0 ? 'text-rose-400' : 'text-slate-500'}`} />
           </div>
-          <div className="text-2xl font-bold">{dashboard.overdue_tasks_count}</div>
+          <div className="text-2xl font-bold font-mono">{dashboard.overdue_tasks_count}</div>
           <span className="text-[10px] opacity-75">Needs immediate review</span>
         </div>
 
-        <div className="p-4.5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-subtle-elevation">
+        <div className="p-4.5 rounded-2xl bg-[#0e1017]/70 border border-white/[0.06] shadow-subtle-elevation">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Completed</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-2xl font-bold text-emerald-400">{dashboard.completed_tasks_count}</div>
+          <div className="text-2xl font-bold text-emerald-400 font-mono">{dashboard.completed_tasks_count}</div>
           <span className="text-[10px] text-slate-500">All-time finished</span>
         </div>
 
-        <div className="p-4.5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-subtle-elevation">
+        <div className="p-4.5 rounded-2xl bg-[#0e1017]/70 border border-white/[0.06] shadow-subtle-elevation">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Active Projects</span>
-            <FolderKanban className="w-4 h-4 text-emerald-400" />
+            <FolderKanban className="w-4 h-4 text-champagne-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-100">{dashboard.active_projects_count}</div>
+          <div className="text-2xl font-bold text-white font-mono">{dashboard.active_projects_count}</div>
           <span className="text-[10px] text-slate-500">Workspaces in flight</span>
         </div>
 
-        <div className="p-4.5 rounded-2xl bg-slate-900/70 border border-slate-800/80 col-span-2 md:col-span-1 shadow-subtle-elevation">
+        <div className="p-4.5 rounded-2xl bg-[#0e1017]/70 border border-white/[0.06] col-span-2 md:col-span-1 shadow-subtle-elevation">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Active Goals</span>
             <Target className="w-4 h-4 text-purple-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-100">{dashboard.active_goals_count}</div>
+          <div className="text-2xl font-bold text-white font-mono">{dashboard.active_goals_count}</div>
           <span className="text-[10px] text-slate-500">Strategic objectives</span>
         </div>
       </div>
@@ -128,13 +133,13 @@ export const ProductivityDashboardView: React.FC = () => {
       {/* Main Grid: Overdue & Upcoming */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Overdue / High Priority Tasks */}
-        <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800/80 flex flex-col shadow-subtle-elevation">
+        <div className="p-5 rounded-2xl bg-[#0e1017]/70 border border-white/[0.06] flex flex-col shadow-subtle-elevation">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center">
               <AlertTriangle className="w-4 h-4 mr-2 text-rose-400" />
               Overdue Commitments
             </h3>
-            <Link to="/tasks" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center">
+            <Link to="/tasks" className="text-xs text-champagne-400 hover:text-champagne-300 flex items-center">
               View all <ArrowRight className="w-3 h-3 ml-1" />
             </Link>
           </div>

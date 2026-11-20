@@ -2,6 +2,7 @@
  * Mobile Secondary Navigation Sheet (Bottom Sheet Drawer).
  * Provides accessible, one-handed touch access to all secondary AUREN surfaces:
  * Memory, Projects, Goals, Productivity, Reflection, Search, Settings, and System.
+ * Elevated with AUREN Obsidian & Champagne Design System.
  */
 
 import React from 'react';
@@ -15,7 +16,6 @@ import {
   Search,
   Settings,
   Activity,
-  User,
   LogOut,
   ChevronRight,
   ShieldCheck,
@@ -72,7 +72,7 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       label: 'Reflective Insights',
       desc: 'AI contradiction audit',
       icon: Sparkles,
-      color: 'text-amber-400 bg-amber-950/60 border-amber-800/40',
+      color: 'text-champagne-300 bg-champagne-950/60 border-champagne-800/40',
     },
     {
       to: '/search',
@@ -111,9 +111,9 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       />
 
       {/* Sheet Content Container */}
-      <div className="relative w-full bg-slate-950 border-t border-slate-800/80 rounded-t-3xl shadow-2xl z-10 flex flex-col max-h-[85dvh] overflow-hidden">
+      <div className="relative w-full bg-slate-950/95 border-t border-slate-800/80 rounded-t-3xl shadow-modal-elevation z-10 flex flex-col max-h-[85dvh] overflow-hidden">
         {/* Pull Handle & Header */}
-        <div className="pt-3 pb-2 px-6 flex flex-col items-center border-b border-slate-800/80 bg-slate-900/40">
+        <div className="pt-3 pb-3 px-6 flex flex-col items-center border-b border-slate-800/80 bg-slate-900/40">
           <div className="w-10 h-1 bg-slate-700/80 rounded-full mb-3" />
           <div className="w-full flex items-center justify-between">
             <div>
@@ -140,73 +140,77 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
                   key={item.to}
                   to={item.to}
                   onClick={onClose}
-                  className="flex items-center space-x-3 p-3 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:bg-slate-900 hover:border-slate-700 transition active:scale-[0.98] touch-target"
+                  className="flex items-center justify-between p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.07] hover:border-white/[0.12] transition-all group touch-target"
                 >
-                  <div className={`p-2.5 rounded-xl border ${item.color} flex-shrink-0`}>
-                    <Icon className="w-4 h-4" />
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <div className={`p-2.5 rounded-xl border flex-shrink-0 ${item.color}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold text-slate-200 group-hover:text-white block truncate tracking-tight">
+                        {item.label}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block truncate">
+                        {item.desc}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-semibold text-slate-200 block truncate">
-                      {item.label}
-                    </span>
-                    <span className="text-[10px] text-slate-400 block truncate">
-                      {item.desc}
-                    </span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-300 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
                 </Link>
               );
             })}
           </div>
 
-          {/* Account Footer Inside Sheet */}
-          <div className="mt-4 pt-4 border-t border-slate-800/80">
+          {/* User Account / Session Section */}
+          <div className="mt-4 pt-3 border-t border-slate-800/80">
             {user ? (
-              <div className="p-3.5 rounded-2xl bg-slate-900/40 border border-slate-800/80 flex items-center justify-between">
+              <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.07] flex items-center justify-between">
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center flex-shrink-0">
-                    <User className="w-4 h-4" />
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-champagne-300 p-0.5 flex items-center justify-center text-white flex-shrink-0 shadow-sm">
+                    <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center font-bold text-xs text-champagne-300">
+                      {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                    </div>
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs font-medium text-slate-200 block truncate">
+                    <span className="text-xs font-semibold text-slate-200 block truncate">
                       {user.email}
                     </span>
-                    <span className="text-[10px] text-emerald-400 flex items-center font-mono">
-                      <ShieldCheck className="w-3 h-3 mr-1" />
-                      RLS Protected
+                    <span className="text-[10px] text-emerald-400 flex items-center space-x-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>Authenticated Session</span>
                     </span>
                   </div>
                 </div>
                 <button
-                  onClick={() => {
-                    signOut();
+                  onClick={async () => {
+                    await signOut();
                     onClose();
                   }}
-                  className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+                  className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 transition flex items-center justify-center touch-target"
                   title="Sign Out"
-                  aria-label="Sign Out"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => {
-                  onOpenAuth('signin');
-                  onClose();
-                }}
-                className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition touch-target"
-              >
-                <span>Sign In to AUREN</span>
-              </button>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={() => onOpenAuth('signin')}
+                  className="w-full py-2.5 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-medium text-slate-300 hover:text-white transition touch-target flex items-center justify-center"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => onOpenAuth('signup')}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition touch-target flex items-center justify-center"
+                >
+                  Create Account
+                </button>
+              </div>
             )}
           </div>
         </div>
-
-        {/* Bottom Safe Area Spacer */}
-        <div className="h-[env(safe-area-inset-bottom,0.75rem)]" />
       </div>
     </div>
   );
 };
-

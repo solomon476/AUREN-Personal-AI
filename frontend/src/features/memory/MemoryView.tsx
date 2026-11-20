@@ -152,28 +152,28 @@ export const MemoryView: React.FC = () => {
     switch (status) {
       case 'confirmed':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-950/70 text-emerald-300 border border-emerald-800/50 shadow-sm">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-950/70 text-emerald-300 border border-emerald-500/30 shadow-sm font-mono">
             <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-400" />
             Confirmed
           </span>
         );
       case 'unconfirmed':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-950/70 text-amber-300 border border-amber-800/50 shadow-sm">
-            <Sparkles className="w-3 h-3 mr-1 text-amber-400" />
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-champagne-500/10 text-champagne-300 border border-champagne-500/30 shadow-sm font-mono">
+            <Sparkles className="w-3 h-3 mr-1 text-champagne-400" />
             Inference
           </span>
         );
       case 'rejected':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-rose-950/70 text-rose-300 border border-rose-800/50 shadow-sm">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-rose-950/70 text-rose-300 border border-rose-500/30 shadow-sm font-mono">
             <XCircle className="w-3 h-3 mr-1 text-rose-400" />
             Rejected
           </span>
         );
       case 'system_asserted':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-indigo-950/70 text-indigo-300 border border-indigo-800/50 shadow-sm">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-indigo-950/70 text-indigo-300 border border-indigo-500/30 shadow-sm font-mono">
             <ShieldCheck className="w-3 h-3 mr-1 text-indigo-400" />
             System
           </span>
@@ -186,13 +186,13 @@ export const MemoryView: React.FC = () => {
   const renderLifecyclePill = (status: string) => {
     if (status === 'active') return null;
     const colors: Record<string, string> = {
-      superseded: 'bg-slate-800/80 text-slate-400 border-slate-700',
+      superseded: 'bg-graphite-800/80 text-slate-400 border-white/[0.08]',
       expired: 'bg-amber-950/60 text-amber-400 border-amber-900/50',
-      archived: 'bg-slate-800/80 text-slate-400 border-slate-700',
+      archived: 'bg-graphite-800/80 text-slate-400 border-white/[0.08]',
       rejected: 'bg-rose-950/60 text-rose-400 border-rose-900/50',
     };
     return (
-      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-mono border ${colors[status] || 'bg-slate-800 text-slate-400'}`}>
+      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-mono border ${colors[status] || 'bg-graphite-800 text-slate-400'}`}>
         {status}
       </span>
     );
@@ -201,18 +201,18 @@ export const MemoryView: React.FC = () => {
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-[#07080c] text-slate-100 overflow-hidden">
       {/* Top Header */}
-      <div className="flex-shrink-0 px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur">
+      <div className="flex-shrink-0 px-4 py-4 sm:px-6 sm:py-5 border-b border-white/[0.06] bg-[#0e1017]/70 backdrop-blur-md">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div className="flex items-center space-x-3.5">
-            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-sm">
+            <div className="p-2.5 rounded-xl bg-champagne-500/10 text-champagne-400 border border-champagne-500/20 shadow-sm">
               <Brain className="h-6 w-6" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl font-bold text-white tracking-tight">Long-term Memory Explorer</h1>
-                <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded bg-graphite-800/90 text-champagne-300 border border-champagne-500/20">
                   Epistemic Knowledge Base
                 </span>
               </div>
@@ -223,7 +223,7 @@ export const MemoryView: React.FC = () => {
           </div>
           <button
             onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center justify-center px-4 py-2.5 min-h-[44px] rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all duration-200 self-start sm:self-auto"
+            className="inline-flex items-center justify-center px-4 py-2.5 min-h-[44px] rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all duration-200 self-start sm:self-auto touch-target cursor-pointer"
           >
             <Plus className="w-4 h-4 mr-1.5" />
             Add Memory
@@ -232,7 +232,7 @@ export const MemoryView: React.FC = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex-shrink-0 px-4 py-3 sm:px-6 sm:py-3.5 border-b border-slate-800/80 bg-slate-900/20">
+      <div className="flex-shrink-0 px-4 py-3 sm:px-6 sm:py-3.5 border-b border-white/[0.06] bg-[#0e1017]/40">
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Search Box */}
           <div className="relative flex-1 min-w-[200px]">
@@ -245,7 +245,7 @@ export const MemoryView: React.FC = () => {
                 setPage(1);
               }}
               placeholder="Search memory content..."
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-150 min-h-[42px]"
+              className="w-full bg-[#07080c]/80 border border-white/[0.08] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-champagne-500/50 focus:border-champagne-500/50 transition-all duration-150 min-h-[42px]"
             />
           </div>
 
@@ -256,7 +256,7 @@ export const MemoryView: React.FC = () => {
               setSelectedType(e.target.value);
               setPage(1);
             }}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition min-h-[42px]"
+            className="bg-[#07080c]/80 border border-white/[0.08] rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-champagne-500/50 transition min-h-[42px]"
             aria-label="Filter by memory type"
           >
             <option value="">All Types</option>
@@ -275,7 +275,7 @@ export const MemoryView: React.FC = () => {
               setSelectedCategory(e.target.value);
               setPage(1);
             }}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition min-h-[42px]"
+            className="bg-[#07080c]/80 border border-white/[0.08] rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-champagne-500/50 transition min-h-[42px]"
             aria-label="Filter by category"
           >
             <option value="">All Categories</option>
@@ -294,7 +294,7 @@ export const MemoryView: React.FC = () => {
               setSelectedConfirmation(e.target.value);
               setPage(1);
             }}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition min-h-[42px]"
+            className="bg-[#07080c]/80 border border-white/[0.08] rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-champagne-500/50 transition min-h-[42px]"
             aria-label="Filter by confirmation status"
           >
             <option value="">All Epistemic States</option>
@@ -385,7 +385,7 @@ export const MemoryView: React.FC = () => {
               <div
                 key={mem.id}
                 onClick={() => handleOpenDetail(mem)}
-                className="group relative flex flex-col justify-between p-4.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-indigo-500/40 hover:bg-slate-900/90 transition-all duration-200 shadow-subtle-elevation cursor-pointer"
+                className="group relative flex flex-col justify-between p-5 rounded-2xl bg-[#0e1017]/70 border border-white/[0.06] hover:border-champagne-500/40 hover:bg-[#0e1017]/95 transition-all duration-200 shadow-subtle-elevation cursor-pointer"
               >
                 <div className="space-y-3">
                   {/* Status header */}
@@ -398,7 +398,7 @@ export const MemoryView: React.FC = () => {
                       {[1, 2, 3, 4, 5].map((s) => (
                         <Star
                           key={s}
-                          className={`w-2.5 h-2.5 ${s <= mem.importance ? 'text-amber-400 fill-amber-400' : 'text-slate-800'}`}
+                          className={`w-3 h-3 ${s <= mem.importance ? 'text-champagne-400 fill-champagne-400' : 'text-slate-800'}`}
                         />
                       ))}
                     </div>
@@ -411,9 +411,9 @@ export const MemoryView: React.FC = () => {
                 </div>
 
                 {/* Footer meta & actions */}
-                <div className="pt-3 mt-3 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400">
+                <div className="pt-3 mt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-slate-400">
                   <div className="flex items-center space-x-2">
-                    <span className="capitalize px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-[10px] text-slate-400 font-mono">
+                    <span className="capitalize px-2 py-0.5 rounded-md bg-[#07080c] border border-white/[0.08] text-[10px] text-champagne-300/80 font-mono">
                       {mem.memory_type}
                     </span>
                     <span className="capitalize text-slate-500 text-[10px]">
@@ -440,7 +440,7 @@ export const MemoryView: React.FC = () => {
                         e.stopPropagation();
                         handleOpenDetail(mem);
                       }}
-                      className="p-2 -m-1 sm:p-1 sm:m-0 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition touch-target flex items-center justify-center"
+                      className="p-2 -m-1 sm:p-1 sm:m-0 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.06] transition touch-target flex items-center justify-center"
                       aria-label="View memory details"
                     >
                       <Eye className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
@@ -455,7 +455,7 @@ export const MemoryView: React.FC = () => {
 
       {/* Pagination Footer */}
       {!isLoading && !isError && data && data.total > 0 && (
-        <div className="flex-shrink-0 px-6 py-3.5 border-t border-slate-800/80 bg-slate-900/40 flex items-center justify-between text-xs text-slate-400">
+        <div className="flex-shrink-0 px-6 py-3.5 border-t border-white/[0.06] bg-[#0e1017]/70 flex items-center justify-between text-xs text-slate-400">
           <div>
             Showing <span className="text-white font-medium">{(page - 1) * pageSize + 1}</span> to{' '}
             <span className="text-white font-medium">{Math.min(page * pageSize, data.total)}</span> of{' '}
@@ -466,7 +466,7 @@ export const MemoryView: React.FC = () => {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="p-1.5 rounded-lg border border-slate-800 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              className="p-1.5 rounded-lg border border-white/[0.08] hover:bg-white/[0.06] disabled:opacity-40 disabled:cursor-not-allowed transition"
               aria-label="Previous page"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -477,7 +477,7 @@ export const MemoryView: React.FC = () => {
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="p-1.5 rounded-lg border border-slate-800 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              className="p-1.5 rounded-lg border border-white/[0.08] hover:bg-white/[0.06] disabled:opacity-40 disabled:cursor-not-allowed transition"
               aria-label="Next page"
             >
               <ChevronRight className="w-4 h-4" />
@@ -520,15 +520,15 @@ export const MemoryView: React.FC = () => {
       {/* New Memory Modal */}
       {isCreateOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="create-memory-title"
         >
-          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="relative w-full max-w-lg bg-[#0e1017] border border-white/[0.08] rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
               <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <div className="p-2 rounded-xl bg-champagne-500/10 text-champagne-400 border border-champagne-500/20">
                   <Plus className="h-4 w-4" />
                 </div>
                 <h2 id="create-memory-title" className="text-base font-semibold text-white">
@@ -537,7 +537,7 @@ export const MemoryView: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsCreateOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/[0.06] transition"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -559,7 +559,7 @@ export const MemoryView: React.FC = () => {
                   onChange={(e) => setNewContent(e.target.value)}
                   placeholder="e.g., Prefers technical documentation with practical code examples..."
                   rows={3}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-champagne-500/50"
                   required
                 />
               </div>
@@ -570,7 +570,7 @@ export const MemoryView: React.FC = () => {
                   <select
                     value={newType}
                     onChange={(e) => setNewType(e.target.value as MemoryType)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white"
+                    className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl p-2 text-xs text-white"
                   >
                     <option value="fact">Fact</option>
                     <option value="preference">Preference</option>
@@ -586,7 +586,7 @@ export const MemoryView: React.FC = () => {
                   <select
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value as MemoryCategory)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white"
+                    className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl p-2 text-xs text-white"
                   >
                     <option value="general">General</option>
                     <option value="personal">Personal</option>
@@ -602,7 +602,7 @@ export const MemoryView: React.FC = () => {
                   <select
                     value={newImportance}
                     onChange={(e) => setNewImportance(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white"
+                    className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl p-2 text-xs text-white"
                   >
                     <option value="1">1 - Minimal</option>
                     <option value="2">2 - Low</option>
@@ -613,18 +613,18 @@ export const MemoryView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2 border-t border-slate-800">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-white/[0.08]">
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="px-3.5 py-1.5 rounded-lg border border-slate-700 text-xs font-medium text-slate-300 hover:bg-slate-800 transition"
+                  className="px-3.5 py-1.5 rounded-lg border border-white/[0.08] text-xs font-medium text-slate-300 hover:bg-white/[0.06] transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createMutation.isPending}
-                  className="inline-flex items-center px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition"
+                  className="inline-flex items-center px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition cursor-pointer"
                 >
                   {createMutation.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
                   Save Confirmed Memory

@@ -63,7 +63,7 @@ const StalenessCard: React.FC<StalenessCardProps> = ({ item }) => {
       : 'text-yellow-400';
 
   return (
-    <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 hover:border-slate-700/80 transition-all duration-200 shadow-subtle-elevation">
+    <div className="bg-[#0e1017]/70 border border-white/[0.06] rounded-xl p-4 hover:border-champagne-500/30 transition-all duration-200 shadow-subtle-elevation">
       <div className="flex items-start gap-3.5">
         <div className={`mt-0.5 flex-shrink-0 ${SOURCE_COLORS[item.source_type]}`}>
           {SOURCE_ICONS[item.source_type]}
@@ -85,7 +85,7 @@ const StalenessCard: React.FC<StalenessCardProps> = ({ item }) => {
         </div>
         <button
           onClick={() => navigate({ to: item.navigation_path as never })}
-          className="flex-shrink-0 text-xs text-slate-400 hover:text-indigo-300 transition-colors flex items-center gap-1 mt-0.5"
+          className="flex-shrink-0 text-xs text-slate-400 hover:text-champagne-300 transition-colors flex items-center gap-1 mt-0.5 cursor-pointer"
         >
           View <ChevronRight className="w-3 h-3" />
         </button>
@@ -203,17 +203,17 @@ export const ReflectionView: React.FC = () => {
   const isLoading = insightsLoading || stalenessLoading || contradictionsLoading;
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-100">
+    <div className="flex flex-col h-full bg-[#07080c] text-slate-100">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-slate-800/80 px-6 py-5 bg-slate-900/40 backdrop-blur">
+      <div className="flex-shrink-0 border-b border-white/[0.06] px-6 py-5 bg-[#0e1017]/70 backdrop-blur-md">
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 shadow-sm">
+              <div className="p-2 rounded-xl bg-champagne-500/10 border border-champagne-500/20 text-champagne-400 shadow-sm">
                 <Sparkles className="w-5 h-5" />
               </div>
-              <h1 className="text-xl font-bold text-slate-100 tracking-tight">Reflective Intelligence</h1>
-              <span className="text-xs text-slate-400 bg-slate-800/60 border border-slate-700/60 px-2.5 py-0.5 rounded-full font-mono">
+              <h1 className="text-xl font-bold text-white tracking-tight">Reflective Intelligence</h1>
+              <span className="text-xs text-champagne-300 bg-graphite-800/90 border border-champagne-500/20 px-2.5 py-0.5 rounded-full font-mono">
                 Phase 3C.5
               </span>
             </div>
@@ -224,7 +224,7 @@ export const ReflectionView: React.FC = () => {
           <button
             onClick={() => refetchInsights()}
             disabled={insightsFetching}
-            className="flex items-center gap-2 text-xs text-slate-300 hover:text-white transition-colors px-3.5 py-2 rounded-xl bg-slate-800/80 border border-slate-700/60 hover:bg-slate-700 disabled:opacity-50 shadow-sm"
+            className="flex items-center gap-2 text-xs text-slate-300 hover:text-white transition-colors px-3.5 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] disabled:opacity-50 shadow-sm cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${insightsFetching ? 'animate-spin' : ''}`} />
             <span>Refresh</span>

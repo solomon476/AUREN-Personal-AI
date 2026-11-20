@@ -7,6 +7,7 @@
  * 4. Life Management — Tasks, Projects, Goals, Productivity
  * 5. Reflection — Private Journal & Reflective Intelligence
  * 6. Settings — Privacy, Preferences & Control
+ * Elevated with AUREN Obsidian, Graphite & Champagne Design System.
  */
 
 import React from 'react';
@@ -155,8 +156,8 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             onClick={onNavigate}
             className={`group w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all duration-150 ${
               active
-                ? 'bg-slate-900 text-white shadow-subtle-elevation border border-slate-700/60'
-                : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/40 border border-transparent'
+                ? 'bg-white/[0.06] text-white shadow-subtle-elevation border border-white/[0.09]'
+                : 'text-slate-400 hover:text-slate-100 hover:bg-white/[0.03] border border-transparent'
             }`}
           >
             <div className="flex items-center space-x-2.5">
@@ -167,7 +168,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               />
               <span className="tracking-tight">{item.label}</span>
             </div>
-            {item.badge && (
+            {item.badge ? (
               <span
                 className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border transition-colors ${
                   active
@@ -177,7 +178,9 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               >
                 {item.badge}
               </span>
-            )}
+            ) : active ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-champagne-300/80 shadow-glow-champagne" />
+            ) : null}
           </Link>
         );
       })}
@@ -189,9 +192,9 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       {/* Brand Header */}
       <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
         <Link to="/home" onClick={onNavigate} className="flex items-center space-x-2.5 group">
-          <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-sky-500 to-emerald-400 p-0.5 flex items-center justify-center text-white shadow-md shadow-indigo-600/20 group-hover:scale-105 transition-transform duration-200">
+          <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-sky-500 to-champagne-300 p-0.5 flex items-center justify-center text-white shadow-md shadow-indigo-600/20 group-hover:scale-105 transition-transform duration-200">
             <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-              <Bot className="h-4 w-4 text-indigo-400 group-hover:text-sky-300 transition-colors" />
+              <Bot className="h-4 w-4 text-indigo-400 group-hover:text-champagne-300 transition-colors" />
             </div>
           </div>
           <div className="flex flex-col">
@@ -199,7 +202,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               <span className="text-base font-extrabold tracking-widest bg-gradient-to-r from-slate-100 via-sky-200 to-indigo-200 bg-clip-text text-transparent">
                 AUREN
               </span>
-              <span className="ml-1.5 text-[8px] text-indigo-300 uppercase tracking-widest font-semibold px-1 py-0.2 bg-indigo-950/80 rounded border border-indigo-800/50">
+              <span className="ml-1.5 text-[8px] text-champagne-300 uppercase tracking-widest font-semibold px-1 py-0.2 bg-champagne-950/70 rounded border border-champagne-800/40">
                 Personal AI
               </span>
             </div>
@@ -209,7 +212,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       </div>
 
       {/* Navigation Links Scroll Container */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6 scrollbar-thin">
         {/* Core Intelligence */}
         <div className="space-y-1">
           <p className="px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
@@ -243,14 +246,14 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
           <div className="space-y-2">
             <button
               onClick={() => onOpenAuth?.('signin')}
-              className="w-full flex items-center justify-center space-x-1.5 py-2 px-3 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-900 rounded-xl transition border border-slate-800 hover:border-slate-700"
+              className="w-full flex items-center justify-center space-x-1.5 py-2 px-3 text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.04] rounded-xl transition border border-slate-800 hover:border-slate-700"
             >
               <LogIn className="h-3.5 w-3.5" />
               <span>Sign In</span>
             </button>
             <button
               onClick={() => onOpenAuth?.('signup')}
-              className="w-full flex items-center justify-center py-2 px-3 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-md shadow-indigo-600/20 hover:shadow-indigo-600/40 transition"
+              className="w-full flex items-center justify-center py-2 px-3 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl shadow-md shadow-indigo-600/20 hover:shadow-indigo-600/35 transition"
             >
               Get Started
             </button>

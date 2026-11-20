@@ -176,18 +176,18 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
       onKeyDown={handleKeyDown}
       role="dialog"
       aria-modal="true"
       aria-labelledby="memory-detail-title"
     >
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92vh] sm:max-h-[90vh] overflow-y-auto pb-safe">
+      <div className="relative w-full max-w-2xl bg-[#0e1017] border border-white/[0.08] rounded-t-3xl sm:rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92vh] sm:max-h-[90vh] overflow-y-auto pb-safe">
         {/* Modal Header */}
-        <div className="flex items-start justify-between pb-3 border-b border-slate-800">
+        <div className="flex items-start justify-between pb-3 border-b border-white/[0.08]">
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              <h2 id="memory-detail-title" className="text-lg font-semibold text-white">
+              <h2 id="memory-detail-title" className="text-lg font-semibold text-white tracking-tight">
                 Memory Details
               </h2>
               {renderEpistemicBadge()}
@@ -199,7 +199,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-2.5 -m-1.5 rounded-lg hover:bg-slate-800 transition touch-target flex items-center justify-center"
+            className="text-slate-400 hover:text-white p-2.5 -m-1.5 rounded-lg hover:bg-white/[0.06] transition touch-target flex items-center justify-center"
             aria-label="Close dialog"
           >
             <X className="h-5 w-5" />
@@ -215,18 +215,18 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
         )}
 
         {/* Epistemic Meaning Explanatory Banner */}
-        <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-start space-x-2.5">
-          <Info className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+        <div className="p-3 rounded-xl bg-[#07080c]/90 border border-champagne-500/20 flex items-start space-x-2.5">
+          <Info className="w-4 h-4 text-champagne-400 flex-shrink-0 mt-0.5" />
           <div className="text-xs text-slate-300 space-y-0.5">
-            <span className="font-semibold text-cyan-300">Epistemic Status: </span>
+            <span className="font-semibold text-champagne-300">Epistemic Status: </span>
             {getEpistemicExplanation()}
           </div>
         </div>
 
         {/* Memory Content Section */}
         {isEditing ? (
-          <div className="space-y-4 p-4 rounded-xl bg-slate-950/80 border border-cyan-800/40">
-            <div className="flex items-center space-x-2 text-cyan-400 text-xs font-semibold uppercase tracking-wider">
+          <div className="space-y-4 p-4 rounded-xl bg-[#07080c] border border-cyan-800/40">
+            <div className="flex items-center space-x-2 text-cyan-400 text-xs font-semibold uppercase tracking-wider font-mono">
               <Edit3 className="w-3.5 h-3.5" />
               <span>Correct Memory (Preserves Historical Lineage)</span>
             </div>
@@ -237,7 +237,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             <textarea
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
-              className="w-full h-24 bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              className="w-full h-24 bg-[#0e1017] border border-white/[0.08] rounded-lg p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
               placeholder="Corrected memory content..."
             />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -246,7 +246,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 <select
                   value={editType}
                   onChange={(e) => setEditType(e.target.value as MemoryType)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white"
+                  className="w-full bg-[#0e1017] border border-white/[0.08] rounded-lg p-2 text-xs text-white"
                 >
                   <option value="fact">Fact</option>
                   <option value="preference">Preference</option>
@@ -261,7 +261,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 <select
                   value={editCategory}
                   onChange={(e) => setEditCategory(e.target.value as MemoryCategory)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white"
+                  className="w-full bg-[#0e1017] border border-white/[0.08] rounded-lg p-2 text-xs text-white"
                 >
                   <option value="general">General</option>
                   <option value="personal">Personal</option>
@@ -276,7 +276,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 <select
                   value={editImportance}
                   onChange={(e) => setEditImportance(Number(e.target.value))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white"
+                  className="w-full bg-[#0e1017] border border-white/[0.08] rounded-lg p-2 text-xs text-white"
                 >
                   <option value="1">1 - Minimal</option>
                   <option value="2">2 - Low</option>
@@ -291,7 +291,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 type="button"
                 onClick={() => setIsEditing(false)}
                 disabled={actionLoading}
-                className="px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-medium text-slate-300 hover:bg-slate-800 transition"
+                className="px-3 py-1.5 rounded-lg border border-white/[0.08] text-xs font-medium text-slate-300 hover:bg-white/[0.06] transition"
               >
                 Cancel
               </button>
@@ -307,35 +307,35 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             </div>
           </div>
         ) : (
-          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800 space-y-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Memory Content</span>
+          <div className="p-4 rounded-xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">Memory Content</span>
             <p className="text-sm text-slate-100 whitespace-pre-wrap leading-relaxed">{memory.content}</p>
           </div>
         )}
 
         {/* Classification & Metadata Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div className="p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+          <div className="p-2.5 rounded-lg bg-[#07080c]/50 border border-white/[0.06]">
             <span className="text-slate-500 block mb-0.5">Type</span>
             <span className="font-semibold text-slate-200 capitalize">{memory.memory_type}</span>
           </div>
-          <div className="p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+          <div className="p-2.5 rounded-lg bg-[#07080c]/50 border border-white/[0.06]">
             <span className="text-slate-500 block mb-0.5">Category</span>
             <span className="font-semibold text-slate-200 capitalize">{memory.category.replace('_', ' ')}</span>
           </div>
-          <div className="p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+          <div className="p-2.5 rounded-lg bg-[#07080c]/50 border border-white/[0.06]">
             <span className="text-slate-500 block mb-0.5">Importance</span>
             <div className="flex items-center space-x-1">
               {[1, 2, 3, 4, 5].map((star) => (
                 <Star
                   key={star}
-                  className={`w-3 h-3 ${star <= memory.importance ? 'text-amber-400 fill-amber-400' : 'text-slate-700'}`}
+                  className={`w-3 h-3 ${star <= memory.importance ? 'text-champagne-400 fill-champagne-400' : 'text-slate-700'}`}
                 />
               ))}
               <span className="font-semibold text-slate-200 ml-1">{memory.importance}/5</span>
             </div>
           </div>
-          <div className="p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+          <div className="p-2.5 rounded-lg bg-[#07080c]/50 border border-white/[0.06]">
             <span className="text-slate-500 block mb-0.5" title="Model processing score; does not denote factual truth probability">
               Extraction score
             </span>
@@ -349,9 +349,9 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
         </div>
 
         {/* Provenance & Lineage Section */}
-        <div className="p-3.5 rounded-xl bg-slate-950/50 border border-slate-800 space-y-2 text-xs">
-          <div className="flex items-center space-x-1.5 text-slate-400 font-semibold uppercase tracking-wider mb-1">
-            <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
+        <div className="p-3.5 rounded-xl bg-[#07080c]/50 border border-white/[0.06] space-y-2 text-xs">
+          <div className="flex items-center space-x-1.5 text-champagne-300 font-semibold uppercase tracking-wider mb-1 font-mono">
+            <GitBranch className="w-3.5 h-3.5 text-champagne-400" />
             <span>Provenance & Historical Lineage</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-400">
@@ -386,7 +386,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             {memory.superseded_by_id && (
               <div className="sm:col-span-2">
                 <span className="text-slate-500">Superseded By (Newer Version): </span>
-                <code className="text-amber-400 font-mono text-[11px]">{memory.superseded_by_id}</code>
+                <code className="text-champagne-400 font-mono text-[11px]">{memory.superseded_by_id}</code>
               </div>
             )}
             {memory.source_conversation_id && (
@@ -400,7 +400,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
         {/* Epistemic Action Controls Footer */}
         {!isEditing && (
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/[0.08]">
             <div className="flex flex-wrap items-center gap-2">
               {/* Unconfirmed Controls */}
               {memory.confirmation_status === 'unconfirmed' && memory.lifecycle_status === 'active' && (
@@ -433,7 +433,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                     type="button"
                     onClick={handleStartEditing}
                     disabled={actionLoading}
-                    className="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/40 text-xs font-medium transition"
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg bg-[#07080c] hover:bg-white/[0.06] text-cyan-300 border border-cyan-800/40 text-xs font-medium transition"
                   >
                     <Edit3 className="w-3.5 h-3.5 mr-1" />
                     Correct Memory
@@ -442,7 +442,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                     type="button"
                     onClick={() => handleAction(onOutdate)}
                     disabled={actionLoading}
-                    className="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-800/40 text-xs font-medium transition"
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg bg-[#07080c] hover:bg-white/[0.06] text-champagne-300 border border-champagne-500/30 text-xs font-medium transition"
                   >
                     <Clock className="w-3.5 h-3.5 mr-1" />
                     Mark Outdated
@@ -451,7 +451,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                     type="button"
                     onClick={() => handleAction(onArchive)}
                     disabled={actionLoading}
-                    className="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition"
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg bg-[#07080c] hover:bg-white/[0.06] text-slate-300 border border-white/[0.08] text-xs font-medium transition"
                   >
                     <Archive className="w-3.5 h-3.5 mr-1" />
                     Archive
@@ -476,7 +476,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition"
+              className="px-4 py-1.5 rounded-lg bg-[#07080c] hover:bg-white/[0.06] border border-white/[0.08] text-white text-xs font-medium transition"
             >
               Close
             </button>
