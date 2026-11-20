@@ -37,6 +37,16 @@ export interface MockAuthOptions {
   session?: Session | null;
   profile?: UserProfileResponse | null;
   isLoading?: boolean;
+  error?: string | null;
+  isConfigured?: boolean;
+  signIn?: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signUp?: (
+    email: string,
+    password: string,
+    fullName?: string
+  ) => Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean; userExists?: boolean }>;
+  signOut?: () => Promise<void>;
+  refreshProfile?: () => Promise<void>;
 }
 
 export const MockAuthProvider: React.FC<{ children: React.ReactNode; auth?: MockAuthOptions }> = ({
@@ -62,12 +72,12 @@ export const MockAuthProvider: React.FC<{ children: React.ReactNode; auth?: Mock
     session,
     profile,
     isLoading: auth?.isLoading ?? false,
-    error: null,
-    isConfigured: true,
-    signIn: async () => ({ success: true }),
-    signUp: async () => ({ success: true }),
-    signOut: async () => {},
-    refreshProfile: async () => {},
+    error: auth?.error ?? null,
+    isConfigured: auth?.isConfigured ?? true,
+    signIn: auth?.signIn ?? (async () => ({ success: true })),
+    signUp: auth?.signUp ?? (async () => ({ success: true })),
+    signOut: auth?.signOut ?? (async () => {}),
+    refreshProfile: auth?.refreshProfile ?? (async () => {}),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

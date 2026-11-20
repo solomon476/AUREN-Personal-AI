@@ -15,7 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { UserProfileMenu } from '../auth/UserProfileMenu';
 
 export const AppLayout: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -92,7 +92,9 @@ export const AppLayout: React.FC = () => {
               <Search className="h-4 w-4" />
             </Link>
 
-            {user ? (
+            {isLoading ? (
+              <div className="h-7 w-16 bg-slate-800/50 rounded-xl animate-pulse" />
+            ) : user ? (
               <UserProfileMenu />
             ) : (
               <button

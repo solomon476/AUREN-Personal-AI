@@ -34,7 +34,7 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
   onClose,
   onOpenAuth,
 }) => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isLoading } = useAuth();
 
   if (!isOpen) return null;
 
@@ -163,7 +163,9 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
 
           {/* User Account / Session Section */}
           <div className="mt-4 pt-3 border-t border-slate-800/80">
-            {user ? (
+            {isLoading ? (
+              <div className="h-16 rounded-2xl bg-white/[0.03] border border-white/[0.07] animate-pulse" />
+            ) : user ? (
               <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.07] flex items-center justify-between">
                 <div className="flex items-center space-x-3 min-w-0">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-champagne-300 p-0.5 flex items-center justify-center text-white flex-shrink-0 shadow-sm">

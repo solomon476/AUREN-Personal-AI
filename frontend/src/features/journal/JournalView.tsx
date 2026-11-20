@@ -54,7 +54,7 @@ const MOOD_OPTIONS = [
 ];
 
 export const JournalView: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMood, setSelectedMood] = useState<string>('');
 
@@ -258,7 +258,9 @@ export const JournalView: React.FC = () => {
 
           {/* Entries Feed */}
           <div className="flex-1 overflow-y-auto divide-y divide-white/[0.04] scrollbar-thin">
-            {!user ? (
+            {isAuthLoading || isLoading ? (
+              <div className="p-6 text-center text-xs text-slate-500">Loading reflections...</div>
+            ) : !user ? (
               <div className="p-8 text-center space-y-3">
                 <Lock className="w-8 h-8 text-champagne-400 mx-auto" />
                 <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
@@ -266,8 +268,6 @@ export const JournalView: React.FC = () => {
                   Sign in to create, browse, and sync your private reflection journal with cryptographic guarantees.
                 </p>
               </div>
-            ) : isLoading ? (
-              <div className="p-6 text-center text-xs text-slate-500">Loading reflections...</div>
             ) : error ? (
               <div className="p-4 m-3 bg-red-950/40 border border-red-800/80 rounded-xl text-xs text-red-300">
                 Failed to load journal entries.

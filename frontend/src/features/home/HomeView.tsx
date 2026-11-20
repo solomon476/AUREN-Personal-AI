@@ -37,7 +37,7 @@ import { useConversations } from '../../hooks/useConversations';
 import { Task, TaskStatus } from '../../api/productivity';
 
 export const HomeView: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const navigate = useNavigate();
 
   const [promptInput, setPromptInput] = useState('');
@@ -141,7 +141,7 @@ export const HomeView: React.FC = () => {
       </div>
 
       {/* Guest Mode Banner */}
-      {!user && (
+      {!isAuthLoading && !user && (
         <div className="rounded-2xl bg-gradient-to-r from-indigo-950/40 via-slate-900/60 to-champagne-950/20 border border-indigo-800/40 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-subtle-elevation backdrop-blur-md">
           <div className="flex items-center space-x-3.5">
             <div className="p-2.5 rounded-xl bg-indigo-600/20 text-indigo-400 flex-shrink-0 border border-indigo-500/30 shadow-glow-indigo">
@@ -294,7 +294,7 @@ export const HomeView: React.FC = () => {
               </Link>
             </div>
 
-            {isLoadingTasks ? (
+            {isAuthLoading || isLoadingTasks ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading priority tasks...</div>
             ) : !user ? (
               <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">
@@ -403,7 +403,7 @@ export const HomeView: React.FC = () => {
               </Link>
             </div>
 
-            {isLoadingProjects ? (
+            {isAuthLoading || isLoadingProjects ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading projects...</div>
             ) : !user ? (
               <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">
@@ -479,7 +479,7 @@ export const HomeView: React.FC = () => {
               </Link>
             </div>
 
-            {isLoadingGoals ? (
+            {isAuthLoading || isLoadingGoals ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading goals...</div>
             ) : !user ? (
               <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">
@@ -546,7 +546,7 @@ export const HomeView: React.FC = () => {
               </Link>
             </div>
 
-            {isLoadingConversations ? (
+            {isAuthLoading || isLoadingConversations ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading dialogue...</div>
             ) : !user ? (
               <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">

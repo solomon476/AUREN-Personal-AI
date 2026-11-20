@@ -40,7 +40,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   onNavigate,
   onOpenAuth,
 }) => {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
@@ -240,7 +240,9 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
 
       {/* Persistent User Account Footer */}
       <div className="p-3 border-t border-slate-800/80 bg-slate-950/90">
-        {user ? (
+        {isLoading ? (
+          <div className="h-10 w-full rounded-xl bg-slate-800/40 animate-pulse border border-slate-800/50" />
+        ) : user ? (
           <UserProfileMenu />
         ) : (
           <div className="space-y-2">
