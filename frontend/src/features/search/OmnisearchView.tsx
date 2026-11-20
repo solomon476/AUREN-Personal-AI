@@ -186,7 +186,7 @@ export const OmnisearchView: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-slate-950">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-slate-800/60 px-6 py-5">
+      <div className="flex-shrink-0 border-b border-slate-800/60 px-4 py-4 sm:px-6 sm:py-5">
         <div className="flex items-center gap-3 mb-1">
           <Search className="w-5 h-5 text-violet-400" />
           <h1 className="text-lg font-semibold text-slate-100">Omnisearch</h1>
@@ -194,12 +194,12 @@ export const OmnisearchView: React.FC = () => {
             Phase 3C.5
           </span>
         </div>
-        <p className="text-slate-500 text-sm">
+        <p className="text-slate-500 text-xs sm:text-sm">
           Search across conversations, memories, tasks, projects, and goals.
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 space-y-4">
         {/* Search input */}
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
@@ -208,12 +208,13 @@ export const OmnisearchView: React.FC = () => {
             value={rawQuery}
             onChange={handleQueryChange}
             placeholder="Search everything… (min 2 characters)"
-            className="w-full bg-slate-900/80 border border-slate-700/60 rounded-lg pl-10 pr-10 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-violet-600/60 focus:ring-1 focus:ring-violet-600/20 transition-all"
+            className="w-full bg-slate-900/80 border border-slate-700/60 rounded-xl pl-10 pr-10 py-3 text-xs sm:text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-violet-600/60 focus:ring-1 focus:ring-violet-600/20 transition-all min-h-[44px]"
           />
           {rawQuery && (
             <button
               onClick={clearQuery}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-500 hover:text-slate-300 transition-colors touch-target flex items-center justify-center"
+              aria-label="Clear search"
             >
               <X className="w-4 h-4" />
             </button>
@@ -232,7 +233,7 @@ export const OmnisearchView: React.FC = () => {
               <button
                 key={src}
                 onClick={() => toggleSource(src)}
-                className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all ${
+                className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 min-h-[36px] rounded-xl border transition-all ${
                   active
                     ? `${cfg.badgeColor} border-current`
                     : 'bg-slate-900/40 text-slate-500 border-slate-700/40 hover:border-slate-600/60 hover:text-slate-400'
@@ -246,7 +247,7 @@ export const OmnisearchView: React.FC = () => {
           {selectedSources.length > 0 && (
             <button
               onClick={() => setSelectedSources([])}
-              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-2.5 py-1.5 min-h-[36px] flex items-center"
             >
               Clear
             </button>

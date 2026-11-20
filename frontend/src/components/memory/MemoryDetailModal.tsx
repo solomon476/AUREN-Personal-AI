@@ -176,13 +176,13 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
       onKeyDown={handleKeyDown}
       role="dialog"
       aria-modal="true"
       aria-labelledby="memory-detail-title"
     >
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92vh] sm:max-h-[90vh] overflow-y-auto pb-safe">
         {/* Modal Header */}
         <div className="flex items-start justify-between pb-3 border-b border-slate-800">
           <div>
@@ -199,7 +199,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+            className="text-slate-400 hover:text-white p-2.5 -m-1.5 rounded-lg hover:bg-slate-800 transition touch-target flex items-center justify-center"
             aria-label="Close dialog"
           >
             <X className="h-5 w-5" />

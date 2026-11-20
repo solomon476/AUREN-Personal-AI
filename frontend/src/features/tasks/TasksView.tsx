@@ -113,7 +113,7 @@ export const TasksView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden text-slate-100">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between p-4 sm:p-6 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur gap-3 sm:gap-4">
         <div>
           <div className="flex items-center space-x-3.5">
             <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-sm">
@@ -130,7 +130,7 @@ export const TasksView: React.FC = () => {
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-indigo-600/20 self-start md:self-auto"
+          className="flex items-center justify-center space-x-2 px-4 py-2.5 min-h-[44px] bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-indigo-600/20 self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />
           <span>New Task</span>
@@ -138,7 +138,7 @@ export const TasksView: React.FC = () => {
       </div>
 
       {/* Filter and Tab Bar */}
-      <div className="p-6 pb-2 space-y-4">
+      <div className="p-4 sm:p-6 pb-2 space-y-3 sm:space-y-4">
         {/* Status Tabs */}
         <div className="flex items-center space-x-2 border-b border-slate-800/80 pb-3 overflow-x-auto scrollbar-none">
           {[
@@ -154,7 +154,7 @@ export const TasksView: React.FC = () => {
                 setActiveTab(tab.id);
                 setPage(1);
               }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-150 whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[38px] rounded-xl text-xs font-medium transition-all duration-150 whitespace-nowrap flex items-center ${
                 activeTab === tab.id
                   ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
@@ -166,7 +166,7 @@ export const TasksView: React.FC = () => {
         </div>
 
         {/* Filter Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
@@ -177,7 +177,7 @@ export const TasksView: React.FC = () => {
                 setPage(1);
               }}
               placeholder="Search tasks..."
-              className="w-full pl-10 pr-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+              className="w-full pl-10 pr-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition min-h-[42px]"
             />
           </div>
 
@@ -188,7 +188,7 @@ export const TasksView: React.FC = () => {
                 setSelectedPriority(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition"
+              className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition min-h-[42px]"
             >
               <option value="">All Priorities</option>
               <option value="urgent">Urgent</option>
@@ -205,7 +205,7 @@ export const TasksView: React.FC = () => {
                 setSelectedProjectId(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition"
+              className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition min-h-[42px]"
             >
               <option value="">All Projects</option>
               {projectsData?.items.map((p) => (
@@ -219,7 +219,7 @@ export const TasksView: React.FC = () => {
       </div>
 
       {/* Task List */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 scrollbar-thin">
         {isLoading ? (
           <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
             <Clock className="w-5 h-5 animate-spin mr-2 text-indigo-400" />
@@ -273,7 +273,7 @@ export const TasksView: React.FC = () => {
                   <div className="flex items-start space-x-3.5 flex-1 min-w-0">
                     <button
                       onClick={() => handleToggleComplete(task)}
-                      className="mt-0.5 text-slate-500 hover:text-indigo-400 transition-colors"
+                      className="p-2 -m-1.5 touch-target flex items-center justify-center text-slate-500 hover:text-indigo-400 transition-colors flex-shrink-0"
                       aria-label={task.status === 'completed' ? 'Mark incomplete' : 'Mark completed'}
                     >
                       {task.status === 'completed' ? (
@@ -352,17 +352,17 @@ export const TasksView: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity ml-3">
+                  <div className="flex items-center space-x-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity ml-2 sm:ml-3 flex-shrink-0">
                     <button
                       onClick={() => handleOpenEdit(task)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                      className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors touch-target flex items-center justify-center"
                       title="Edit task"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(task)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                      className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors touch-target flex items-center justify-center"
                       title="Delete task"
                     >
                       <Trash2 className="w-4 h-4" />

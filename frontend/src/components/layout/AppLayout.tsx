@@ -1,12 +1,15 @@
 /**
  * Core Application Shell Layout.
- * Integrates persistent navigation sidebar, mobile responsive drawer, top bar, and main content area.
+ * Integrates persistent navigation sidebar (desktop), mobile bottom navigation bar (phone),
+ * slide-up secondary hub sheet, responsive drawer, top bar, and main content area.
  */
 
 import React, { useState } from 'react';
-import { Menu, X, Bot } from 'lucide-react';
+import { Menu, X, Bot, Search } from 'lucide-react';
 import { Outlet, Link } from '@tanstack/react-router';
 import { NavigationSidebar } from './NavigationSidebar';
+import { MobileBottomNav } from './MobileBottomNav';
+import { MobileMoreSheet } from './MobileMoreSheet';
 import { AuthModal } from '../auth/AuthModal';
 import { useAuth } from '../../context/AuthContext';
 import { UserProfileMenu } from '../auth/UserProfileMenu';
@@ -14,6 +17,7 @@ import { UserProfileMenu } from '../auth/UserProfileMenu';
 export const AppLayout: React.FC = () => {
   const { user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
 
@@ -21,6 +25,7 @@ export const AppLayout: React.FC = () => {
     setAuthMode(mode);
     setIsAuthModalOpen(true);
     setIsMobileMenuOpen(false);
+    setIsMoreSheetOpen(false);
   };
 
   return (
@@ -30,7 +35,7 @@ export const AppLayout: React.FC = () => {
         <NavigationSidebar onOpenAuth={openAuth} />
       </div>
 
-      {/* Mobile Drawer (Slide-over) */}
+      {/* Mobile Drawer (Slide-over Full Navigation) */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden animate-in fade-in duration-200">
           <div
@@ -40,7 +45,7 @@ export const AppLayout: React.FC = () => {
           <div className="relative flex flex-col w-72 max-w-xs bg-slate-950 shadow-2xl z-10 border-r border-slate-800/80">
             <button
               onClick={() => setIsMobileMenuOpen(false)}
-              className="absolute top-4 right-3 text-slate-400 hover:text-white p-1 rounded-lg"
+              className="absolute top-4 right-3 text-slate-400 hover:text-white p-2 rounded-lg touch-target flex items-center justify-center"
               aria-label="Close menu"
             >
               <X className="h-5 w-5" />
@@ -59,11 +64,11 @@ export const AppLayout: React.FC = () => {
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.06),rgba(255,255,255,0))]" />
 
         {/* Mobile Header Bar */}
-        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md z-10">
-          <div className="flex items-center space-x-3">
+        <header className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-slate-800/80 bg-slate-950/95 backdrop-blur-md z-30 pt-[env(safe-area-inset-top,0.5rem)]">
+          <div className="flex items-center space-x-2.5">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 border border-slate-800"
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 border border-slate-800/80 touch-target flex items-center justify-center transition"
               aria-label="Open navigation menu"
             >
               <Menu className="h-5 w-5" />
@@ -79,12 +84,20 @@ export const AppLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-2">
+            <Link
+              to="/search"
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 border border-slate-800/80 touch-target flex items-center justify-center transition"
+              aria-label="Search"
+            >
+              <Search className="h-4 w-4" />
+            </Link>
+
             {user ? (
               <UserProfileMenu />
             ) : (
               <button
                 onClick={() => openAuth('signin')}
-                className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-sm transition"
+                className="px-3.5 py-1.5 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl shadow-sm transition"
               >
                 Sign In
               </button>
@@ -92,10 +105,23 @@ export const AppLayout: React.FC = () => {
           </div>
         </header>
 
-        {/* Dynamic Route Content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-7 relative z-0">
+        {/* Dynamic Route Content (with bottom padding for mobile navigation bar) */}
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-7 pb-20 md:pb-7 relative z-0 scrollbar-thin">
           <Outlet />
         </main>
+
+        {/* Mobile-First Bottom Navigation Bar */}
+        <MobileBottomNav
+          onOpenMore={() => setIsMoreSheetOpen(true)}
+          isMoreOpen={isMoreSheetOpen}
+        />
+
+        {/* Mobile More Secondary Navigation Sheet */}
+        <MobileMoreSheet
+          isOpen={isMoreSheetOpen}
+          onClose={() => setIsMoreSheetOpen(false)}
+          onOpenAuth={openAuth}
+        />
       </div>
 
       {/* Global Auth Modal */}

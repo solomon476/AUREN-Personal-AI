@@ -1,7 +1,7 @@
 /**
  * Persistent Chat & Streaming Conversational View.
  * Enhanced with Rich Markdown & Code Rendering, Conversation Rename/Delete Lifecycle,
- * Resilient SSE Reconnection with Exponential Backoff, and AUREN Design System Elevation.
+ * Resilient SSE Reconnection with Exponential Backoff, and Mobile-First Responsive Architecture.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -19,6 +19,7 @@ import {
   Edit2,
   Trash2,
   Brain,
+  X,
 } from 'lucide-react';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useSafeSearch } from '../../hooks/useSafeSearch';
@@ -85,7 +86,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
     idempotencyKey: string;
   } | null>(null);
 
-  // Modals for conversation lifecycle & context inspection
+  // Modals and Drawers
+  const [isMobileThreadDrawerOpen, setIsMobileThreadDrawerOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [contextInspectorMessageId, setContextInspectorMessageId] = useState<string | null>(null);
@@ -130,6 +132,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
       const newConv = await createConversationMutation.mutateAsync('New Conversation');
       setMessages([]);
       setErrorMessage(null);
+      setIsMobileThreadDrawerOpen(false);
       navigate({ to: '/chat/$conversationId', params: { conversationId: newConv.id } });
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to create conversation');
@@ -139,6 +142,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   const handleSelectConversation = (id: string) => {
     if (isStreaming) return;
     setErrorMessage(null);
+    setIsMobileThreadDrawerOpen(false);
     navigate({ to: '/chat/$conversationId', params: { conversationId: id } });
   };
 
@@ -288,86 +292,126 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
 
   const activeConv = conversations.find((c) => c.id === activeConversationId);
 
-  return (
-    <div className="flex h-[calc(100vh-5rem)] min-h-[550px] bg-slate-950/80 border border-slate-800/80 rounded-2xl overflow-hidden shadow-subtle-elevation backdrop-blur transition-all duration-300">
-      {/* Sidebar: Threads History */}
-      <aside className="w-64 sm:w-72 bg-slate-950 border-r border-slate-800/80 flex flex-col flex-shrink-0">
-        <div className="p-3.5 border-b border-slate-800/80">
-          <button
-            onClick={handleNewConversation}
-            disabled={isStreaming || createConversationMutation.isPending}
-            className="w-full flex items-center justify-center space-x-2 py-2.5 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all duration-200"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="tracking-wide">New Conversation</span>
-          </button>
-        </div>
+  // Common Thread List Renderer (shared between Desktop Sidebar and Mobile Drawer)
+  const renderThreadList = () => (
+    <>
+      <div className="p-3.5 border-b border-slate-800/80">
+        <button
+          onClick={handleNewConversation}
+          disabled={isStreaming || createConversationMutation.isPending}
+          className="w-full flex items-center justify-center space-x-2 py-2.5 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all duration-200 touch-target"
+        >
+          <Plus className="h-4 w-4" />
+          <span className="tracking-wide">New Conversation</span>
+        </button>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin">
-          {isLoadingConversations ? (
-            <div className="p-6 text-center text-xs text-slate-500 flex items-center justify-center space-x-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
-              <span>Loading threads...</span>
-            </div>
-          ) : conversations.length === 0 ? (
-            <div className="p-6 text-center text-xs text-slate-500 font-normal">
-              No conversations yet. Start one above!
-            </div>
-          ) : (
-            conversations.map((c) => {
-              const isActive = c.id === activeConversationId;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => handleSelectConversation(c.id)}
-                  className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-left text-xs transition-all duration-150 truncate ${
-                    isActive
-                      ? 'bg-slate-900 border border-slate-700/80 text-white font-medium shadow-sm'
-                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200 border border-transparent'
-                  }`}
-                >
-                  <MessageSquare className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
-                  <span className="truncate flex-1 font-medium">{c.title}</span>
-                  {typeof c.message_count === 'number' && c.message_count > 0 && (
-                    <span className="text-[10px] text-slate-500 font-mono px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800">
-                      {c.message_count}
-                    </span>
-                  )}
-                </button>
-              );
-            })
-          )}
-        </div>
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin">
+        {isLoadingConversations ? (
+          <div className="p-6 text-center text-xs text-slate-500 flex items-center justify-center space-x-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+            <span>Loading threads...</span>
+          </div>
+        ) : conversations.length === 0 ? (
+          <div className="p-6 text-center text-xs text-slate-500 font-normal">
+            No conversations yet. Start one above!
+          </div>
+        ) : (
+          conversations.map((c) => {
+            const isActive = c.id === activeConversationId;
+            return (
+              <button
+                key={c.id}
+                onClick={() => handleSelectConversation(c.id)}
+                className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-left text-xs transition-all duration-150 truncate touch-target ${
+                  isActive
+                    ? 'bg-slate-900 border border-slate-700/80 text-white font-medium shadow-sm'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200 border border-transparent'
+                }`}
+              >
+                <MessageSquare className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                <span className="truncate flex-1 font-medium">{c.title}</span>
+                {typeof c.message_count === 'number' && c.message_count > 0 && (
+                  <span className="text-[10px] text-slate-500 font-mono px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800">
+                    {c.message_count}
+                  </span>
+                )}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-[calc(100dvh-8rem)] md:h-[calc(100vh-5rem)] min-h-[480px] bg-slate-950/80 border border-slate-800/80 rounded-2xl overflow-hidden shadow-subtle-elevation backdrop-blur transition-all duration-300">
+      {/* Desktop Sidebar: Threads History (Hidden on mobile phones to maximize conversation width) */}
+      <aside className="hidden md:flex flex-col w-64 sm:w-72 bg-slate-950 border-r border-slate-800/80 flex-shrink-0">
+        {renderThreadList()}
       </aside>
 
-      {/* Main Chat Workspace */}
-      <section className="flex-1 flex flex-col bg-slate-900/30">
+      {/* Mobile Threads Drawer (Slide-over drawer for phone screens) */}
+      {isMobileThreadDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden animate-in fade-in duration-200">
+          <div
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md"
+            onClick={() => setIsMobileThreadDrawerOpen(false)}
+          />
+          <div className="relative flex flex-col w-72 max-w-[85vw] bg-slate-950 shadow-2xl z-10 border-r border-slate-800/80">
+            <div className="p-3.5 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/40">
+              <span className="text-xs font-semibold text-white">Conversation History</span>
+              <button
+                onClick={() => setIsMobileThreadDrawerOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg touch-target flex items-center justify-center"
+                aria-label="Close thread drawer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {renderThreadList()}
+          </div>
+        </div>
+      )}
+
+      {/* Main Chat Workspace (Full width on mobile) */}
+      <section className="flex-1 flex flex-col bg-slate-900/30 min-w-0">
         {/* Active Thread Header */}
-        <div className="h-14 border-b border-slate-800/80 px-5 flex items-center justify-between bg-slate-950/70 backdrop-blur">
-          <div className="flex items-center space-x-2.5 min-w-0">
-            <div className="h-7 w-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 flex-shrink-0">
+        <div className="h-14 border-b border-slate-800/80 px-3.5 sm:px-5 flex items-center justify-between bg-slate-950/70 backdrop-blur">
+          <div className="flex items-center space-x-2 min-w-0">
+            {/* Mobile Threads Drawer Trigger Button */}
+            <button
+              onClick={() => setIsMobileThreadDrawerOpen(true)}
+              className="md:hidden flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:text-white transition touch-target flex-shrink-0"
+              aria-label="Open conversation threads"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-[11px] font-medium">Threads</span>
+            </button>
+
+            <div className="h-7 w-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 hidden sm:flex items-center justify-center text-indigo-400 flex-shrink-0">
               <Sparkles className="h-3.5 w-3.5" />
             </div>
-            <h3 className="text-xs sm:text-sm font-semibold text-white tracking-tight truncate max-w-xs sm:max-w-md">
+            <h3 className="text-xs sm:text-sm font-semibold text-white tracking-tight truncate max-w-[140px] xs:max-w-xs sm:max-w-md">
               {activeConv ? activeConv.title : 'New Dialogue'}
             </h3>
             {activeConv && (
-              <div className="flex items-center space-x-1 pl-1.5">
+              <div className="flex items-center space-x-1 pl-1">
                 <button
                   onClick={() => setIsRenameModalOpen(true)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700 transition"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700 transition touch-target flex items-center justify-center"
                   title="Rename conversation"
                   aria-label="Rename conversation"
                 >
-                  <Edit2 className="h-3 w-3" />
+                  <Edit2 className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => setIsDeleteModalOpen(true)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 border border-transparent hover:border-slate-700 transition"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 border border-transparent hover:border-slate-700 transition touch-target flex items-center justify-center"
                   title="Delete conversation"
                   aria-label="Delete conversation"
                 >
-                  <Trash2 className="h-3 w-3" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
@@ -381,19 +425,19 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         </div>
 
         {/* Message Stream Display */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-7 space-y-5">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-7 space-y-4 sm:space-y-5 scrollbar-thin">
           {isLoadingMessages ? (
             <div className="h-full flex items-center justify-center text-slate-400 text-xs space-x-2">
               <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
               <span>Loading messages...</span>
             </div>
           ) : messages.length === 0 && !streamingContent ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
-              <div className="h-14 w-14 rounded-2xl bg-indigo-950/60 border border-indigo-800/50 flex items-center justify-center text-indigo-400 shadow-xl shadow-indigo-950/40">
-                <Bot className="h-7 w-7" />
+            <div className="h-full flex flex-col items-center justify-center text-center p-4 sm:p-6 space-y-3 sm:space-y-4">
+              <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-indigo-950/60 border border-indigo-800/50 flex items-center justify-center text-indigo-400 shadow-xl shadow-indigo-950/40">
+                <Bot className="h-6 w-6 sm:h-7 sm:w-7" />
               </div>
-              <div className="space-y-1.5">
-                <h4 className="text-base font-bold text-white tracking-tight">AUREN Personal AI Assistant</h4>
+              <div className="space-y-1">
+                <h4 className="text-sm sm:text-base font-bold text-white tracking-tight">AUREN Personal AI Assistant</h4>
                 <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
                   Ready to assist. Your dialogues are saved privately to your account with strict ownership enforcement.
                 </p>
@@ -406,15 +450,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 return (
                   <div
                     key={msg.id || index}
-                    className={`flex items-start space-x-3.5 ${isUser ? 'justify-end' : 'justify-start'}`}
+                    className={`flex items-start space-x-2.5 sm:space-x-3.5 ${isUser ? 'justify-end' : 'justify-start'}`}
                   >
                     {!isUser && (
-                      <div className="h-8 w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/60 flex items-center justify-center text-indigo-400 flex-shrink-0 text-xs mt-0.5 shadow-sm">
-                        <Bot className="h-4 w-4" />
+                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/60 flex items-center justify-center text-indigo-400 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                        <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
                     )}
                     <div
-                      className={`max-w-[85%] sm:max-w-[78%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed ${
+                      className={`max-w-[92%] sm:max-w-[78%] rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm leading-relaxed ${
                         isUser
                           ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-subtle-elevation'
                           : 'bg-slate-900/90 text-slate-200 border border-slate-800/80 shadow-subtle-elevation'
@@ -422,11 +466,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                     >
                       <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
                       {!isUser && (
-                        <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
+                        <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
                           <button
                             type="button"
                             onClick={() => setContextInspectorMessageId(msg.id)}
-                            className="inline-flex items-center space-x-1.5 text-slate-400 hover:text-cyan-400 transition-colors"
+                            className="inline-flex items-center space-x-1.5 text-slate-400 hover:text-cyan-400 transition-colors touch-target py-1"
                             title="Inspect memory context used for this response"
                             aria-label="Inspect context provenance"
                           >
@@ -442,8 +486,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                       )}
                     </div>
                     {isUser && (
-                      <div className="h-8 w-8 rounded-xl bg-slate-800 border border-slate-700/80 flex items-center justify-center text-slate-300 flex-shrink-0 text-xs mt-0.5 shadow-sm">
-                        <User className="h-4 w-4" />
+                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-slate-800 border border-slate-700/80 flex items-center justify-center text-slate-300 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                        <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
                     )}
                   </div>
@@ -452,11 +496,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
 
               {/* In-Flight Streaming Assistant Bubble */}
               {isStreaming && (
-                <div className="flex items-start space-x-3.5 justify-start animate-in fade-in duration-150">
-                  <div className="h-8 w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/60 flex items-center justify-center text-indigo-400 flex-shrink-0 text-xs mt-0.5 shadow-sm">
-                    <Bot className="h-4 w-4" />
+                <div className="flex items-start space-x-2.5 sm:space-x-3.5 justify-start animate-in fade-in duration-150">
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/60 flex items-center justify-center text-indigo-400 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                    <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
-                  <div className="max-w-[85%] sm:max-w-[78%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed bg-slate-900/90 text-slate-200 border border-slate-800/80 shadow-subtle-elevation">
+                  <div className="max-w-[92%] sm:max-w-[78%] rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm leading-relaxed bg-slate-900/90 text-slate-200 border border-slate-800/80 shadow-subtle-elevation">
                     {streamingContent ? (
                       <MessageContent content={streamingContent} role="assistant" conversationId={activeConversationId || undefined} />
                     ) : (
@@ -472,14 +516,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           )}
 
           {reconnectStatus && (
-            <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/50 flex items-center space-x-2.5 text-xs text-amber-300 animate-pulse">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/50 flex items-center space-x-2.5 text-xs text-amber-300 animate-pulse">
               <Loader2 className="h-4 w-4 animate-spin text-amber-400 flex-shrink-0" />
               <span>{reconnectStatus}</span>
             </div>
           )}
 
           {errorMessage && (
-            <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/50 flex items-center justify-between text-xs text-rose-300">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/50 flex items-center justify-between text-xs text-rose-300">
               <div className="flex items-start space-x-2.5">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-rose-400" />
                 <div>
@@ -492,7 +536,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                   type="button"
                   onClick={handleRetry}
                   disabled={isStreaming}
-                  className="ml-3 px-3 py-1.5 bg-rose-900/60 hover:bg-rose-800/80 border border-rose-700/60 rounded-lg text-rose-200 text-xs font-semibold flex items-center space-x-1.5 transition flex-shrink-0 disabled:opacity-50"
+                  className="ml-2.5 px-3 py-1.5 bg-rose-900/60 hover:bg-rose-800/80 border border-rose-700/60 rounded-lg text-rose-200 text-xs font-semibold flex items-center space-x-1.5 transition flex-shrink-0 disabled:opacity-50 touch-target"
                   title="Retry failed message with identical idempotency key"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -502,7 +546,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 <button
                   type="button"
                   onClick={() => navigate({ to: '/chat' })}
-                  className="ml-3 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200 text-xs font-medium"
+                  className="ml-2.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200 text-xs font-medium touch-target"
                 >
                   Return to Chat
                 </button>
@@ -514,7 +558,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         </div>
 
         {/* Input Composer Bar */}
-        <div className="p-4 sm:p-5 border-t border-slate-800/80 bg-slate-950/80 backdrop-blur">
+        <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <form onSubmit={handleSendMessage} className="relative flex items-center">
             <textarea
               rows={1}
@@ -528,15 +572,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               }}
               placeholder="Ask AUREN anything... (Enter to send, Shift+Enter for newline)"
               disabled={isStreaming}
-              className="w-full resize-none py-3 pl-4 pr-24 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all duration-200 disabled:opacity-50"
+              className="w-full resize-none py-2.5 sm:py-3 pl-3.5 sm:pl-4 pr-20 sm:pr-24 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all duration-200 disabled:opacity-50"
             />
 
-            <div className="absolute right-2.5 flex items-center space-x-1.5">
+            <div className="absolute right-2 flex items-center space-x-1">
               {isStreaming ? (
                 <button
                   type="button"
                   onClick={handleStopStreaming}
-                  className="p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg transition"
+                  className="p-2 sm:p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl transition touch-target flex items-center justify-center"
                   title="Stop generating"
                   aria-label="Stop generating"
                 >
@@ -546,7 +590,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 <button
                   type="submit"
                   disabled={!inputValue.trim()}
-                  className="p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-white rounded-lg transition shadow-md shadow-indigo-600/20"
+                  className="p-2 sm:p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-white rounded-xl transition shadow-md shadow-indigo-600/20 touch-target flex items-center justify-center"
                   title="Send message"
                   aria-label="Send message"
                 >
@@ -556,8 +600,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
             </div>
           </form>
 
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 px-1 font-mono">
-            <span>Enter to send &bull; Shift+Enter for newline</span>
+          <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-500 px-1 font-mono">
+            <span className="hidden xs:inline">Enter to send &bull; Shift+Enter for newline</span>
             <span>{inputValue.length}/10000 characters</span>
           </div>
         </div>

@@ -95,9 +95,9 @@ export const HomeView: React.FC = () => {
   });
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-y-auto text-slate-100 p-4 sm:p-7 space-y-6 max-w-7xl mx-auto">
+    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-y-auto text-slate-100 p-3.5 sm:p-7 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Briefing Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-800/80 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 sm:pb-5 border-b border-slate-800/80 gap-3 sm:gap-4">
         <div>
           <div className="flex items-center space-x-2 text-xs font-medium text-indigo-400 mb-1">
             <Calendar className="w-3.5 h-3.5 text-indigo-400/90" />
@@ -105,7 +105,7 @@ export const HomeView: React.FC = () => {
             <span className="text-slate-600">•</span>
             <span className="text-slate-400 font-normal">Personal Command Center</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-100 via-slate-200 to-indigo-200 bg-clip-text text-transparent">
+          <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-100 via-slate-200 to-indigo-200 bg-clip-text text-transparent">
             {getGreeting()}{user?.email ? `, ${user.email.split('@')[0]}` : ''}
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-xl leading-relaxed">
@@ -115,18 +115,18 @@ export const HomeView: React.FC = () => {
 
         {/* Quick KPI Snapshot */}
         {dashboard && (
-          <div className="flex items-center gap-3">
-            <div className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 shadow-subtle-elevation text-center min-w-[76px] transition-all hover:border-slate-700/80">
+          <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto w-full md:w-auto scrollbar-none py-1">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 shadow-subtle-elevation text-center min-w-[72px] transition-all hover:border-slate-700/80">
               <span className="text-[10px] text-slate-400 uppercase tracking-widest block font-semibold">Tasks</span>
-              <span className="text-xl font-bold text-indigo-400 tracking-tight">{dashboard.active_tasks_count}</span>
+              <span className="text-lg sm:text-xl font-bold text-indigo-400 tracking-tight">{dashboard.active_tasks_count}</span>
             </div>
-            <div className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 shadow-subtle-elevation text-center min-w-[76px] transition-all hover:border-slate-700/80">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 shadow-subtle-elevation text-center min-w-[72px] transition-all hover:border-slate-700/80">
               <span className="text-[10px] text-slate-400 uppercase tracking-widest block font-semibold">Projects</span>
-              <span className="text-xl font-bold text-emerald-400 tracking-tight">{dashboard.active_projects_count}</span>
+              <span className="text-lg sm:text-xl font-bold text-emerald-400 tracking-tight">{dashboard.active_projects_count}</span>
             </div>
-            <div className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 shadow-subtle-elevation text-center min-w-[76px] transition-all hover:border-slate-700/80">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 shadow-subtle-elevation text-center min-w-[72px] transition-all hover:border-slate-700/80">
               <span className="text-[10px] text-slate-400 uppercase tracking-widest block font-semibold">Goals</span>
-              <span className="text-xl font-bold text-purple-400 tracking-tight">{dashboard.active_goals_count}</span>
+              <span className="text-lg sm:text-xl font-bold text-purple-400 tracking-tight">{dashboard.active_goals_count}</span>
             </div>
           </div>
         )}
@@ -312,19 +312,23 @@ export const HomeView: React.FC = () => {
                     key={task.id}
                     className="flex items-center justify-between p-3 rounded-xl bg-slate-900/50 hover:bg-slate-900 border border-slate-800/70 transition shadow-sm"
                   >
-                    <div className="flex items-center space-x-3 min-w-0">
+                    <div className="flex items-center space-x-2 min-w-0">
                       <button
                         type="button"
                         onClick={() => handleToggleTask(task)}
                         title="Toggle task status"
                         aria-label="Toggle task status"
-                        className={`w-4 h-4 rounded border flex items-center justify-center transition flex-shrink-0 ${
-                          task.status === 'completed'
-                            ? 'bg-emerald-600 border-emerald-500 text-white'
-                            : 'border-slate-700 hover:border-slate-500'
-                        }`}
+                        className="p-2 -m-1.5 touch-target flex items-center justify-center flex-shrink-0"
                       >
-                        {task.status === 'completed' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        <span
+                          className={`w-4 h-4 rounded border flex items-center justify-center transition ${
+                            task.status === 'completed'
+                              ? 'bg-emerald-600 border-emerald-500 text-white'
+                              : 'border-slate-700 hover:border-slate-500'
+                          }`}
+                        >
+                          {task.status === 'completed' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        </span>
                       </button>
                       <div className="min-w-0">
                         <span

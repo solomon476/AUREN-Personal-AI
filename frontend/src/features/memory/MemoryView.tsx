@@ -203,8 +203,8 @@ export const MemoryView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden">
       {/* Top Header */}
-      <div className="flex-shrink-0 px-6 py-5 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex-shrink-0 px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div className="flex items-center space-x-3.5">
             <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-sm">
               <Brain className="h-6 w-6" />
@@ -223,7 +223,7 @@ export const MemoryView: React.FC = () => {
           </div>
           <button
             onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all duration-200"
+            className="inline-flex items-center justify-center px-4 py-2.5 min-h-[44px] rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all duration-200 self-start sm:self-auto"
           >
             <Plus className="w-4 h-4 mr-1.5" />
             Add Memory
@@ -232,10 +232,10 @@ export const MemoryView: React.FC = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex-shrink-0 px-6 py-3.5 border-b border-slate-800/80 bg-slate-900/20">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex-shrink-0 px-4 py-3 sm:px-6 sm:py-3.5 border-b border-slate-800/80 bg-slate-900/20">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Search Box */}
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-500" />
             <input
               type="text"
@@ -245,7 +245,7 @@ export const MemoryView: React.FC = () => {
                 setPage(1);
               }}
               placeholder="Search memory content..."
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-150"
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-150 min-h-[42px]"
             />
           </div>
 
@@ -256,7 +256,7 @@ export const MemoryView: React.FC = () => {
               setSelectedType(e.target.value);
               setPage(1);
             }}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition"
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition min-h-[42px]"
             aria-label="Filter by memory type"
           >
             <option value="">All Types</option>
@@ -275,7 +275,7 @@ export const MemoryView: React.FC = () => {
               setSelectedCategory(e.target.value);
               setPage(1);
             }}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition"
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition min-h-[42px]"
             aria-label="Filter by category"
           >
             <option value="">All Categories</option>
@@ -294,7 +294,7 @@ export const MemoryView: React.FC = () => {
               setSelectedConfirmation(e.target.value);
               setPage(1);
             }}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition"
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition min-h-[42px]"
             aria-label="Filter by confirmation status"
           >
             <option value="">All Epistemic States</option>
@@ -311,7 +311,7 @@ export const MemoryView: React.FC = () => {
               setSelectedLifecycle(e.target.value);
               setPage(1);
             }}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition"
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition min-h-[42px]"
             aria-label="Filter by lifecycle status"
           >
             <option value="active">Active Only</option>
@@ -421,7 +421,7 @@ export const MemoryView: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="flex items-center space-x-1.5">
+                  <div className="flex items-center space-x-1 sm:space-x-1.5">
                     {mem.confirmation_status === 'unconfirmed' && mem.lifecycle_status === 'active' && (
                       <button
                         onClick={(e) => {
@@ -429,9 +429,10 @@ export const MemoryView: React.FC = () => {
                           confirmMutation.mutate(mem.id);
                         }}
                         title="Confirm inference"
-                        className="p-1 rounded-md text-emerald-400 hover:bg-emerald-950/60 transition"
+                        aria-label="Confirm inference"
+                        className="p-2 -m-1 sm:p-1 sm:m-0 rounded-md text-emerald-400 hover:bg-emerald-950/60 transition touch-target flex items-center justify-center"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <CheckCircle2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                       </button>
                     )}
                     <button
@@ -439,9 +440,10 @@ export const MemoryView: React.FC = () => {
                         e.stopPropagation();
                         handleOpenDetail(mem);
                       }}
-                      className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                      className="p-2 -m-1 sm:p-1 sm:m-0 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition touch-target flex items-center justify-center"
+                      aria-label="View memory details"
                     >
-                      <Eye className="w-3.5 h-3.5" />
+                      <Eye className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                     </button>
                   </div>
                 </div>

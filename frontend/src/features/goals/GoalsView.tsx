@@ -73,7 +73,7 @@ export const GoalsView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden text-slate-100">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between p-4 sm:p-6 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur gap-3 sm:gap-4">
         <div>
           <div className="flex items-center space-x-3.5">
             <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 shadow-sm">
@@ -90,7 +90,7 @@ export const GoalsView: React.FC = () => {
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-indigo-600/20 self-start md:self-auto"
+          className="flex items-center justify-center space-x-2 px-4 py-2.5 min-h-[44px] bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-indigo-600/20 self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />
           <span>New Goal</span>
@@ -98,7 +98,7 @@ export const GoalsView: React.FC = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="p-6 pb-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="p-4 sm:p-6 pb-2 grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
@@ -109,7 +109,7 @@ export const GoalsView: React.FC = () => {
               setPage(1);
             }}
             placeholder="Search goals..."
-            className="w-full pl-10 pr-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+            className="w-full pl-10 pr-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition min-h-[42px]"
           />
         </div>
 
@@ -120,7 +120,7 @@ export const GoalsView: React.FC = () => {
               setSelectedStatus(e.target.value);
               setPage(1);
             }}
-            className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition"
+            className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition min-h-[42px]"
           >
             <option value="">All Statuses</option>
             <option value="in_progress">In Progress</option>
@@ -184,15 +184,19 @@ export const GoalsView: React.FC = () => {
                         <div className="flex items-center space-x-1">
                           <button
                             onClick={(e) => handleOpenEdit(e, goal)}
-                            className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
+                            className="p-2 -m-1 sm:p-1 sm:m-0 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition touch-target flex items-center justify-center"
+                            title="Edit goal"
+                            aria-label="Edit goal"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                           </button>
                           <button
                             onClick={(e) => handleDelete(e, goal.id)}
-                            className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+                            className="p-2 -m-1 sm:p-1 sm:m-0 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition touch-target flex items-center justify-center"
+                            title="Delete goal"
+                            aria-label="Delete goal"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                           </button>
                         </div>
                       </div>

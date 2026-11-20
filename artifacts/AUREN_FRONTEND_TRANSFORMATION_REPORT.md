@@ -286,3 +286,4 @@ The full Vitest test suite was executed against the transformed code:
 ---
 *Report certified by Antigravity Autonomous Engineering Agent.*  
 *Commit `fd07da5` deployed to `main`.*
+

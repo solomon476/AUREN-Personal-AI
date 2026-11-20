@@ -19,6 +19,7 @@ import {
   Tag,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
   Smile,
   Eye,
   Shield,
@@ -203,8 +204,8 @@ export const JournalView: React.FC = () => {
 
       {/* Main Workspace Body */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        {/* Left Column: Entries List & Filters */}
-        <div className="w-full md:w-80 lg:w-96 border-r border-slate-800/80 flex flex-col bg-slate-950">
+        {/* Left Column: Entries List & Filters (Hidden on mobile when actively editing or viewing an entry) */}
+        <div className={`${isEditing || selectedEntry ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 border-r border-slate-800/80 flex-col bg-slate-950`}>
           {/* Action Bar */}
           <div className="p-4 border-b border-slate-800/80 space-y-3">
             <button
@@ -329,12 +330,26 @@ export const JournalView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Writing & Reflection Workspace */}
-        <div className="flex-1 flex flex-col bg-slate-950 overflow-hidden">
+        {/* Right Column: Writing & Reflection Workspace (Full width on mobile when writing/reading, hidden when browsing list) */}
+        <div className={`${!isEditing && !selectedEntry ? 'hidden md:flex' : 'flex'} flex-1 flex-col bg-slate-950 overflow-hidden`}>
           {isEditing ? (
-            <form onSubmit={handleSaveEntry} className="flex-1 flex flex-col h-full overflow-hidden p-6 space-y-4">
+            <form onSubmit={handleSaveEntry} className="flex-1 flex flex-col h-full overflow-hidden p-3.5 sm:p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                 <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(false);
+                      if (!selectedEntry && editingEntryId) {
+                        setEditingEntryId(null);
+                      }
+                    }}
+                    className="md:hidden flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:text-white touch-target mr-1"
+                    aria-label="Back to reflections"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-slate-400" />
+                    <span>Back</span>
+                  </button>
                   <Edit3 className="w-4 h-4 text-indigo-400" />
                   <span className="text-sm font-semibold text-slate-200">
                     {editingEntryId ? 'Edit Reflection' : 'New Reflection'}
@@ -471,7 +486,21 @@ export const JournalView: React.FC = () => {
             </form>
           ) : selectedEntry ? (
             /* Entry Detail View */
-            <div className="flex-1 flex flex-col h-full overflow-hidden p-6 space-y-4">
+            <div className="flex-1 flex flex-col h-full overflow-hidden p-3.5 sm:p-6 space-y-4">
+              <div className="md:hidden pb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedEntry(null);
+                    setIsEditing(false);
+                  }}
+                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:text-white touch-target"
+                  aria-label="Back to reflections"
+                >
+                  <ChevronLeft className="w-4 h-4 text-slate-400" />
+                  <span>Back to Reflections</span>
+                </button>
+              </div>
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
                 <div>
                   <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 mb-1.5">
