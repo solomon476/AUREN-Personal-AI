@@ -80,11 +80,11 @@ export const markdownSanitizeSchema = {
   },
 };
 
-interface ActionProposalCardProps {
-  payloadStr: string;
+interface ActionProposalItemProps {
+  action: any;
 }
 
-const ActionProposalCard: React.FC<ActionProposalCardProps> = ({ payloadStr }) => {
+const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action }) => {
   const { user } = useAuth();
   const createTaskMutation = useCreateTask(user?.id);
   const createProjectMutation = useCreateProject(user?.id);
@@ -93,23 +93,21 @@ const ActionProposalCard: React.FC<ActionProposalCardProps> = ({ payloadStr }) =
   const [executed, setExecuted] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  let action: any = null;
-  try {
-    action = JSON.parse(payloadStr.trim());
-  } catch {
-    return null;
-  }
-
   if (!action || !action.type) return null;
 
   const handleConfirm = async () => {
+    if (!user) {
+      setErrorMsg('Please sign in to save items to Life Management.');
+      return;
+    }
     setErrorMsg(null);
     try {
       if (action.type === 'create_task') {
+        const dueDate = action.due_date && String(action.due_date).trim() ? String(action.due_date).trim() : undefined;
         await createTaskMutation.mutateAsync({
           title: action.title || 'Untitled Task',
           priority: action.priority || 'medium',
-          due_date: action.due_date,
+          due_date: dueDate,
         });
       } else if (action.type === 'create_project') {
         await createProjectMutation.mutateAsync({
@@ -117,10 +115,11 @@ const ActionProposalCard: React.FC<ActionProposalCardProps> = ({ payloadStr }) =
           description: action.description,
         });
       } else if (action.type === 'create_goal') {
+        const targetDate = action.target_date && String(action.target_date).trim() ? String(action.target_date).trim() : undefined;
         await createGoalMutation.mutateAsync({
           title: action.title || action.name || 'Untitled Goal',
           description: action.description,
-          target_date: action.target_date,
+          target_date: targetDate,
         });
       }
       setExecuted(true);
@@ -171,7 +170,7 @@ const ActionProposalCard: React.FC<ActionProposalCardProps> = ({ payloadStr }) =
   const Icon = meta.icon;
 
   return (
-    <div className={`my-3 p-3.5 rounded-xl border ${meta.border} ${meta.bg} space-y-2.5 max-w-lg`}>
+    <div className={`my-2 p-3.5 rounded-xl border ${meta.border} ${meta.bg} space-y-2.5 max-w-lg`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <Icon className={`w-4 h-4 ${meta.color}`} />
@@ -225,6 +224,35 @@ const ActionProposalCard: React.FC<ActionProposalCardProps> = ({ payloadStr }) =
       </div>
     </div>
   );
+};
+
+interface ActionProposalCardProps {
+  payloadStr: string;
+}
+
+const ActionProposalCard: React.FC<ActionProposalCardProps> = ({ payloadStr }) => {
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(payloadStr.trim());
+  } catch {
+    return null;
+  }
+
+  if (Array.isArray(parsed)) {
+    return (
+      <div className="space-y-2 my-3">
+        {parsed.map((item, idx) => (
+          <ActionProposalItem key={idx} action={item} />
+        ))}
+      </div>
+    );
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    return <ActionProposalItem action={parsed} />;
+  }
+
+  return null;
 };
 
 interface FencedCodeBlockProps {

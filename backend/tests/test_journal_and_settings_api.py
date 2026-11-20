@@ -188,3 +188,58 @@ def test_user_data_export_flow():
     assert "goals" in bundle
     assert "memories" in bundle
     assert "journal_entries" in bundle
+    assert "conversations" in bundle
+
+
+class PrefSpyProvider:
+    def __init__(self):
+        self.recorded_messages = []
+
+    def get_model_id(self) -> str:
+        return "mock-spy"
+
+    async def generate_response(self, messages, **kwargs):
+        self.recorded_messages = messages
+        return None
+
+    async def stream_response(self, messages, **kwargs):
+        self.recorded_messages = messages
+        yield "Response adhering to preferences"
+
+
+@pytest.mark.asyncio
+async def test_chat_service_injects_user_preferences():
+    """Verify Assistant dynamically incorporates user tone and custom instructions into system context."""
+    from app.services.chat.chat_service import chat_service
+    from app.services.profile_service import profile_service
+    from app.models.user import UserProfileUpdate
+    from app.models.chat import ChatCompletionRequest
+
+    # Set user preferences
+    await profile_service.update_profile(
+        USER_A,
+        UserProfileUpdate(
+            preferences={
+                "ai_tone": "executive",
+                "ai_custom_instructions": "Always include next review deadlines.",
+            }
+        ),
+    )
+
+    spy_provider = PrefSpyProvider()
+    with patch.object(chat_service, "_get_provider", return_value=spy_provider):
+        conv = await chat_service.validate_and_resolve_conversation(
+            USER_A,
+            ChatCompletionRequest(message="What should we plan today?"),
+        )
+        async for _ in chat_service.stream_chat_completion(
+            user=USER_A,
+            conversation=conv,
+            request=ChatCompletionRequest(message="What should we plan today?"),
+        ):
+            pass
+
+        assert spy_provider.recorded_messages
+        system_msg = next((m.content for m in spy_provider.recorded_messages if m.role == "system"), "")
+        assert "executive" in system_msg.lower() or "Executive-level summaries" in system_msg
+        assert "Always include next review deadlines." in system_msg

@@ -15,7 +15,9 @@ import {
   Trash2,
   FolderKanban,
   TrendingUp,
+  ArrowRight,
 } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
 import { Goal, GoalCreateInput, GoalUpdateInput } from '../../api/productivity';
 import {
   useCreateGoal,
@@ -302,15 +304,20 @@ export const GoalsView: React.FC = () => {
                   <div className="text-xs text-slate-500">No linked projects.</div>
                 ) : (
                   activeGoalDetail.projects.map((proj) => (
-                    <div
+                    <Link
                       key={proj.id}
-                      className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs mb-1.5"
+                      to="/projects"
+                      search={{ project_id: proj.id }}
+                      className="p-2.5 rounded-lg bg-slate-950/60 hover:bg-slate-900 border border-slate-800/80 text-xs mb-1.5 flex items-center justify-between group transition"
                     >
-                      <div className="font-medium text-slate-200">{proj.name}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        {proj.progress_percentage}% completed
+                      <div>
+                        <div className="font-medium text-slate-200 group-hover:text-indigo-400 transition">{proj.name}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {proj.progress_percentage}% completed
+                        </div>
                       </div>
-                    </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 transition" />
+                    </Link>
                   ))
                 )}
               </div>
@@ -323,13 +330,15 @@ export const GoalsView: React.FC = () => {
                   <div className="text-xs text-slate-500">No directly linked tasks.</div>
                 ) : (
                   activeGoalDetail.tasks.map((task) => (
-                    <div
+                    <Link
                       key={task.id}
-                      className="p-2 rounded bg-slate-950/60 border border-slate-800/80 text-xs flex items-center justify-between mb-1"
+                      to="/tasks"
+                      search={{ goal_id: activeGoalDetail.id }}
+                      className="p-2 rounded bg-slate-950/60 hover:bg-slate-900 border border-slate-800/80 text-xs flex items-center justify-between mb-1 group transition"
                     >
-                      <span className="truncate text-slate-300">{task.title}</span>
+                      <span className="truncate text-slate-300 group-hover:text-white transition">{task.title}</span>
                       <span className="text-[10px] text-slate-400 uppercase">{task.status}</span>
-                    </div>
+                    </Link>
                   ))
                 )}
               </div>

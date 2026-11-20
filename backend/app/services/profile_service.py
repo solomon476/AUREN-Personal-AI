@@ -200,16 +200,29 @@ class ProfileService:
         from app.services.productivity.repository import get_productivity_repository
         from app.services.memory.repository import get_memory_repository
         from app.services.journal.repository import get_journal_repository
+        from app.services.chat.repository import get_chat_repository
 
         prod_repo = get_productivity_repository(user_token=user.token)
         mem_repo = get_memory_repository(user_token=user.token)
         journal_repo = get_journal_repository(user_token=user.token)
+        chat_repo = get_chat_repository(user_token=user.token)
 
         tasks, _ = await prod_repo.list_tasks(user_id=user.id, page=1, page_size=1000)
         projects, _ = await prod_repo.list_projects(user_id=user.id, page=1, page_size=1000)
         goals, _ = await prod_repo.list_goals(user_id=user.id, page=1, page_size=1000)
         memories, _ = await mem_repo.list_memories(user_id=user.id, page=1, page_size=1000)
         journal_entries, _ = await journal_repo.list_entries(user_id=user.id, page=1, page_size=1000)
+
+        conversations_list = []
+        try:
+            convs = await chat_repo.list_conversations(user_id=user.id, limit=500)
+            for c in convs:
+                msgs = await chat_repo.get_messages(user_id=user.id, conversation_id=c.id, limit=1000)
+                c_dict = c.model_dump(mode="json")
+                c_dict["messages"] = [m.model_dump(mode="json") for m in msgs]
+                conversations_list.append(c_dict)
+        except Exception as e:
+            logger.warning("Conversations export warning: %s", e)
 
         return UserDataExportResponse(
             user_id=user.id,
@@ -221,6 +234,7 @@ class ProfileService:
             goals=[g.model_dump(mode="json") for g in goals],
             memories=[m.model_dump(mode="json") for m in memories],
             journal_entries=[j.model_dump(mode="json") for j in journal_entries],
+            conversations=conversations_list,
         )
 
 

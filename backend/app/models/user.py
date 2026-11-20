@@ -55,3 +55,4 @@ class UserDataExportResponse(BaseModel):
     goals: List[Dict[str, Any]] = Field(default_factory=list)
     memories: List[Dict[str, Any]] = Field(default_factory=list)
     journal_entries: List[Dict[str, Any]] = Field(default_factory=list)
+    conversations: List[Dict[str, Any]] = Field(default_factory=list)

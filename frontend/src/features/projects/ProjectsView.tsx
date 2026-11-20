@@ -3,7 +3,7 @@
  * Groups tasks into coherent workspaces with derived task progress and deadline tracking.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FolderKanban,
   Plus,
@@ -14,7 +14,10 @@ import {
   Edit2,
   Trash2,
   ListTodo,
+  ArrowRight,
 } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { useSafeSearch } from '../../hooks/useSafeSearch';
 import { Project, ProjectCreateInput, ProjectUpdateInput } from '../../api/productivity';
 import {
   useCreateProject,
@@ -34,7 +37,14 @@ export const ProjectsView: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const searchParams = useSafeSearch<{ project_id?: string }>();
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(searchParams?.project_id || null);
+
+  useEffect(() => {
+    if (searchParams?.project_id && searchParams.project_id !== activeProjectId) {
+      setActiveProjectId(searchParams.project_id);
+    }
+  }, [searchParams?.project_id]);
 
   const { data: projectsData, isLoading, error } = useProjects({
     status: selectedStatus || undefined,
@@ -231,10 +241,16 @@ export const ProjectsView: React.FC = () => {
                     {/* Progress Bar & Task Count */}
                     <div className="mt-4 pt-3 border-t border-slate-800/60">
                       <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="text-slate-400 flex items-center">
+                        <Link
+                          to="/tasks"
+                          search={{ project_id: project.id }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-slate-400 hover:text-indigo-400 flex items-center transition"
+                        >
                           <ListTodo className="w-3.5 h-3.5 mr-1 text-slate-500" />
-                          {project.completed_task_count} / {project.task_count} tasks completed
-                        </span>
+                          <span>{project.completed_task_count} / {project.task_count} tasks completed</span>
+                          <ArrowRight className="w-3 h-3 ml-1 text-slate-500" />
+                        </Link>
                         <span className="font-semibold text-slate-200">
                           {project.progress_percentage}%
                         </span>
@@ -276,8 +292,16 @@ export const ProjectsView: React.FC = () => {
               </button>
             </div>
 
-            <div className="py-3 text-xs text-slate-400 border-b border-slate-800">
-              {activeProjectDetail.description || 'No description provided.'}
+            <div className="py-3 text-xs text-slate-400 border-b border-slate-800 flex items-center justify-between">
+              <span className="flex-1 pr-3">{activeProjectDetail.description || 'No description provided.'}</span>
+              <Link
+                to="/tasks"
+                search={{ project_id: activeProjectDetail.id }}
+                className="flex items-center space-x-1 text-xs text-indigo-400 hover:text-indigo-300 font-medium flex-shrink-0"
+              >
+                <span>Filter Tasks</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
 
             <div className="flex-1 overflow-y-auto py-3 space-y-2">

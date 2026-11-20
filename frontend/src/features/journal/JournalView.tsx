@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Smile,
+  Eye,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -28,6 +29,7 @@ import {
   useUpdateJournalEntry,
 } from '../../hooks/useJournal';
 import { JournalEntry } from '../../api/journal';
+import { MessageContent } from '../../components/chat/MessageContent';
 
 const REFLECTION_PROMPTS = [
   'What was the single most impactful decision or achievement today?',
@@ -52,7 +54,9 @@ export const JournalView: React.FC = () => {
   const [selectedMood, setSelectedMood] = useState<string>('');
 
   // Active editing or viewing entry
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write');
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -74,24 +78,34 @@ export const JournalView: React.FC = () => {
   const deleteMutation = useDeleteJournalEntry(user?.id);
 
   const handleOpenNewEntry = (initialPrompt?: string) => {
+    setSelectedEntry(null);
     setEditingEntryId(null);
     setTitle('');
     setContent(initialPrompt ? `> **Prompt:** ${initialPrompt}\n\n` : '');
     setMood('reflective');
     setTagsInput('');
     setEntryDate(new Date().toISOString().split('T')[0]);
-    setIsEditorOpen(true);
+    setIsEditing(true);
+    setEditorTab('write');
     setStatusMessage(null);
   };
 
   const handleSelectEntry = (entry: JournalEntry) => {
+    setSelectedEntry(entry);
+    setIsEditing(false);
+    setStatusMessage(null);
+  };
+
+  const handleStartEdit = (entry: JournalEntry) => {
+    setSelectedEntry(entry);
     setEditingEntryId(entry.id);
     setTitle(entry.title || '');
     setContent(entry.content);
     setMood(entry.mood || 'reflective');
     setTagsInput(entry.tags ? entry.tags.join(', ') : '');
     setEntryDate(entry.entry_date || new Date().toISOString().split('T')[0]);
-    setIsEditorOpen(true);
+    setIsEditing(true);
+    setEditorTab('write');
     setStatusMessage(null);
   };
 
@@ -105,8 +119,9 @@ export const JournalView: React.FC = () => {
       .filter(Boolean);
 
     try {
+      let saved: JournalEntry;
       if (editingEntryId) {
-        await updateMutation.mutateAsync({
+        saved = await updateMutation.mutateAsync({
           entryId: editingEntryId,
           payload: {
             title: title.trim() || undefined,
@@ -118,7 +133,7 @@ export const JournalView: React.FC = () => {
         });
         setStatusMessage('Reflection updated securely.');
       } else {
-        await createMutation.mutateAsync({
+        saved = await createMutation.mutateAsync({
           title: title.trim() || undefined,
           content: content.trim(),
           mood,
@@ -128,8 +143,9 @@ export const JournalView: React.FC = () => {
         });
         setStatusMessage('New reflection saved securely.');
       }
+      setSelectedEntry(saved);
+      setIsEditing(false);
       setTimeout(() => setStatusMessage(null), 3000);
-      setIsEditorOpen(false);
     } catch (err: any) {
       setStatusMessage(`Error saving reflection: ${err.message || 'Unknown error'}`);
     }
@@ -141,8 +157,9 @@ export const JournalView: React.FC = () => {
     }
     try {
       await deleteMutation.mutateAsync(entryId);
-      if (editingEntryId === entryId) {
-        setIsEditorOpen(false);
+      if (selectedEntry?.id === entryId) {
+        setSelectedEntry(null);
+        setIsEditing(false);
         setEditingEntryId(null);
       }
     } catch (err: any) {
@@ -231,7 +248,15 @@ export const JournalView: React.FC = () => {
 
           {/* Entries Feed */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
-            {isLoading ? (
+            {!user ? (
+              <div className="p-8 text-center space-y-3">
+                <Lock className="w-8 h-8 text-indigo-400 mx-auto" />
+                <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
+                <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+                  Sign in to create, browse, and sync your private reflection journal with cryptographic guarantees.
+                </p>
+              </div>
+            ) : isLoading ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading reflections...</div>
             ) : error ? (
               <div className="p-4 m-3 bg-red-950/40 border border-red-800/80 rounded-lg text-xs text-red-300">
@@ -247,7 +272,7 @@ export const JournalView: React.FC = () => {
               </div>
             ) : (
               journalData.items.map((entry) => {
-                const isSelected = editingEntryId === entry.id;
+                const isSelected = selectedEntry?.id === entry.id;
                 const moodObj = MOOD_OPTIONS.find((m) => m.value === entry.mood);
                 return (
                   <div
@@ -297,7 +322,7 @@ export const JournalView: React.FC = () => {
 
         {/* Right Column: Writing & Reflection Workspace */}
         <div className="flex-1 flex flex-col bg-slate-950 overflow-hidden">
-          {isEditorOpen ? (
+          {isEditing ? (
             <form onSubmit={handleSaveEntry} className="flex-1 flex flex-col h-full overflow-hidden p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                 <div className="flex items-center space-x-2">
@@ -307,22 +332,44 @@ export const JournalView: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  {editingEntryId && (
+                  {/* Write vs Preview Toggle */}
+                  <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 mr-2">
                     <button
                       type="button"
-                      onClick={() => handleDeleteEntry(editingEntryId)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition text-xs"
-                      title="Delete Entry"
+                      onClick={() => setEditorTab('write')}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
+                        editorTab === 'write'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      Write
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab('preview')}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition flex items-center space-x-1 ${
+                        editorTab === 'preview'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>Preview</span>
+                    </button>
+                  </div>
+
                   <button
                     type="button"
-                    onClick={() => setIsEditorOpen(false)}
+                    onClick={() => {
+                      setIsEditing(false);
+                      if (!selectedEntry && editingEntryId) {
+                        setEditingEntryId(null);
+                      }
+                    }}
                     className="px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-xs transition"
                   >
-                    Close
+                    Cancel
                   </button>
                   <button
                     type="submit"
@@ -393,16 +440,93 @@ export const JournalView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Markdown Content Editor */}
+              {/* Markdown Content Editor / Preview Tab */}
               <div className="flex-1 flex flex-col min-h-0">
-                <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Begin your reflection... Markdown formatting supported."
-                  className="w-full flex-1 bg-slate-900/30 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none font-sans leading-relaxed"
-                />
+                {editorTab === 'write' ? (
+                  <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Begin your reflection... Markdown formatting supported."
+                    className="w-full flex-1 bg-slate-900/30 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none font-sans leading-relaxed"
+                  />
+                ) : (
+                  <div className="w-full flex-1 bg-slate-900/30 border border-slate-800 rounded-xl p-6 overflow-y-auto">
+                    {content.trim() ? (
+                      <MessageContent content={content} role="assistant" />
+                    ) : (
+                      <div className="text-xs text-slate-500 italic">No content written yet to preview.</div>
+                    )}
+                  </div>
+                )}
               </div>
             </form>
+          ) : selectedEntry ? (
+            /* Entry Detail View */
+            <div className="flex-1 flex flex-col h-full overflow-hidden p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
+                <div>
+                  <div className="flex items-center space-x-2 text-xs text-slate-400 mb-1">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>{selectedEntry.entry_date}</span>
+                    {selectedEntry.mood && (
+                      <>
+                        <span>•</span>
+                        <span className="capitalize text-indigo-400">{selectedEntry.mood}</span>
+                      </>
+                    )}
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-100">
+                    {selectedEntry.title || 'Untitled Reflection'}
+                  </h2>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit(selectedEntry)}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteEntry(selectedEntry.id)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition text-xs border border-slate-800"
+                    title="Delete Entry"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedEntry(null)}
+                    className="px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-xs transition"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              {selectedEntry.tags && selectedEntry.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedEntry.tags.map((tag, idx) => (
+                    <span
+                      key={idx}
+                      className="text-[10px] px-2 py-0.5 rounded-md bg-slate-900 text-slate-300 border border-slate-800 font-mono"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Rendered Markdown Body */}
+              <div className="flex-1 overflow-y-auto pr-2">
+                <div className="p-5 rounded-2xl bg-slate-900/30 border border-slate-800/80 leading-relaxed text-sm">
+                  <MessageContent content={selectedEntry.content} role="assistant" />
+                </div>
+              </div>
+            </div>
           ) : (
             /* Focused Welcome / Reflection Prompts Screen */
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-xl mx-auto space-y-6">

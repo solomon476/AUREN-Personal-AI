@@ -15,12 +15,14 @@ import {
   CheckCircle2,
   Database,
   Lock,
+  LogOut,
+  Cpu,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useExportUserData, useUpdateUserProfile, useUserProfile } from '../../hooks/useSettings';
 
 export const SettingsView: React.FC = () => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { data: profile } = useUserProfile(user?.id);
   const updateProfileMutation = useUpdateUserProfile(user?.id);
   const exportDataMutation = useExportUserData();
@@ -228,7 +230,41 @@ export const SettingsView: React.FC = () => {
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Theme</label>
+                    <select
+                      value={theme}
+                      onChange={(e) => setTheme(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="dark">Dark Slate (Default)</option>
+                      <option value="midnight">Midnight Indigo (Deep Contrast)</option>
+                      <option value="obsidian">Pure Obsidian (OLED Black)</option>
+                    </select>
+                  </div>
                 </div>
+
+                {/* Session Management */}
+                {user && (
+                  <div className="pt-4 border-t border-slate-800/80 space-y-3">
+                    <h3 className="text-xs font-semibold text-slate-300">Active Session</h3>
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                      <div>
+                        <span className="text-xs text-slate-200 block font-medium">Logged in as {user.email}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">Role: {user.role || 'authenticated'}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => signOut()}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 hover:border-rose-800/40 text-slate-300 text-xs font-medium transition border border-slate-700"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -370,6 +406,31 @@ export const SettingsView: React.FC = () => {
                     {exportStatus && (
                       <p className="text-xs text-indigo-300 font-mono">{exportStatus}</p>
                     )}
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <Cpu className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs font-semibold text-slate-200">System Integrations &amp; Infrastructure</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80">
+                        <span className="text-[10px] text-slate-500 block uppercase font-mono">Database</span>
+                        <span className="text-slate-200 font-medium">PostgreSQL &amp; Supabase RLS</span>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80">
+                        <span className="text-[10px] text-slate-500 block uppercase font-mono">AI Model</span>
+                        <span className="text-slate-200 font-medium">{aiModel}</span>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80">
+                        <span className="text-[10px] text-slate-500 block uppercase font-mono">Retrieval</span>
+                        <span className="text-slate-200 font-medium">Hybrid Lexical &amp; HNSW</span>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80">
+                        <span className="text-[10px] text-slate-500 block uppercase font-mono">Local Storage</span>
+                        <span className="text-slate-200 font-medium">SQLite WAL Engine</span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="p-4 rounded-xl bg-slate-900/30 border border-slate-800/60 space-y-1">

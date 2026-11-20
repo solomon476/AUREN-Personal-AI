@@ -3,7 +3,7 @@
  * Provides interactive task organization, status transitions, priority filtering, and project association.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CheckSquare,
   Plus,
@@ -18,6 +18,7 @@ import {
   Edit2,
   Trash2,
 } from 'lucide-react';
+import { useSafeSearch } from '../../hooks/useSafeSearch';
 import { Task, TaskCreateInput, TaskPriority, TaskStatus, TaskUpdateInput } from '../../api/productivity';
 import {
   useChangeTaskStatus,
@@ -39,11 +40,18 @@ const PRIORITY_BADGES: Record<TaskPriority, { label: string; color: string }> = 
 
 export const TasksView: React.FC = () => {
   const { user } = useAuth();
+  const searchParams = useSafeSearch<{ project_id?: string; goal_id?: string }>();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [selectedPriority, setSelectedPriority] = useState<string>('');
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(searchParams?.project_id || '');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
+
+  useEffect(() => {
+    if (searchParams?.project_id && searchParams.project_id !== selectedProjectId) {
+      setSelectedProjectId(searchParams.project_id);
+    }
+  }, [searchParams?.project_id]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);

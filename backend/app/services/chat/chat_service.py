@@ -361,8 +361,32 @@ class ChatService:
             limit=settings.CHAT_HISTORY_LIMIT,
         )
 
+        system_content = SYSTEM_PROMPT
+        try:
+            from app.services.profile_service import profile_service
+            profile = await profile_service.get_profile(user)
+            prefs = profile.preferences or {}
+            user_instructions = []
+            tone = prefs.get("ai_tone")
+            if tone:
+                tone_descriptions = {
+                    "concise": "Maintain a concise and direct tone with minimal filler.",
+                    "thoughtful": "Adopt a thoughtful, reflective, and socratic demeanor.",
+                    "detailed": "Provide exhaustive, high-precision, technical breakdowns.",
+                    "executive": "Provide executive-level summaries, key decisions, and immediate action items.",
+                }
+                desc = tone_descriptions.get(tone, f"Communication style: {tone}")
+                user_instructions.append(f"User tone preference: {desc}")
+            custom_inst = prefs.get("ai_custom_instructions")
+            if custom_inst and str(custom_inst).strip():
+                user_instructions.append(f"User custom instructions: {str(custom_inst).strip()}")
+            if user_instructions:
+                system_content += "\n\nUser Preferences:\n" + "\n".join(f"- {inst}" for inst in user_instructions)
+        except Exception as pref_err:
+            logger.warning("Failed loading user preferences for chat context: %s", pref_err)
+
         llm_messages: list[ChatMessage] = [
-            ChatMessage(role="system", content=SYSTEM_PROMPT)
+            ChatMessage(role="system", content=system_content)
         ]
 
         retrieved_memories_data: list[dict[str, Any]] = []

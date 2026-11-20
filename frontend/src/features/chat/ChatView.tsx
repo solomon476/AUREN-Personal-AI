@@ -21,6 +21,7 @@ import {
   Brain,
 } from 'lucide-react';
 import { useNavigate, useParams } from '@tanstack/react-router';
+import { useSafeSearch } from '../../hooks/useSafeSearch';
 import { 
   ChatMessage, 
   streamChat 
@@ -62,9 +63,18 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   } = useConversationMessages(user?.id, activeConversationId || undefined);
   const invalidateMessages = useInvalidateMessages();
 
+  const searchParams = useSafeSearch<{ q?: string; prompt?: string }>();
+  const initialPrompt = searchParams?.q || searchParams?.prompt || '';
+
   // Local State for interactive stream accumulation, modals, and input
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState(initialPrompt);
+
+  useEffect(() => {
+    if (initialPrompt && !inputValue) {
+      setInputValue(initialPrompt);
+    }
+  }, [initialPrompt]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [reconnectStatus, setReconnectStatus] = useState<string | null>(null);

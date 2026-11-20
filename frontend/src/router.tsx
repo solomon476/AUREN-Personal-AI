@@ -51,6 +51,10 @@ export const homeRoute = createRoute({
 export const chatRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/chat',
+  validateSearch: (search: Record<string, unknown>): { q?: string; prompt?: string } => ({
+    q: typeof search.q === 'string' ? search.q : undefined,
+    prompt: typeof search.prompt === 'string' ? search.prompt : undefined,
+  }),
   component: ChatView,
 });
 
@@ -71,12 +75,19 @@ export const memoriesRoute = createRoute({
 export const tasksRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tasks',
+  validateSearch: (search: Record<string, unknown>): { project_id?: string; goal_id?: string } => ({
+    project_id: typeof search.project_id === 'string' ? search.project_id : undefined,
+    goal_id: typeof search.goal_id === 'string' ? search.goal_id : undefined,
+  }),
   component: TasksView,
 });
 
 export const projectsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/projects',
+  validateSearch: (search: Record<string, unknown>): { project_id?: string } => ({
+    project_id: typeof search.project_id === 'string' ? search.project_id : undefined,
+  }),
   component: ProjectsView,
 });
 

@@ -41,19 +41,19 @@ export const HomeView: React.FC = () => {
 
   // Real data hooks
   const { data: dashboard } = useProductivityDashboard(user?.id);
-  const { data: tasksData, isLoading: isLoadingTasks } = useTasks(
+  const { data: tasksData, isLoading: isLoadingTasks, error: tasksError } = useTasks(
     { status: 'todo', page: 1, page_size: 5 },
     user?.id
   );
-  const { data: projectsData, isLoading: isLoadingProjects } = useProjects(
+  const { data: projectsData, isLoading: isLoadingProjects, error: projectsError } = useProjects(
     { status: 'active', page: 1, page_size: 4 },
     user?.id
   );
-  const { data: goalsData, isLoading: isLoadingGoals } = useGoals(
+  const { data: goalsData, isLoading: isLoadingGoals, error: goalsError } = useGoals(
     { status: 'in_progress', page: 1, page_size: 3 },
     user?.id
   );
-  const { data: conversations = [], isLoading: isLoadingConversations } = useConversations(user?.id);
+  const { data: conversations = [], isLoading: isLoadingConversations, error: conversationsError } = useConversations(user?.id);
 
   const changeTaskStatusMutation = useChangeTaskStatus(user?.id);
 
@@ -76,8 +76,8 @@ export const HomeView: React.FC = () => {
       navigate({ to: '/chat' });
       return;
     }
-    // Navigate to chat and pass prompt via state or query
-    navigate({ to: '/chat' });
+    // Navigate to chat and pass prompt via search param
+    navigate({ to: '/chat', search: { q: query } });
   };
 
   const getGreeting = () => {
@@ -130,6 +130,29 @@ export const HomeView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Guest Mode Banner */}
+      {!user && (
+        <div className="rounded-2xl bg-indigo-950/30 border border-indigo-800/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 flex-shrink-0">
+              <Bot className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xs font-semibold text-slate-100">Guest Preview Mode</h2>
+              <p className="text-[11px] text-slate-400">
+                You are exploring AUREN without an active session. Sign in to sync your tasks, projects, strategic goals, reflections, and persistent knowledge.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/chat"
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition whitespace-nowrap text-center shadow-md shadow-indigo-600/20"
+          >
+            Open Assistant
+          </Link>
+        </div>
+      )}
 
       {/* Central AI Assistant Entry Point */}
       <div className="relative rounded-2xl bg-gradient-to-r from-indigo-950/40 via-slate-900/70 to-sky-950/40 border border-indigo-800/40 p-5 shadow-xl shadow-indigo-950/10 space-y-3">
@@ -255,6 +278,18 @@ export const HomeView: React.FC = () => {
 
             {isLoadingTasks ? (
               <div className="p-4 text-center text-xs text-slate-500">Loading priority tasks...</div>
+            ) : !user ? (
+              <div className="p-5 text-center rounded-xl bg-slate-950/50 border border-slate-800/60 space-y-2">
+                <CheckSquare className="w-6 h-6 text-indigo-400 mx-auto" />
+                <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
+                <p className="text-[11px] text-slate-500">
+                  Sign in to view, prioritize, and check off your personal tasks.
+                </p>
+              </div>
+            ) : tasksError ? (
+              <div className="p-4 text-center rounded-xl bg-slate-900/40 border border-slate-800 text-xs text-slate-400">
+                Tasks temporarily unavailable.
+              </div>
             ) : !tasksData?.items.length ? (
               <div className="p-6 text-center rounded-xl bg-slate-950/50 border border-slate-800/60 space-y-2">
                 <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
@@ -339,6 +374,18 @@ export const HomeView: React.FC = () => {
 
             {isLoadingProjects ? (
               <div className="p-4 text-center text-xs text-slate-500">Loading projects...</div>
+            ) : !user ? (
+              <div className="p-5 text-center rounded-xl bg-slate-950/50 border border-slate-800/60 space-y-2">
+                <FolderKanban className="w-6 h-6 text-emerald-400 mx-auto" />
+                <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
+                <p className="text-[11px] text-slate-500">
+                  Sign in to view your multi-step project workspaces and completion progress.
+                </p>
+              </div>
+            ) : projectsError ? (
+              <div className="p-4 text-center rounded-xl bg-slate-900/40 border border-slate-800 text-xs text-slate-400">
+                Projects temporarily unavailable.
+              </div>
             ) : !projectsData?.items.length ? (
               <div className="p-6 text-center rounded-xl bg-slate-950/50 border border-slate-800/60 space-y-2">
                 <FolderKanban className="w-6 h-6 text-slate-600 mx-auto" />
@@ -359,6 +406,7 @@ export const HomeView: React.FC = () => {
                   <Link
                     key={project.id}
                     to="/projects"
+                    search={{ project_id: project.id }}
                     className="p-3.5 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 transition flex flex-col justify-between space-y-3 group"
                   >
                     <div>
@@ -415,6 +463,18 @@ export const HomeView: React.FC = () => {
 
             {isLoadingGoals ? (
               <div className="p-4 text-center text-xs text-slate-500">Loading goals...</div>
+            ) : !user ? (
+              <div className="p-5 text-center rounded-xl bg-slate-950/50 border border-slate-800/60 space-y-2">
+                <Target className="w-5 h-5 text-purple-400 mx-auto" />
+                <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
+                <p className="text-[11px] text-slate-500">
+                  Sign in to track strategic objectives, measurable milestones, and deadlines.
+                </p>
+              </div>
+            ) : goalsError ? (
+              <div className="p-4 text-center rounded-xl bg-slate-900/40 border border-slate-800 text-xs text-slate-400">
+                Goals temporarily unavailable.
+              </div>
             ) : !goalsData?.items.length ? (
               <div className="p-5 text-center rounded-xl bg-slate-950/50 border border-slate-800/60 space-y-2">
                 <Target className="w-5 h-5 text-slate-600 mx-auto" />
@@ -469,6 +529,24 @@ export const HomeView: React.FC = () => {
 
             {isLoadingConversations ? (
               <div className="p-4 text-center text-xs text-slate-500">Loading dialogue...</div>
+            ) : !user ? (
+              <div className="p-5 text-center rounded-xl bg-slate-950/50 border border-slate-800/60 space-y-2">
+                <MessageSquare className="w-5 h-5 text-sky-400 mx-auto" />
+                <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
+                <p className="text-[11px] text-slate-500">
+                  Sign in to access your persistent conversations across devices.
+                </p>
+                <Link
+                  to="/chat"
+                  className="inline-block mt-1 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs text-white transition"
+                >
+                  Start Dialogue
+                </Link>
+              </div>
+            ) : conversationsError ? (
+              <div className="p-4 text-center rounded-xl bg-slate-900/40 border border-slate-800 text-xs text-slate-400">
+                Dialogue history temporarily unavailable.
+              </div>
             ) : !conversations.length ? (
               <div className="p-5 text-center rounded-xl bg-slate-950/50 border border-slate-800/60 space-y-2">
                 <MessageSquare className="w-5 h-5 text-slate-600 mx-auto" />
