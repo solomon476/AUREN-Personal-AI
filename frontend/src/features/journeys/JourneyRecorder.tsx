@@ -28,6 +28,11 @@ import {
   Share2,
   Loader2,
   ChevronRight,
+  Crosshair,
+  UserPlus,
+  Copy,
+  Check,
+  ExternalLink,
 } from 'lucide-react';
 import { GPSPoint, JourneyCreatePayload } from '../../api/journeys';
 import { connectionsApi } from '../../api/connections';
@@ -77,9 +82,19 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
   const [searchResults, setSearchResults] = useState<JourneyDestination[]>([]);
   const [isDestModalOpen, setIsDestModalOpen] = useState(false);
 
-  // Peer Location Sharing State
+  // Peer Location Sharing & Map Focus State
   const [peers, setPeers] = useState<PeerLocation[]>([]);
+  const [allConnections, setAllConnections] = useState<any[]>([]);
   const [isSharingLocation, setIsSharingLocation] = useState(false);
+  const [focusTarget, setFocusTarget] = useState<{ lat: number; lng: number } | null>(null);
+  const [isConnectionsModalOpen, setIsConnectionsModalOpen] = useState(false);
+  const [modalInviteName, setModalInviteName] = useState('');
+  const [modalGeneratedCode, setModalGeneratedCode] = useState<string | null>(null);
+  const [isModalCreatingInvite, setIsModalCreatingInvite] = useState(false);
+  const [hasCopiedModalCode, setHasCopiedModalCode] = useState(false);
+  const [modalIncomingCode, setModalIncomingCode] = useState('');
+  const [isModalAccepting, setIsModalAccepting] = useState(false);
+  const [modalAcceptMsg, setModalAcceptMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const lastLocationSyncRef = useRef<number>(0);
 
   // Metadata & Team Assignment
@@ -114,6 +129,7 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
     try {
       const res = await connectionsApi.list();
       if (res && res.items) {
+        setAllConnections(res.items);
         const activePeers: PeerLocation[] = res.items
           .filter((c) => c.location_sharing_active && c.last_latitude && c.last_longitude)
           .map((c) => ({
@@ -480,6 +496,50 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
     }
   };
 
+  const handleLocatePeer = (peer: { lat: number; lng: number }) => {
+    setFocusTarget({ lat: peer.lat, lng: peer.lng });
+    setIsConnectionsModalOpen(false);
+  };
+
+  const handleModalCreateInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalInviteName.trim() || isModalCreatingInvite) return;
+    setIsModalCreatingInvite(true);
+    try {
+      const res = await connectionsApi.createInvite(modalInviteName.trim());
+      setModalGeneratedCode(res.invite_code);
+      await fetchPeerLocations();
+    } catch (err: any) {
+      console.warn('Invite creation issue:', err);
+    } finally {
+      setIsModalCreatingInvite(false);
+    }
+  };
+
+  const handleModalAcceptInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalIncomingCode.trim() || isModalAccepting) return;
+    setIsModalAccepting(true);
+    setModalAcceptMsg(null);
+    try {
+      await connectionsApi.acceptInvite(modalIncomingCode.trim());
+      setModalAcceptMsg({ type: 'success', text: 'Trusted connection accepted! You can now track each other.' });
+      setModalIncomingCode('');
+      await fetchPeerLocations();
+    } catch (err: any) {
+      setModalAcceptMsg({ type: 'error', text: err?.message || 'Invalid or expired invite code.' });
+    } finally {
+      setIsModalAccepting(false);
+    }
+  };
+
+  const handleCopyInviteLink = (code: string) => {
+    const inviteUrl = `${window.location.origin}/connections?invite=${code}`;
+    navigator.clipboard?.writeText(inviteUrl);
+    setHasCopiedModalCode(true);
+    setTimeout(() => setHasCopiedModalCode(false), 2500);
+  };
+
   const formatTimer = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
@@ -494,7 +554,7 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
   return (
     <div className="space-y-4">
       {/* Network & Active State Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-sm">
         <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
           <input
             type="text"
@@ -502,7 +562,7 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
             onChange={(e) => setJourneyTitle(e.target.value)}
             disabled={isRecording}
             placeholder="Journey Title..."
-            className="text-base sm:text-lg font-bold text-slate-900 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:outline-none transition-colors min-w-0 max-w-[130px] xs:max-w-[200px] sm:max-w-none"
+            className="text-base sm:text-lg font-bold text-slate-900 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:outline-none transition-colors w-full min-w-0 truncate"
           />
           {isRecording && (
             <span className="flex-shrink-0 flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-700 animate-pulse">
@@ -512,22 +572,25 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
           )}
         </div>
 
-        <div className="flex items-center space-x-2 flex-shrink-0">
-          {/* Voluntary Location Sharing Button */}
+        <div className="flex items-center space-x-2 flex-shrink-0 self-end sm:self-auto">
+          {/* Voluntary Location Sharing & Trusted Connections Button */}
           <button
             type="button"
-            onClick={handleToggleSharing}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-xs ${
+            onClick={() => setIsConnectionsModalOpen(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-xs ${
               isSharingLocation
                 ? 'bg-emerald-600 text-white shadow-emerald-600/20'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
-            title="Share your live location with trusted connections"
+            title="Manage live location sharing & trusted connections"
           >
             <Share2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">
-              {isSharingLocation ? 'Sharing Live Location' : 'Share Location'}
-            </span>
+            <span>{isSharingLocation ? 'Sharing Active' : 'Share Location'}</span>
+            {peers.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-emerald-800 text-[10px] text-white font-bold ml-0.5">
+                {peers.length}
+              </span>
+            )}
           </button>
 
           <div
@@ -812,28 +875,98 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
         currentLocation={currentFix}
         destination={destination}
         peerLocations={peers}
+        focusLocation={focusTarget}
         height={320}
       />
 
-      {/* Connected Peers Status Strip */}
-      {peers.length > 0 && (
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-sm flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="h-8 w-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold">
-              <Users className="w-4 h-4" />
+      {/* Connected Peers Status Strip & Interactive Map Locator */}
+      {peers.length > 0 ? (
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <div className="h-8 w-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-900">
+                  {peers.length} Trusted Connection{peers.length > 1 ? 's' : ''} on Live Map
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Voluntary live location broadcasting active
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-900">
-                {peers.length} Trusted Connection{peers.length > 1 ? 's' : ''} on Map
-              </p>
-              <p className="text-[11px] text-slate-500">
-                {peers.map((p) => p.displayName).join(', ')} are sharing live locations.
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsConnectionsModalOpen(true)}
+              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer flex items-center space-x-1"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Manage Sharing</span>
+            </button>
           </div>
-          <span className="text-[11px] font-mono text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 font-bold">
-            Live Radar Sync
-          </span>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            {peers.map((peer) => {
+              const distMeters = currentFix
+                ? calculateHaversineDistance(currentFix.lat, currentFix.lng, peer.lat, peer.lng)
+                : null;
+              const distText =
+                distMeters !== null
+                  ? distMeters >= 1000
+                    ? `${(distMeters / 1000).toFixed(1)} km away`
+                    : `${Math.round(distMeters)} m away`
+                  : 'Sharing live';
+
+              return (
+                <div
+                  key={peer.id}
+                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/90 hover:border-indigo-300 transition"
+                >
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <div className="relative">
+                      <div className="h-8 w-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">
+                        {peer.avatarInitials}
+                      </div>
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-white animate-pulse" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 truncate">{peer.displayName}</p>
+                      <p className="text-[10px] text-slate-500 font-mono flex items-center space-x-1">
+                        <MapPin className="w-3 h-3 text-indigo-500" />
+                        <span>{distText}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleLocatePeer(peer)}
+                    className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition cursor-pointer shrink-0"
+                    title={`Locate ${peer.displayName} on Map`}
+                  >
+                    <Crosshair className="w-3.5 h-3.5" />
+                    <span>Locate on Map</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 flex items-center justify-between text-xs">
+          <div className="flex items-center space-x-2.5 text-slate-600">
+            <Users className="w-4 h-4 text-slate-400" />
+            <span>Connect with contacts to view live positions on this map.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsConnectionsModalOpen(true)}
+            className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer flex items-center space-x-1 shrink-0"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Share / Invite</span>
+          </button>
         </div>
       )}
 
@@ -975,6 +1108,236 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
           </div>
         )}
       </div>
+
+      {/* Share Location & Trusted Connections Modal */}
+      {isConnectionsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 space-y-5">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="h-9 w-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                  <Share2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Share Location &amp; Connections</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Voluntary GPS sharing and real-time peer map tracking
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsConnectionsModalOpen(false);
+                  setModalGeneratedCode(null);
+                  setModalAcceptMsg(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Live Location Broadcast Master Switch */}
+            <div className={`p-4 rounded-xl border transition ${
+              isSharingLocation
+                ? 'bg-emerald-50/70 border-emerald-200'
+                : 'bg-slate-50 border-slate-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${isSharingLocation ? 'bg-emerald-600 animate-ping' : 'bg-slate-400'}`} />
+                    <span className="text-xs font-bold text-slate-900">
+                      {isSharingLocation ? 'Live Location Broadcasting Active' : 'Location Sharing Disabled'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {isSharingLocation
+                      ? 'Your coordinates are voluntarily shared with your accepted connections.'
+                      : 'Enable sharing so your trusted contacts can view where you are.'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleToggleSharing}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shadow-xs ${
+                    isSharingLocation
+                      ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  }`}
+                >
+                  {isSharingLocation ? 'Stop Sharing' : 'Start Sharing'}
+                </button>
+              </div>
+            </div>
+
+            {/* Trusted Contacts List */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Trusted Contacts ({allConnections.length})
+                </h4>
+                <a
+                  href="/connections"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-emerald-600 hover:underline flex items-center space-x-1"
+                >
+                  <span>Full Network</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+
+              {allConnections.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {allConnections.map((conn) => {
+                    const isBroadcasting = conn.location_sharing_active && conn.last_latitude && conn.last_longitude;
+                    return (
+                      <div
+                        key={conn.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 text-xs"
+                      >
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <div className="h-7 w-7 rounded-full bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+                            {conn.avatar_initials}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 truncate">{conn.display_name}</p>
+                            <p className="text-[10px] text-slate-500 flex items-center space-x-1">
+                              {isBroadcasting ? (
+                                <span className="text-emerald-700 font-medium flex items-center space-x-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse inline-block" />
+                                  <span>Sharing live location</span>
+                                </span>
+                              ) : (
+                                <span>Not broadcasting</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+
+                        {isBroadcasting && (
+                          <button
+                            type="button"
+                            onClick={() => handleLocatePeer({ lat: conn.last_latitude, lng: conn.last_longitude })}
+                            className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold transition cursor-pointer"
+                          >
+                            <Crosshair className="w-3 h-3" />
+                            <span>Locate on Map</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                  No contacts connected yet. Generate an invite below to share your link.
+                </div>
+              )}
+            </div>
+
+            {/* Invite a Friend Form */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center space-x-1.5">
+                <UserPlus className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Invite New Connection
+                </h4>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Enter your friend or colleague&apos;s name to generate an invite code &amp; link.
+              </p>
+
+              {!modalGeneratedCode ? (
+                <form onSubmit={handleModalCreateInvite} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={modalInviteName}
+                    onChange={(e) => setModalInviteName(e.target.value)}
+                    placeholder="Friend's Name (e.g. Elena, Alex)"
+                    required
+                    disabled={isModalCreatingInvite}
+                    className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-600"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!modalInviteName.trim() || isModalCreatingInvite}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-xs transition cursor-pointer flex items-center space-x-1"
+                  >
+                    {isModalCreatingInvite ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <span>Generate Invite</span>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2">
+                  <p className="text-xs font-bold text-emerald-900">
+                    Invite Code Created for &quot;{modalInviteName}&quot;!
+                  </p>
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-emerald-200 font-mono text-xs font-bold text-slate-900">
+                    <span>{modalGeneratedCode}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyInviteLink(modalGeneratedCode)}
+                      className="flex items-center space-x-1 text-emerald-700 hover:text-emerald-800 text-xs font-sans cursor-pointer font-semibold"
+                    >
+                      {hasCopiedModalCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{hasCopiedModalCode ? 'Link Copied!' : 'Copy Link'}</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Share this code or link. Once they enter it, you will see each other live on the map!
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Accept Friend's Code Form */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Enter Received Invite Code
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Received a code from someone? Enter it below to mutually connect.
+              </p>
+              <form onSubmit={handleModalAcceptInvite} className="flex gap-2">
+                <input
+                  type="text"
+                  value={modalIncomingCode}
+                  onChange={(e) => setModalIncomingCode(e.target.value)}
+                  placeholder="e.g. aur_9f4e21"
+                  required
+                  disabled={isModalAccepting}
+                  className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-none focus:border-emerald-600"
+                />
+                <button
+                  type="submit"
+                  disabled={!modalIncomingCode.trim() || isModalAccepting}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs transition cursor-pointer"
+                >
+                  {isModalAccepting ? 'Connecting...' : 'Connect'}
+                </button>
+              </form>
+
+              {modalAcceptMsg && (
+                <div className={`p-2 rounded-lg text-xs font-medium flex items-center space-x-1.5 ${
+                  modalAcceptMsg.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}>
+                  {modalAcceptMsg.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
+                  <span>{modalAcceptMsg.text}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

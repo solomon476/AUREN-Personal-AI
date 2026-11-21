@@ -15,7 +15,7 @@ export interface Conversation {
 }
 
 export interface AttachmentItem {
-  type: 'image' | 'audio';
+  type: 'image' | 'audio' | 'document' | 'file';
   url: string;
   name?: string;
   size?: number;

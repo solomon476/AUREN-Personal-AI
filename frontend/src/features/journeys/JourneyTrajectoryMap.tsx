@@ -55,6 +55,7 @@ interface JourneyTrajectoryMapProps {
   currentLocation?: GPSPoint | null;
   destination?: JourneyDestination | null;
   peerLocations?: PeerLocation[];
+  focusLocation?: { lat: number; lng: number } | null;
   height?: number;
   className?: string;
   showControls?: boolean;
@@ -81,6 +82,7 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
   currentLocation,
   destination,
   peerLocations = [],
+  focusLocation = null,
   height = 340,
   className = '',
   showControls = true,
@@ -178,6 +180,16 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
       );
     }
   }, [points.length, currentLocation, destination, isMapReady]);
+
+  // Center/Fly to specific peer or target coordinates on request
+  useEffect(() => {
+    if (focusLocation && mapInstanceRef.current && isMapReady) {
+      mapInstanceRef.current.flyTo([focusLocation.lat, focusLocation.lng], 16, {
+        animate: true,
+        duration: 1.2,
+      });
+    }
+  }, [focusLocation, isMapReady]);
 
   // -------------------------------------------------------------------------
   // 2. Handle Tile Layer Switching (Streets vs Satellite)

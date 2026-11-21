@@ -23,6 +23,8 @@ import {
   Mic,
   Check,
   Volume2,
+  FileText,
+  Download,
 } from 'lucide-react';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { API_BASE_URL } from '../../api/client';
@@ -128,6 +130,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   }>>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Document & File Attachments State (PDF, DOCX, TXT, CSV, etc.)
+  const [selectedDocs, setSelectedDocs] = useState<Array<{
+    name: string;
+    size: number;
+    dataUrl: string;
+    type: string;
+  }>>([]);
+  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
+  const docInputRef = useRef<HTMLInputElement | null>(null);
+
   // Voice Note Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -182,6 +194,42 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
       }
       return prev.filter((_, i) => i !== index);
     });
+  };
+
+  // Document & File Selection Handler
+  const handleDocumentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach((file) => {
+      // 20MB safety limit for client-side base64
+      if (file.size > 20 * 1024 * 1024) {
+        setErrorMessage(`File "${file.name}" exceeds 20MB limit.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setSelectedDocs((prev) => [
+            ...prev,
+            {
+              name: file.name,
+              size: file.size,
+              dataUrl: reader.result as string,
+              type: file.type || 'application/octet-stream',
+            },
+          ]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    e.target.value = '';
+    setIsAttachMenuOpen(false);
+  };
+
+  const handleRemoveDocument = (index: number) => {
+    setSelectedDocs((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Voice Recording Handlers
@@ -527,7 +575,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = inputValue.trim();
-    const hasAttachments = selectedImages.length > 0 || Boolean(recordedAudioBase64);
+    const hasAttachments = selectedImages.length > 0 || selectedDocs.length > 0 || Boolean(recordedAudioBase64);
     if ((!trimmed && !hasAttachments) || isStreaming) return;
 
     if (!user) {
@@ -543,6 +591,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         name: img.name,
         size: img.size,
       })),
+      ...selectedDocs.map((doc) => ({
+        type: 'document' as const,
+        url: doc.dataUrl,
+        name: doc.name,
+        size: doc.size,
+      })),
       ...(recordedAudioBase64
         ? [
             {
@@ -556,10 +610,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
 
     const messageText =
       trimmed ||
-      (recordedAudioBase64 ? 'Voice message note' : 'Please analyze the attached image.');
+      (selectedDocs.length > 0
+        ? `Please examine the attached document(s): ${selectedDocs.map((d) => d.name).join(', ')}`
+        : recordedAudioBase64
+        ? 'Voice message note'
+        : 'Please analyze the attached image.');
 
     setInputValue('');
     setSelectedImages([]);
+    setSelectedDocs([]);
     setRecordedAudioUrl(null);
     setRecordedAudioBase64(null);
     setRecordingDuration(0);
@@ -568,7 +627,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
       id: `temp-${Date.now()}`,
       conversation_id: activeConversationId || '',
       role: 'user',
-      content: trimmed || (recordedAudioBase64 ? '🎤 Voice message' : '🖼️ Attached image'),
+      content:
+        trimmed ||
+        (selectedDocs.length > 0
+          ? `📄 Attached ${selectedDocs.length} file(s)`
+          : recordedAudioBase64
+          ? '🎤 Voice message'
+          : '🖼️ Attached image'),
       idempotency_key: idempotencyKey,
       metadata: attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : undefined,
       created_at: new Date().toISOString(),
@@ -834,7 +899,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                           : 'bg-slate-50 text-slate-900 border border-slate-200 shadow-sm rounded-tl-sm'
                       }`}
                     >
-                      {/* Attachments rendering (Images & Voice Notes) */}
+                      {/* Attachments rendering (Images, Documents & Voice Notes) */}
                       {msg.metadata?.attachments && Array.isArray(msg.metadata.attachments) && msg.metadata.attachments.length > 0 && (
                         <div className="space-y-2 mb-2.5">
                           {msg.metadata.attachments.map((att: any, attIdx: number) => (
@@ -851,6 +916,35 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                                     <div className="px-2 py-1 text-[10px] text-slate-500 truncate max-w-xs">
                                       {att.name}
                                     </div>
+                                  )}
+                                </div>
+                              )}
+                              {(att.type === 'document' || att.type === 'file') && (
+                                <div className="p-2.5 rounded-xl bg-white/90 border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3 max-w-sm">
+                                  <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                                    <div className="h-8 w-8 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                                      <FileText className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-semibold text-slate-800 truncate" title={att.name || 'Document'}>
+                                        {att.name || 'Attached Document'}
+                                      </p>
+                                      <p className="text-[10px] text-slate-500 font-mono">
+                                        {att.size ? (att.size > 1024 * 1024 ? `${(att.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(att.size / 1024)} KB`) : 'Document file'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {att.url && (
+                                    <a
+                                      href={att.url}
+                                      download={att.name || 'document'}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex-shrink-0"
+                                      title="Download / View document"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </a>
                                   )}
                                 </div>
                               )}
@@ -1034,6 +1128,39 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
             </div>
           )}
 
+          {/* Document Previews Strip */}
+          {selectedDocs.length > 0 && (
+            <div className="flex items-center gap-2 mb-2.5 overflow-x-auto pb-1 scrollbar-thin">
+              {selectedDocs.map((doc, idx) => (
+                <div
+                  key={idx}
+                  className="relative group flex items-center gap-2 p-2 bg-indigo-50/80 border border-indigo-200/80 rounded-xl flex-shrink-0 shadow-2xs"
+                >
+                  <div className="h-8 w-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div className="text-[11px] max-w-[140px] truncate">
+                    <p className="font-semibold text-slate-800 truncate" title={doc.name}>{doc.name}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      {doc.size > 1024 * 1024
+                        ? `${(doc.size / (1024 * 1024)).toFixed(1)} MB`
+                        : `${Math.round(doc.size / 1024)} KB`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveDocument(idx)}
+                    className="p-1 rounded-full text-slate-400 hover:text-rose-600 hover:bg-white transition cursor-pointer"
+                    title="Remove document"
+                    aria-label="Remove document"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Recorded Audio Preview Strip */}
           {recordedAudioUrl && !isRecording && (
             <div className="flex items-center justify-between gap-3 mb-2.5 p-2.5 bg-emerald-50/90 border border-emerald-200 rounded-2xl shadow-xs">
@@ -1097,7 +1224,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           ) : (
             <form
               onSubmit={handleSendMessage}
-              className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-white border border-slate-200/90 rounded-2xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all shadow-sm"
+              className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-white border border-slate-200/90 rounded-2xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all shadow-sm relative"
             >
               {/* Hidden File Input for Image Attachments */}
               <input
@@ -1109,17 +1236,65 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 onChange={handleImageSelect}
               />
 
-              {/* Attach Image Button */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isStreaming}
-                className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition touch-target flex-shrink-0 cursor-pointer disabled:opacity-50"
-                title="Attach photo or image"
-                aria-label="Attach image"
-              >
-                <Plus className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
-              </button>
+              {/* Hidden File Input for Document Attachments */}
+              <input
+                ref={docInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,.json,application/pdf,text/*"
+                multiple
+                className="hidden"
+                onChange={handleDocumentSelect}
+              />
+
+              {/* Attachments Dropdown Menu Button */}
+              <div className="relative flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsAttachMenuOpen((prev) => !prev)}
+                  disabled={isStreaming}
+                  className={`h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center transition touch-target flex-shrink-0 cursor-pointer disabled:opacity-50 ${
+                    isAttachMenuOpen
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                  title="Attach photo or document"
+                  aria-label="Attach image or document"
+                >
+                  <Plus className={`h-4 w-4 sm:h-4.5 sm:w-4.5 transition-transform duration-200 ${isAttachMenuOpen ? 'rotate-45' : ''}`} />
+                </button>
+
+                {isAttachMenuOpen && (
+                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200/90 p-1.5 z-50 space-y-1 animate-in fade-in duration-150">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAttachMenuOpen(false);
+                        fileInputRef.current?.click();
+                      }}
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
+                    >
+                      <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700">
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </span>
+                      <span>Photo / Image</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAttachMenuOpen(false);
+                        docInputRef.current?.click();
+                      }}
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 transition cursor-pointer"
+                    >
+                      <span className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700">
+                        <FileText className="w-3.5 h-3.5" />
+                      </span>
+                      <span>Document / PDF</span>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Voice Note Button */}
               <button
@@ -1144,7 +1319,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                     handleSendMessage();
                   }
                 }}
-                placeholder={selectedImages.length > 0 ? "Add a message about this image..." : "Ask AUREN anything..."}
+                placeholder={
+                  selectedDocs.length > 0
+                    ? 'Add a message about this document...'
+                    : selectedImages.length > 0
+                    ? 'Add a message about this image...'
+                    : 'Ask AUREN anything...'
+                }
                 disabled={isStreaming}
                 className="flex-1 bg-transparent border-0 outline-none px-2 sm:px-3 py-1.5 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:ring-0 resize-none min-h-[36px] max-h-[130px] leading-relaxed"
               />
@@ -1164,9 +1345,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 ) : (
                   <button
                     type="submit"
-                    disabled={!inputValue.trim() && selectedImages.length === 0 && !recordedAudioBase64}
+                    disabled={!inputValue.trim() && selectedImages.length === 0 && selectedDocs.length === 0 && !recordedAudioBase64}
                     className={`h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer ${
-                      inputValue.trim() || selectedImages.length > 0 || recordedAudioBase64
+                      inputValue.trim() || selectedImages.length > 0 || selectedDocs.length > 0 || recordedAudioBase64
                         ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white shadow-md shadow-emerald-600/25'
                         : 'bg-slate-100 text-slate-400 border border-slate-200/80 hover:bg-slate-200/50'
                     }`}

@@ -5,7 +5,7 @@
  * and Interactive Assistant Action Proposal Cards.
  */
 
-import React, { useState, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -24,7 +24,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useCreateGoal, useCreateProject, useCreateTask } from '../../hooks/useProductivity';
+import { useCreateGoal, useCreateProject, useCreateTask, useUpdateTask, useTasks } from '../../hooks/useProductivity';
 import * as productivityApi from '../../api/productivity';
 
 import 'katex/dist/katex.min.css';
@@ -153,8 +153,10 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
   const context = useContext(MessageContext);
   const conversationId = propConversationId || context.conversationId;
   const createTaskMutation = useCreateTask(user?.id);
+  const updateTaskMutation = useUpdateTask(user?.id);
   const createProjectMutation = useCreateProject(user?.id);
   const createGoalMutation = useCreateGoal(user?.id);
+  const { data: tasksData } = useTasks();
 
   const actionKey = `auren_action_${user?.id || 'guest'}_${conversationId ? conversationId + '_' : ''}${action?.type}_${action?.title || action?.name || ''}_${action?.due_date || action?.target_date || ''}_${action?.priority || ''}`;
 
@@ -180,7 +182,7 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
     }
 
     if (!user) {
-      const msg = 'Please sign in to save items to Life Management.';
+      const msg = 'Please sign in to update items in Life Management.';
       setErrorMsg(msg);
       setStatus('failed');
       return;
@@ -234,7 +236,31 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
 
     try {
       let createdEntity: any = null;
-      if (action.type === 'create_task') {
+      if (action.type === 'complete_task') {
+        let targetTaskId = action.task_id;
+        if (!targetTaskId && tasksData?.items) {
+          const needle = (action.title || action.name || '').toLowerCase().trim();
+          const match = tasksData.items.find(
+            (t) => t.title.toLowerCase().includes(needle) || needle.includes(t.title.toLowerCase())
+          );
+          if (match) {
+            targetTaskId = match.id;
+          }
+        }
+        if (targetTaskId) {
+          createdEntity = await updateTaskMutation.mutateAsync({
+            taskId: targetTaskId,
+            input: { status: 'completed' },
+          });
+        } else {
+          // If task wasn't in active list, record/complete it directly
+          createdEntity = await createTaskMutation.mutateAsync({
+            title: action.title || 'Completed Task',
+            priority: 'medium',
+            status: 'completed',
+          });
+        }
+      } else if (action.type === 'create_task') {
         const dueDate = action.due_date && String(action.due_date).trim() ? String(action.due_date).trim() : undefined;
         createdEntity = await createTaskMutation.mutateAsync({
           title: action.title || 'Untitled Task',
@@ -278,8 +304,25 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
     }
   };
 
+  // Auto-execute completion on mount if user is signed in and action is complete_task
+  useEffect(() => {
+    if (action.type === 'complete_task' && status === 'proposed' && user) {
+      handleExecute();
+    }
+  }, [action.type, status, user]);
+
   const getActionMeta = () => {
     switch (action.type) {
+      case 'complete_task':
+        return {
+          icon: CheckCircle2,
+          label: 'Task Completed',
+          color: 'text-emerald-400',
+          border: 'border-emerald-800/60',
+          bg: 'bg-emerald-950/30',
+          buttonText: 'Mark Completed',
+          title: action.title || 'Completed Task',
+        };
       case 'create_task':
         return {
           icon: CheckSquare,
@@ -362,7 +405,7 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
         {status === 'completed' ? (
           <span className="flex items-center space-x-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-800/50">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Added to Life Management</span>
+            <span>{action.type === 'complete_task' ? 'Marked as Completed ✓' : 'Added to Life Management'}</span>
           </span>
         ) : status === 'executing' ? (
           <button
@@ -371,7 +414,7 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-700/60 text-white text-xs font-medium cursor-wait opacity-80"
           >
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span>Creating {meta.label}...</span>
+            <span>{action.type === 'complete_task' ? 'Marking Completed...' : `Creating ${meta.label}...`}</span>
           </button>
         ) : status === 'failed' ? (
           <button
@@ -388,6 +431,7 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
             onClick={handleExecute}
             disabled={
               createTaskMutation.isPending ||
+              updateTaskMutation.isPending ||
               createProjectMutation.isPending ||
               createGoalMutation.isPending
             }
