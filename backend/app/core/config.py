@@ -175,7 +175,7 @@ class Settings(BaseSettings):
     CHAT_MAX_MESSAGE_LENGTH: int = 10000
     CHAT_STREAM_TIMEOUT_SECONDS: int = 60
     CHAT_STREAM_HEARTBEAT_SECONDS: float = 15.0
-    CHAT_HISTORY_LIMIT: int = 10
+    CHAT_HISTORY_LIMIT: int = 40
 
     # Persistent Memory Pipeline & Hybrid Retrieval Configuration
     MEMORY_EXTRACTION_ENABLED: bool = True

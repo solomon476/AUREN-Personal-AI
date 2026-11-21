@@ -494,30 +494,30 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
   return (
     <div className="space-y-4">
       {/* Network & Active State Header Bar */}
-      <div className="flex items-center justify-between bg-white border border-slate-200/90 rounded-2xl p-4 shadow-sm">
-        <div className="flex items-center space-x-3">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-sm">
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
           <input
             type="text"
             value={journeyTitle}
             onChange={(e) => setJourneyTitle(e.target.value)}
             disabled={isRecording}
             placeholder="Journey Title..."
-            className="text-base sm:text-lg font-bold text-slate-900 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:outline-none transition-colors"
+            className="text-base sm:text-lg font-bold text-slate-900 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:outline-none transition-colors min-w-0 max-w-[130px] xs:max-w-[200px] sm:max-w-none"
           />
           {isRecording && (
-            <span className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-700 animate-pulse">
+            <span className="flex-shrink-0 flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-700 animate-pulse">
               <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
               <span>{isPaused ? 'PAUSED' : 'RECORDING'}</span>
             </span>
           )}
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-shrink-0">
           {/* Voluntary Location Sharing Button */}
           <button
             type="button"
             onClick={handleToggleSharing}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-xs ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-xs ${
               isSharingLocation
                 ? 'bg-emerald-600 text-white shadow-emerald-600/20'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -561,22 +561,36 @@ export const JourneyRecorder: React.FC<JourneyRecorderProps> = ({ onJourneySaved
           </div>
 
           {destination ? (
-            <button
-              type="button"
-              onClick={() => setDestination(null)}
-              className="text-xs text-rose-600 hover:underline flex items-center space-x-1 cursor-pointer font-medium"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span>Clear Destination</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => setIsDestModalOpen(true)}
+                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                title="Change Destination"
+                aria-label="Change Destination"
+              >
+                <Search className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDestination(null)}
+                className="text-xs text-rose-600 hover:underline flex items-center space-x-1 cursor-pointer font-medium"
+                title="Clear Destination"
+                aria-label="Clear Destination"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span className="hidden xs:inline">Clear</span>
+              </button>
+            </div>
           ) : (
             <button
               type="button"
               onClick={() => setIsDestModalOpen(true)}
-              className="text-xs text-emerald-700 hover:underline flex items-center space-x-1 cursor-pointer font-semibold"
+              className="p-2 rounded-xl bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200/80 transition cursor-pointer shadow-2xs flex items-center justify-center"
+              title="Search Target Destination"
+              aria-label="Search Target Destination"
             >
-              <Search className="w-3.5 h-3.5" />
-              <span>Set Target Location (e.g. Kisii)</span>
+              <Search className="w-4 h-4" />
             </button>
           )}
         </div>

@@ -74,11 +74,7 @@ def is_trivial_chitchat(query: str) -> bool:
         "what are you", "help", "ping", "test", "how are you", "how's it going",
         "whats up", "what's up", "nice to meet you"
     }
-    if cleaned in CHITCHAT_EXACT:
-        return True
-    if len(cleaned) <= 4 and cleaned.isalpha():
-        return True
-    return False
+    return cleaned in CHITCHAT_EXACT
 
 
 def requires_productivity_context(query: str) -> bool:
@@ -88,7 +84,9 @@ def requires_productivity_context(query: str) -> bool:
         "task", "project", "goal", "todo", "to-do", "deadline", "due", "schedule",
         "plan", "priority", "priorities", "commitments", "agenda", "milestone",
         "today", "tomorrow", "this week", "what do i have", "what's on my plate",
-        "overdue", "upcoming", "review", "work", "calendar", "progress", "action item"
+        "overdue", "upcoming", "review", "work", "calendar", "progress", "action item",
+        "timetable", "routine", "syllabus", "units", "unit", "study", "exam", "revision",
+        "target", "targets", "curriculum", "course", "program", "assignment"
     ]
     return any(kw in cleaned for kw in PRODUCTIVITY_KEYWORDS)
 
@@ -515,7 +513,7 @@ class ChatService:
                         provider=provider,
                         budget_tokens=settings.MEMORY_CONTEXT_BUDGET_TOKENS,
                     ),
-                    timeout=0.8,
+                    timeout=2.5,
                 )
             except Exception as mem_err:
                 logger.warning("Failed injecting memory context (safe continue): %s", mem_err)
@@ -535,7 +533,7 @@ class ChatService:
                         user_id=user.id,
                         query_text=request.message,
                     ),
-                    timeout=0.8,
+                    timeout=2.5,
                 )
             except Exception as prod_err:
                 logger.warning("Failed injecting productivity context (safe continue): %s", prod_err)
@@ -581,6 +579,7 @@ class ChatService:
             "remember", "recall", "did i", "have i", "when did", "last time",
             "previously", "before", "history", "earlier", "find", "search",
             "past", "ago", "what was", "what were", "show me", "where did",
+            "timetable", "goal", "goals", "exam", "syllabus", "units", "routine",
         ]
         message_lower = request.message.lower()
         should_inject_search = any(pat in message_lower for pat in SEARCH_TRIGGER_PATTERNS)

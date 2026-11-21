@@ -834,12 +834,15 @@ class SQLiteChatRepository(BaseChatRepository):
                 """
                 SELECT * FROM messages
                 WHERE conversation_id = ? AND user_id = ?
-                ORDER BY created_at ASC
+                ORDER BY created_at DESC
                 LIMIT ?
                 """,
                 (str(conversation_id), str(user_id), limit),
             )
             rows = cursor.fetchall()
+
+        # Reverse to restore chronological order (oldest to newest) of the most recent slice
+        rows.reverse()
 
         return [
             MessageModel(

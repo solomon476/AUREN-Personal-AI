@@ -338,12 +338,16 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             params={
                 "conversation_id": f"eq.{conversation_id}",
                 "user_id": f"eq.{user_id}",
-                "order": "created_at.asc",
+                "order": "created_at.desc",
                 "limit": str(limit),
                 "select": "*",
             },
         )
         rows = res.json()
+        if isinstance(rows, list):
+            rows.reverse()
+        else:
+            rows = []
         return [
             MessageModel(
                 id=UUID(r["id"]),

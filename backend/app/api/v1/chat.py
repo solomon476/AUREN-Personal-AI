@@ -245,7 +245,7 @@ async def get_conversation_messages(
                 detail="Conversation not found or access denied.",
             )
 
-        messages = await repo.get_messages(current_user.id, conversation_id)
+        messages = await repo.get_messages(current_user.id, conversation_id, limit=100)
         return [
             MessageResponse(
                 id=m.id,
