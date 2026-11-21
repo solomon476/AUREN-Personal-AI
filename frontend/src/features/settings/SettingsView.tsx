@@ -58,7 +58,7 @@ export const SettingsView: React.FC = () => {
       setFullName(profile.full_name || '');
       setAvatarUrl(profile.avatar_url || '');
       const prefs = profile.preferences || {};
-      if (prefs.theme && ['dark', 'midnight', 'obsidian'].includes(String(prefs.theme))) {
+      if (prefs.theme && ['light', 'dark', 'midnight', 'obsidian'].includes(String(prefs.theme))) {
         setTheme(prefs.theme as ThemeMode);
       }
       if (prefs.ai_model) setAiModel(String(prefs.ai_model));
@@ -267,7 +267,8 @@ export const SettingsView: React.FC = () => {
                       onChange={(e) => setTheme(e.target.value as ThemeMode)}
                       className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-champagne-500/50 transition"
                     >
-                      <option value="dark">Dark Slate (Default)</option>
+                      <option value="light">Executive White (Light Background)</option>
+                      <option value="dark">Dark Slate</option>
                       <option value="midnight">Midnight Indigo (Deep Contrast)</option>
                       <option value="obsidian">Pure Obsidian (OLED Black)</option>
                     </select>

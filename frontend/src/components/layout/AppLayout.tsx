@@ -47,7 +47,7 @@ export const AppLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans selection:bg-indigo-600 selection:text-white">
+    <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-900 font-sans selection:bg-emerald-500 selection:text-white">
       {/* Desktop Sidebar (Persistent) */}
       <div className="hidden md:flex flex-shrink-0 z-20">
         <NavigationSidebar
@@ -85,7 +85,7 @@ export const AppLayout: React.FC = () => {
       {/* Main Execution View */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Subtle Ambient Background Gradient */}
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(215,186,131,0.04),rgba(255,255,255,0))]" />
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.03),rgba(255,255,255,0))]" />
 
         {/* Global PWA Installation Alert Notification */}
         <PWAInstallBanner />

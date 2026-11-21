@@ -1,12 +1,12 @@
 /**
  * Theme Context & Provider for AUREN Personal AI.
- * Supports Dark Slate (default), Midnight Indigo, and Pure Obsidian (OLED).
+ * Supports Executive White (Light default), Dark Slate, Midnight Indigo, and Pure Obsidian (OLED).
  * Persists selection in localStorage and synchronizes with user profile preferences.
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
-export type ThemeMode = 'dark' | 'midnight' | 'obsidian';
+export type ThemeMode = 'light' | 'dark' | 'midnight' | 'obsidian';
 
 interface ThemeContextType {
   theme: ThemeMode;
@@ -14,14 +14,14 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: 'dark',
+  theme: 'light',
   setTheme: () => {},
 });
 
 export const applyThemeToDom = (theme: ThemeMode) => {
   if (typeof document !== 'undefined') {
     document.documentElement.setAttribute('data-theme', theme);
-    document.documentElement.classList.remove('theme-dark', 'theme-midnight', 'theme-obsidian');
+    document.documentElement.classList.remove('theme-light', 'theme-dark', 'theme-midnight', 'theme-obsidian');
     document.documentElement.classList.add(`theme-${theme}`);
     try {
       localStorage.setItem('auren_theme', theme);
@@ -35,15 +35,23 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     if (typeof window !== 'undefined') {
       try {
+        // Migration check: ensure White is immediate default for users
+        const whiteMigrated = localStorage.getItem('auren_white_bg_default_v1');
+        if (!whiteMigrated) {
+          localStorage.setItem('auren_white_bg_default_v1', 'true');
+          localStorage.setItem('auren_theme', 'light');
+          return 'light';
+        }
+
         const saved = localStorage.getItem('auren_theme') as ThemeMode;
-        if (saved && ['dark', 'midnight', 'obsidian'].includes(saved)) {
+        if (saved && ['light', 'dark', 'midnight', 'obsidian'].includes(saved)) {
           return saved;
         }
       } catch {
         // Fallback
       }
     }
-    return 'dark';
+    return 'light';
   });
 
   const setTheme = useCallback((newTheme: ThemeMode) => {
