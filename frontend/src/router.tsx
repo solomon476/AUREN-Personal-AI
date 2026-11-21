@@ -23,6 +23,8 @@ import { ReflectionView } from './features/reflection/ReflectionView';
 import { JournalView } from './features/journal/JournalView';
 import { SettingsView } from './features/settings/SettingsView';
 import { OperationsView } from './features/operations/OperationsView';
+import { JourneysView } from './features/journeys/JourneysView';
+import { ConnectionsView } from './features/connections/ConnectionsView';
 import { NotFound } from './components/common/NotFound';
 
 // Root Application Route with Shared Shell Layout
@@ -147,6 +149,20 @@ export const operationsRoute = createRoute({
   component: OperationsView,
 });
 
+// Area 8: Dedicated GPS Journeys (/journeys)
+export const journeysRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/journeys',
+  component: JourneysView,
+});
+
+// Area 9: Dedicated Trusted Connections (/connections)
+export const connectionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/connections',
+  component: ConnectionsView,
+});
+
 // Route Tree Definition
 export const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -164,6 +180,8 @@ export const routeTree = rootRoute.addChildren([
   searchRoute,
   systemRoute,
   operationsRoute,
+  journeysRoute,
+  connectionsRoute,
 ]);
 
 export function createAppRouter() {

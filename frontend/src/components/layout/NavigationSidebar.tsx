@@ -27,6 +27,8 @@ import {
   Sparkles,
   Download,
   MapPin,
+  Route,
+  ShieldCheck,
 } from 'lucide-react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
@@ -108,6 +110,20 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       icon: MapPin,
       badge: 'Live',
       badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    },
+    {
+      to: '/journeys',
+      label: 'GPS Journeys',
+      icon: Route,
+      badge: 'Offline',
+      badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
+    },
+    {
+      to: '/connections',
+      label: 'Trusted Connections',
+      icon: ShieldCheck,
+      badge: null,
+      badgeColor: '',
     },
   ];
 

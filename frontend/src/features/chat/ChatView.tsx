@@ -19,7 +19,6 @@ import {
   RotateCcw,
   Edit2,
   Trash2,
-  Brain,
   X,
   Mic,
   Check,
@@ -857,7 +856,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                                     onClick={() => {
                                       const prevUser = messages.slice(0, index).reverse().find((m) => m.role === 'user');
                                       if (prevUser?.content) {
-                                        setInputValue(prevUser.content);
+                                        executeChatStream(
+                                          prevUser.content,
+                                          activeConversationId || undefined,
+                                          `retry-${Date.now()}`,
+                                          0,
+                                        );
                                       }
                                     }}
                                     className="ml-3 text-emerald-700 hover:text-emerald-800 font-semibold underline text-xs flex-shrink-0 cursor-pointer"
@@ -871,23 +875,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                           return (
                             <>
                               <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
-                              <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-200 text-[11px] text-slate-500">
-                                <button
-                                  type="button"
-                                  onClick={() => setContextInspectorMessageId(msg.id)}
-                                  className="inline-flex items-center space-x-1.5 text-slate-500 hover:text-emerald-700 transition-colors touch-target py-1 font-semibold cursor-pointer"
-                                  title="Inspect memory context used for this response"
-                                  aria-label="Inspect context provenance"
-                                >
-                                  <Brain className="w-3.5 h-3.5 text-emerald-600" />
-                                  <span>Context Inspector</span>
-                                </button>
-                                {Boolean(msg.metadata?.interrupted) && (
-                                  <span className="text-[10px] text-amber-600 italic font-mono">
-                                    (Stream interrupted)
-                                  </span>
-                                )}
-                              </div>
+                              {Boolean(msg.metadata?.interrupted) && (
+                                <div className="mt-2 text-[10px] text-amber-600 italic font-mono">
+                                  (Stream interrupted)
+                                </div>
+                              )}
                             </>
                           );
                         })()
@@ -1063,7 +1055,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           ) : (
             <form
               onSubmit={handleSendMessage}
-              className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-slate-50 border border-slate-200 rounded-2xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all shadow-inner"
+              className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-white border border-slate-200/90 rounded-2xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all shadow-sm"
             >
               {/* Hidden File Input for Image Attachments */}
               <input
@@ -1080,7 +1072,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isStreaming}
-                className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-emerald-700 hover:bg-slate-200/60 transition touch-target flex-shrink-0 cursor-pointer disabled:opacity-50"
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition touch-target flex-shrink-0 cursor-pointer disabled:opacity-50"
                 title="Attach photo or image"
                 aria-label="Attach image"
               >
@@ -1092,7 +1084,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 type="button"
                 onClick={startVoiceRecording}
                 disabled={isStreaming}
-                className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-emerald-700 hover:bg-slate-200/60 transition touch-target flex-shrink-0 cursor-pointer disabled:opacity-50"
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition touch-target flex-shrink-0 cursor-pointer disabled:opacity-50"
                 title="Record voice note"
                 aria-label="Record voice note"
               >
@@ -1116,7 +1108,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               />
 
               {/* Send / Stop Generation Button */}
-              <div className="flex items-center flex-shrink-0 pr-1">
+              <div className="flex items-center flex-shrink-0 pr-0.5">
                 {isStreaming ? (
                   <button
                     type="button"
@@ -1133,8 +1125,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                     disabled={!inputValue.trim() && selectedImages.length === 0 && !recordedAudioBase64}
                     className={`h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer ${
                       inputValue.trim() || selectedImages.length > 0 || recordedAudioBase64
-                        ? 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md shadow-emerald-500/30'
-                        : 'bg-slate-200 text-slate-400 border border-slate-200'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white shadow-md shadow-emerald-600/25'
+                        : 'bg-slate-100 text-slate-400 border border-slate-200/80 hover:bg-slate-200/50'
                     }`}
                     title="Send message"
                     aria-label="Send message"

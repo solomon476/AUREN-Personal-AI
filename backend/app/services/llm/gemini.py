@@ -134,7 +134,7 @@ class GeminiProvider(BaseLLMProvider):
         candidates = self._get_candidate_models()
         for idx, candidate in enumerate(candidates):
             has_fallback = idx < len(candidates) - 1
-            candidate_timeout = min(self.timeout_seconds, 3.5) if has_fallback else self.timeout_seconds
+            candidate_timeout = min(self.timeout_seconds, 15.0) if has_fallback else self.timeout_seconds
             try:
                 response = await asyncio.wait_for(
                     self._client.aio.models.generate_content(
@@ -204,10 +204,10 @@ class GeminiProvider(BaseLLMProvider):
                     config=config,
                 )
 
-                # Verify connectivity and pull first token with short initial timeout
+                # Verify connectivity and pull first token with resilient initial timeout
                 stream_iter = stream.__aiter__()
                 try:
-                    first_chunk = await asyncio.wait_for(stream_iter.__anext__(), timeout=3.5)
+                    first_chunk = await asyncio.wait_for(stream_iter.__anext__(), timeout=min(self.timeout_seconds, 20.0))
                 except StopAsyncIteration:
                     return
 

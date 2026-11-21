@@ -18,7 +18,11 @@ import {
   ExternalLink,
   RefreshCw,
   Radio,
+  Route,
+  ShieldCheck,
 } from 'lucide-react';
+import { JourneysView } from '../journeys/JourneysView';
+import { ConnectionsView } from '../connections/ConnectionsView';
 
 interface GPSCoordinate {
   latitude: number;
@@ -89,6 +93,7 @@ const INITIAL_ORDERS: WorkOrder[] = [
 ];
 
 export const OperationsView: React.FC = () => {
+  const [activeSection, setActiveSection] = useState<'overview' | 'journeys' | 'connections'>('overview');
   const [gpsData, setGpsData] = useState<GPSCoordinate | null>(() => {
     const saved = localStorage.getItem('auren_last_gps_fix');
     return saved ? JSON.parse(saved) : null;
@@ -203,6 +208,51 @@ export const OperationsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Operational Mode Navigation Tabs */}
+      <div className="flex items-center space-x-2 border-b border-white/[0.08] pb-3 overflow-x-auto scrollbar-none">
+        <button
+          onClick={() => setActiveSection('overview')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+            activeSection === 'overview'
+              ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-white bg-white/5 hover:bg-white/10'
+          }`}
+        >
+          <Radio className="w-3.5 h-3.5" />
+          <span>Field Operations & Dispatch</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('journeys')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+            activeSection === 'journeys'
+              ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-white bg-white/5 hover:bg-white/10'
+          }`}
+        >
+          <Route className="w-3.5 h-3.5" />
+          <span>GPS Journeys & Tracks</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('connections')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+            activeSection === 'connections'
+              ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-white bg-white/5 hover:bg-white/10'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Trusted Connections</span>
+        </button>
+      </div>
+
+      {activeSection === 'journeys' ? (
+        <JourneysView />
+      ) : activeSection === 'connections' ? (
+        <ConnectionsView />
+      ) : (
+        <>
       {/* Operational KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-[#0e111a] border border-white/[0.08] rounded-2xl p-4 sm:p-5 relative overflow-hidden group hover:border-emerald-500/40 transition">
@@ -518,6 +568,8 @@ export const OperationsView: React.FC = () => {
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };

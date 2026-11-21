@@ -19,6 +19,8 @@ import {
   ChevronRight,
   ShieldCheck,
   MapPin,
+  Route,
+  Users,
 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
@@ -77,6 +79,20 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       desc: 'Live location & field dispatch',
       icon: MapPin,
       color: 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40',
+    },
+    {
+      to: '/journeys',
+      label: 'GPS Journeys',
+      desc: 'Offline route recorder & tracks',
+      icon: Route,
+      color: 'text-amber-400 bg-amber-950/60 border-amber-800/40',
+    },
+    {
+      to: '/connections',
+      label: 'Trusted Connections',
+      desc: 'Mutual peer network & sharing',
+      icon: Users,
+      color: 'text-purple-400 bg-purple-950/60 border-purple-800/40',
     },
     {
       to: '/reflection',
