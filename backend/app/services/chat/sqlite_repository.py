@@ -9,6 +9,8 @@ Explicitly identified local-development option providing:
 - Foreign keys and WAL mode enabled.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -16,7 +18,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from app.core.exceptions import DatabaseOperationError, IdempotencyConflictError

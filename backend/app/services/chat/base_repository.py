@@ -4,8 +4,10 @@ Defines the asynchronous contract for conversation, message, and idempotency per
 across PostgreSQL (Supabase) and local SQLite backends.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from uuid import UUID
 
 from app.models.chat import ChatRequestModel, ConversationModel, MessageModel
