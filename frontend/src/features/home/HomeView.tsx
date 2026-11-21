@@ -37,7 +37,7 @@ import { useConversations } from '../../hooks/useConversations';
 import { Task, TaskStatus } from '../../api/productivity';
 
 export const HomeView: React.FC = () => {
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, profile, isLoading: isAuthLoading } = useAuth();
   const navigate = useNavigate();
 
   const [promptInput, setPromptInput] = useState('');
@@ -90,6 +90,30 @@ export const HomeView: React.FC = () => {
     return 'Good evening';
   };
 
+  const getDisplayName = (): string => {
+    if (profile?.full_name?.trim()) {
+      return profile.full_name.trim();
+    }
+    const metaFullName = (user?.user_metadata?.full_name || user?.user_metadata?.name || '') as string;
+    if (metaFullName?.trim()) {
+      return metaFullName.trim();
+    }
+    if (user?.email) {
+      const prefix = user.email.split('@')[0];
+      const cleaned = prefix.replace(/[0-9]+/g, '').replace(/[._-]/g, ' ').trim();
+      if (cleaned.length > 0) {
+        return cleaned
+          .split(/\s+/)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+          .join(' ');
+      }
+      return prefix;
+    }
+    return '';
+  };
+
+  const displayName = getDisplayName();
+
   const todayFormatted = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',
@@ -108,31 +132,31 @@ export const HomeView: React.FC = () => {
             <span className="text-slate-400 font-normal">Personal Command Center</span>
           </div>
           <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-100 via-slate-200 to-champagne-200 bg-clip-text text-transparent">
-            {getGreeting()}{user?.email ? `, ${user.email.split('@')[0]}` : ''}
+            {getGreeting()}{displayName ? `, ${displayName}` : ''}
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 max-w-xl leading-relaxed">
             Overview of your daily commitments, strategic milestones, and intelligence streams.
           </p>
         </div>
 
-        {/* Quick KPI Snapshot */}
+        {/* Quick KPI Snapshot - Minimal Obsidian & Champagne Design */}
         {dashboard && (
-          <div className="flex items-center gap-2.5 sm:gap-3.5 overflow-x-auto w-full md:w-auto scrollbar-none py-1">
-            <div className="flex-1 md:flex-none px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] shadow-subtle-elevation text-center min-w-[80px] hover:border-white/[0.15] transition-all group">
-              <span className="text-[10px] text-slate-400 uppercase tracking-widest block font-semibold">Tasks</span>
-              <span className="text-xl sm:text-2xl font-bold text-champagne-300 tracking-tight group-hover:scale-105 transition-transform inline-block">
+          <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto w-full md:w-auto scrollbar-none py-1">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-champagne-400/20 transition-all group">
+              <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-medium">Tasks</span>
+              <span className="text-lg sm:text-xl font-bold text-slate-100 tracking-tight font-mono inline-block">
                 {dashboard.active_tasks_count ?? 0}
               </span>
             </div>
-            <div className="flex-1 md:flex-none px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] shadow-subtle-elevation text-center min-w-[80px] hover:border-white/[0.15] transition-all group">
-              <span className="text-[10px] text-slate-400 uppercase tracking-widest block font-semibold">Projects</span>
-              <span className="text-xl sm:text-2xl font-bold text-emerald-400 tracking-tight group-hover:scale-105 transition-transform inline-block">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-champagne-400/20 transition-all group">
+              <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-medium">Projects</span>
+              <span className="text-lg sm:text-xl font-bold text-slate-100 tracking-tight font-mono inline-block">
                 {dashboard.active_projects_count ?? 0}
               </span>
             </div>
-            <div className="flex-1 md:flex-none px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] shadow-subtle-elevation text-center min-w-[80px] hover:border-white/[0.15] transition-all group">
-              <span className="text-[10px] text-slate-400 uppercase tracking-widest block font-semibold">Goals</span>
-              <span className="text-xl sm:text-2xl font-bold text-champagne-300 tracking-tight group-hover:scale-105 transition-transform inline-block">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-champagne-400/20 transition-all group">
+              <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-medium">Goals</span>
+              <span className="text-lg sm:text-xl font-bold text-champagne-200/90 tracking-tight font-mono inline-block">
                 {dashboard.active_goals_count ?? 0}
               </span>
             </div>
@@ -241,14 +265,14 @@ export const HomeView: React.FC = () => {
           to="/tasks"
           className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/[0.14] text-xs font-medium text-slate-300 hover:text-white transition shadow-sm"
         >
-          <Plus className="w-3.5 h-3.5 text-indigo-400" />
+          <Plus className="w-3.5 h-3.5 text-champagne-300" />
           <span>New Task</span>
         </Link>
         <Link
           to="/projects"
           className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/[0.14] text-xs font-medium text-slate-300 hover:text-white transition shadow-sm"
         >
-          <Plus className="w-3.5 h-3.5 text-emerald-400" />
+          <Plus className="w-3.5 h-3.5 text-champagne-300" />
           <span>New Project</span>
         </Link>
         <Link
@@ -262,7 +286,7 @@ export const HomeView: React.FC = () => {
           to="/journal"
           className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/[0.14] text-xs font-medium text-slate-300 hover:text-white transition shadow-sm"
         >
-          <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+          <BookOpen className="w-3.5 h-3.5 text-champagne-300" />
           <span>Write Reflection</span>
         </Link>
         <Link

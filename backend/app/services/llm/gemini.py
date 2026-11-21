@@ -24,7 +24,7 @@ class GeminiProvider(BaseLLMProvider):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_id: str = "gemini-3.5-flash-lite",
+        model_id: str = "gemini-3.1-flash-lite",
         timeout_seconds: float = 60.0,
     ):
         self.api_key = api_key
@@ -33,7 +33,7 @@ class GeminiProvider(BaseLLMProvider):
         # Gracefully remap deprecated or alias models when invoking Google API
         api_model = model_id
         if api_model in ("gemini-2.5-flash", "models/gemini-2.5-flash", "gemini-2.0-flash", "models/gemini-2.0-flash"):
-            api_model = "gemini-3.5-flash-lite"
+            api_model = "gemini-3.1-flash-lite"
         elif api_model in ("gemini-2.5-pro", "models/gemini-2.5-pro"):
             api_model = "gemini-3.8-pro"
         self._api_model = api_model
@@ -55,7 +55,7 @@ class GeminiProvider(BaseLLMProvider):
     def _get_candidate_models(self) -> List[str]:
         """Return prioritized list of models to try for maximum availability and resilience."""
         candidates = [self._api_model]
-        for fallback in ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite"):
+        for fallback in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite"):
             if fallback not in candidates:
                 candidates.append(fallback)
         return candidates

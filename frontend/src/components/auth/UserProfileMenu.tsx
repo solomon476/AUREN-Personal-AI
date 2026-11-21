@@ -23,7 +23,22 @@ export const UserProfileMenu: React.FC = () => {
 
   if (!user) return null;
 
-  const displayName = profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User';
+  const getDisplayName = (): string => {
+    if (profile?.full_name?.trim()) return profile.full_name.trim();
+    const metaFullName = (user.user_metadata?.full_name || user.user_metadata?.name || '') as string;
+    if (metaFullName?.trim()) return metaFullName.trim();
+    if (user.email) {
+      const prefix = user.email.split('@')[0];
+      const cleaned = prefix.replace(/[0-9]+/g, '').replace(/[._-]/g, ' ').trim();
+      if (cleaned.length > 0) {
+        return cleaned.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      }
+      return prefix;
+    }
+    return 'User';
+  };
+
+  const displayName = getDisplayName();
   const displayEmail = user.email || 'No email associated';
   const initial = displayName.charAt(0).toUpperCase();
 

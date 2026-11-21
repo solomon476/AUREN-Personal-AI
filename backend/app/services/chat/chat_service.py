@@ -351,13 +351,37 @@ class ChatService:
         yield f"event: metadata\ndata: {json.dumps(init_event)}\n\n"
 
         # -------------------------------------------------------------------
-        # 4. Resolve Preferences, Model & Assemble Sliding Window Context
+        # 4. Resolve Preferences, Model & Assemble Sliding Window Context Concurrently
         # -------------------------------------------------------------------
         user_model = None
         user_instructions = []
-        try:
-            from app.services.profile_service import profile_service
-            profile = await profile_service.get_profile(user)
+
+        # Concurrent retrieval of user profile and conversation message history
+        async def _fetch_profile():
+            try:
+                from app.services.profile_service import profile_service
+                return await profile_service.get_profile(user)
+            except Exception as pref_err:
+                logger.warning("Failed loading user preferences for chat context: %s", pref_err)
+                return None
+
+        async def _fetch_history():
+            return await repo.get_messages(
+                user_id=user.id,
+                conversation_id=conversation.id,
+                limit=settings.CHAT_HISTORY_LIMIT,
+            )
+
+        profile_res, history_res = await asyncio.gather(
+            _fetch_profile(),
+            _fetch_history(),
+            return_exceptions=True,
+        )
+
+        if isinstance(profile_res, Exception) or profile_res is None:
+            profile = None
+        else:
+            profile = profile_res
             prefs = profile.preferences or {}
             user_model = prefs.get("ai_model")
             tone = prefs.get("ai_tone")
@@ -373,8 +397,8 @@ class ChatService:
             custom_inst = prefs.get("ai_custom_instructions")
             if custom_inst and str(custom_inst).strip():
                 user_instructions.append(f"User custom instructions: {str(custom_inst).strip()}")
-        except Exception as pref_err:
-            logger.warning("Failed loading user preferences for chat context: %s", pref_err)
+
+        history = history_res if isinstance(history_res, list) else []
 
         try:
             try:
@@ -392,12 +416,6 @@ class ChatService:
             yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
             return
 
-        history = await repo.get_messages(
-            user_id=user.id,
-            conversation_id=conversation.id,
-            limit=settings.CHAT_HISTORY_LIMIT,
-        )
-
         system_content = SYSTEM_PROMPT
         if user_instructions:
             system_content += "\n\nUser Preferences:\n" + "\n".join(f"- {inst}" for inst in user_instructions)
@@ -406,8 +424,10 @@ class ChatService:
             ChatMessage(role="system", content=system_content)
         ]
 
-        retrieved_memories_data: list[dict[str, Any]] = []
-        if settings.MEMORY_RETRIEVAL_ENABLED:
+        # Concurrent retrieval of Memory Context and Productivity Context
+        async def _fetch_memory_context():
+            if not settings.MEMORY_RETRIEVAL_ENABLED:
+                return None, []
             try:
                 from app.services.embeddings.factory import get_embedding_provider
                 from app.services.memory.context_manager import MemoryContextManager
@@ -421,48 +441,61 @@ class ChatService:
 
                 retriever = MemoryRetriever(repository=repo)
                 ctx_mgr = MemoryContextManager(retriever=retriever, embedding_provider=embedding_provider)
-                mem_context, selected_memories = await ctx_mgr.assemble_memory_context(
+                return await ctx_mgr.assemble_memory_context(
                     user_id=user.id,
                     query_text=request.message,
                     provider=provider,
                     budget_tokens=settings.MEMORY_CONTEXT_BUDGET_TOKENS,
                 )
-                if mem_context:
-                    llm_messages.append(ChatMessage(role="system", content=mem_context))
-                    retrieved_memories_data = [
-                        {
-                            "id": str(m.id),
-                            "content": m.content,
-                            "memory_type": m.memory_type,
-                            "category": m.category,
-                            "confirmation_status": m.confirmation_status,
-                            "importance": m.importance,
-                            "score": m.score,
-                        }
-                        for m in selected_memories
-                    ]
             except Exception as mem_err:
                 logger.warning("Failed injecting memory context (safe continue): %s", mem_err)
+                return None, []
 
-        # -------------------------------------------------------------------
-        # Assemble Productivity Context (Phase 3C.4)
-        # -------------------------------------------------------------------
+        async def _fetch_productivity_context():
+            try:
+                from app.services.productivity.repository import get_productivity_repository
+                from app.services.productivity.context_manager import ProductivityContextManager
+
+                prod_repo = get_productivity_repository(user_token=user_token)
+                prod_ctx_mgr = ProductivityContextManager(repository=prod_repo)
+                return await prod_ctx_mgr.assemble_productivity_context(
+                    user_id=user.id,
+                    query_text=request.message,
+                )
+            except Exception as prod_err:
+                logger.warning("Failed injecting productivity context (safe continue): %s", prod_err)
+                return None, None
+
+        mem_result, prod_result = await asyncio.gather(
+            _fetch_memory_context(),
+            _fetch_productivity_context(),
+            return_exceptions=True,
+        )
+
+        retrieved_memories_data: list[dict[str, Any]] = []
+        if not isinstance(mem_result, Exception) and mem_result:
+            mem_context, selected_memories = mem_result
+            if mem_context:
+                llm_messages.append(ChatMessage(role="system", content=mem_context))
+                retrieved_memories_data = [
+                    {
+                        "id": str(m.id),
+                        "content": m.content,
+                        "memory_type": m.memory_type,
+                        "category": m.category,
+                        "confirmation_status": m.confirmation_status,
+                        "importance": m.importance,
+                        "score": m.score,
+                    }
+                    for m in selected_memories
+                ]
+
         productivity_context_data: dict[str, Any] = {}
-        try:
-            from app.services.productivity.repository import get_productivity_repository
-            from app.services.productivity.context_manager import ProductivityContextManager
-
-            prod_repo = get_productivity_repository(user_token=user_token)
-            prod_ctx_mgr = ProductivityContextManager(repository=prod_repo)
-            prod_context, prod_summary = await prod_ctx_mgr.assemble_productivity_context(
-                user_id=user.id,
-                query_text=request.message,
-            )
-            if prod_context:
+        if not isinstance(prod_result, Exception) and prod_result:
+            prod_context, prod_summary = prod_result
+            if prod_context and prod_summary:
                 llm_messages.append(ChatMessage(role="system", content=prod_context))
                 productivity_context_data = prod_summary.model_dump()
-        except Exception as prod_err:
-            logger.warning("Failed injecting productivity context (safe continue): %s", prod_err)
 
         # -------------------------------------------------------------------
         # Phase 3C.5: Omnisearch / Reflective context injection (READ-ONLY)

@@ -104,9 +104,9 @@ export const ProductivityDashboardView: React.FC = () => {
         <div className="p-4.5 rounded-2xl bg-[#0e1017]/70 border border-white/[0.06] shadow-subtle-elevation">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Completed</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <CheckCircle2 className="w-4 h-4 text-champagne-400" />
           </div>
-          <div className="text-2xl font-bold text-emerald-400 font-mono">{dashboard.completed_tasks_count}</div>
+          <div className="text-2xl font-bold text-champagne-200/90 font-mono">{dashboard.completed_tasks_count}</div>
           <span className="text-[10px] text-slate-500">All-time finished</span>
         </div>
 
@@ -115,16 +115,16 @@ export const ProductivityDashboardView: React.FC = () => {
             <span>Active Projects</span>
             <FolderKanban className="w-4 h-4 text-champagne-400" />
           </div>
-          <div className="text-2xl font-bold text-white font-mono">{dashboard.active_projects_count}</div>
+          <div className="text-2xl font-bold text-slate-100 font-mono">{dashboard.active_projects_count}</div>
           <span className="text-[10px] text-slate-500">Workspaces in flight</span>
         </div>
 
         <div className="p-4.5 rounded-2xl bg-[#0e1017]/70 border border-white/[0.06] col-span-2 md:col-span-1 shadow-subtle-elevation">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
             <span>Active Goals</span>
-            <Target className="w-4 h-4 text-purple-400" />
+            <Target className="w-4 h-4 text-champagne-400" />
           </div>
-          <div className="text-2xl font-bold text-white font-mono">{dashboard.active_goals_count}</div>
+          <div className="text-2xl font-bold text-slate-100 font-mono">{dashboard.active_goals_count}</div>
           <span className="text-[10px] text-slate-500">Strategic objectives</span>
         </div>
       </div>

@@ -617,7 +617,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                   handleSendMessage();
                 }
               }}
-              placeholder="Ask AUREN anything... (Enter to send, Shift+Enter for newline)"
+              placeholder="Ask AUREN anything..."
               disabled={isStreaming}
               className="w-full resize-none py-3 sm:py-3.5 pl-4 sm:pl-5 pr-20 sm:pr-24 bg-white/[0.035] border border-white/[0.09] rounded-2xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-champagne-400/70 focus:ring-1 focus:ring-champagne-400/40 transition-all duration-200 disabled:opacity-50 shadow-inner"
             />
@@ -648,8 +648,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           </form>
 
           <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 px-1 font-mono">
-            <span className="hidden xs:inline">Enter to send &bull; Shift+Enter for newline</span>
-            <span>{inputValue.length}/10000 characters</span>
+            <span className="hidden sm:inline">Enter to send &bull; Shift+Enter for newline</span>
+            <span className="ml-auto">{inputValue.length}/10000 characters</span>
           </div>
         </div>
       </section>

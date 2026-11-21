@@ -163,7 +163,7 @@ class Settings(BaseSettings):
     # Replaceable AI Provider Configuration
     LLM_PROVIDER: str = "gemini"
     LLM_API_KEY: Optional[str] = None
-    LLM_MODEL: str = "gemini-3.5-flash-lite"
+    LLM_MODEL: str = "gemini-3.1-flash-lite"
 
     # Replaceable Embedding Provider Configuration
     EMBEDDING_PROVIDER: str = "gemini"
