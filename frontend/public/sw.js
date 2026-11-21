@@ -11,7 +11,7 @@
  * - OFFLINE RESILIENT: Delivers app shell for navigation requests when offline.
  */
 
-const CACHE_NAME = 'auren-shell-v1';
+const CACHE_NAME = 'auren-shell-v2';
 
 const STATIC_PRECACHE = [
   '/',
@@ -76,19 +76,28 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 3. NAVIGATION REQUESTS (SPA routes like /chat, /tasks, /settings, /journal)
+  // Network-First: always fetch latest HTML from Vercel; fallback to offline shell if offline
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(async () => {
-        const cache = await caches.open(CACHE_NAME);
-        const cachedShell = await cache.match('/index.html');
-        return (
-          cachedShell ||
-          new Response(
-            '<!DOCTYPE html><html><head><meta charset="utf-8"><title>AUREN — Offline</title><style>body{background:#08090C;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}h1{color:#d7ba83;font-size:1.5rem;}p{color:#94a3b8;font-size:0.9rem;}</style></head><body><div><h1>AUREN</h1><p>You are currently offline. Please reconnect to access AI dialogues and synchronized data.</p></div></body></html>',
-            { headers: { 'Content-Type': 'text/html' } }
-          )
-        );
-      })
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          const cachedShell = await cache.match('/index.html');
+          return (
+            cachedShell ||
+            new Response(
+              '<!DOCTYPE html><html><head><meta charset="utf-8"><title>AUREN — Offline</title><style>body{background:#08090C;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}h1{color:#d7ba83;font-size:1.5rem;}p{color:#94a3b8;font-size:0.9rem;}</style></head><body><div><h1>AUREN</h1><p>You are currently offline. Please reconnect to access AI dialogues and synchronized data.</p></div></body></html>',
+              { headers: { 'Content-Type': 'text/html' } }
+            )
+          );
+        })
     );
     return;
   }

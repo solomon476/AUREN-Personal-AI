@@ -256,6 +256,7 @@ async def get_conversation_messages(
                 metadata=m.metadata,
             )
             for m in messages
+            if m.role == "user" or (m.content and m.content.strip()) or (m.metadata and m.metadata.get("attachments"))
         ]
     except HTTPException:
         raise

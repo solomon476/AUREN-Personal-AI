@@ -5,6 +5,14 @@ import './index.css';
 
 // Register PWA Service Worker for safe static asset caching & offline app shell
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
+
   window.addEventListener('load', () => {
     const isLocalhost = Boolean(
       window.location.hostname === 'localhost' ||
@@ -16,6 +24,7 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
         .then((reg) => {
+          reg.update();
           console.log('[AUREN PWA] Service worker registered:', reg.scope);
         })
         .catch((err) => {
