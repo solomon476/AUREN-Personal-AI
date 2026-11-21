@@ -39,12 +39,12 @@ const SOURCE_ICONS: Record<SourceType, React.ReactNode> = {
 };
 
 const SOURCE_COLORS: Record<SourceType, string> = {
-  conversation: 'text-sky-400',
-  message: 'text-blue-400',
-  memory: 'text-violet-400',
-  task: 'text-emerald-400',
-  project: 'text-amber-400',
-  goal: 'text-rose-400',
+  conversation: 'text-champagne-300',
+  message: 'text-slate-300',
+  memory: 'text-champagne-400',
+  task: 'text-slate-200',
+  project: 'text-champagne-300',
+  goal: 'text-champagne-200',
 };
 
 // Staleness Card

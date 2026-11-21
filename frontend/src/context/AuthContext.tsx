@@ -129,9 +129,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
+    // 4. Capacitor native deep-link listener for mobile OAuth/Magic Link callbacks (auren://auth/callback)
+    let capAppListener: any = null;
+    try {
+      import('@capacitor/app')
+        .then(({ App }) => {
+          if (!isMounted) return;
+          capAppListener = App.addListener('appUrlOpen', async (data: { url: string }) => {
+            if (data?.url && (data.url.includes('access_token') || data.url.includes('code='))) {
+              try {
+                const urlObj = new URL(data.url);
+                const hashParams = new URLSearchParams(urlObj.hash.substring(1));
+                const accessToken = hashParams.get('access_token');
+                const refreshToken = hashParams.get('refresh_token');
+                if (accessToken && refreshToken && supabase) {
+                  await supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                  });
+                }
+              } catch (urlErr) {
+                console.warn('Failed parsing deep link auth url:', urlErr);
+              }
+            }
+          });
+        })
+        .catch(() => {
+          // Not running in Capacitor or plugin unavailable
+        });
+    } catch {
+      // Non-blocking Capacitor check
+    }
+
     return () => {
       isMounted = false;
       subscription.unsubscribe();
+      if (capAppListener && typeof capAppListener.remove === 'function') {
+        capAppListener.remove();
+      }
     };
   }, []);
 

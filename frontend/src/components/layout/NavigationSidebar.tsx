@@ -26,6 +26,7 @@ import {
   Activity,
   Search,
   Sparkles,
+  Download,
 } from 'lucide-react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
@@ -34,11 +35,15 @@ import { UserProfileMenu } from '../auth/UserProfileMenu';
 interface NavigationSidebarProps {
   onNavigate?: () => void;
   onOpenAuth?: (mode: 'signin' | 'signup') => void;
+  onOpenInstall?: () => void;
+  isInstalled?: boolean;
 }
 
 export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   onNavigate,
   onOpenAuth,
+  onOpenInstall,
+  isInstalled = false,
 }) => {
   const { user, isLoading } = useAuth();
   const routerState = useRouterState();
@@ -237,6 +242,25 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
           {renderNavGroup(reflectionAndSettingsItems)}
         </div>
       </div>
+
+      {/* PWA Standalone Desktop Installation Prompt */}
+      {!isInstalled && onOpenInstall && (
+        <div className="px-3 pb-2">
+          <button
+            onClick={onOpenInstall}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.07] hover:border-champagne-400/30 text-xs text-slate-300 hover:text-white transition group touch-target cursor-pointer"
+            title="Install AUREN as standalone desktop app"
+          >
+            <div className="flex items-center space-x-2">
+              <Download className="w-3.5 h-3.5 text-champagne-400 group-hover:scale-110 transition-transform" />
+              <span className="font-medium text-[11px]">Install Desktop App</span>
+            </div>
+            <span className="text-[9px] font-mono text-champagne-400/80 bg-champagne-950/60 px-1.5 py-0.5 rounded border border-champagne-700/30">
+              PWA
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Persistent User Account Footer */}
       <div className="p-3 border-t border-white/[0.06] bg-[#07080c]/90">

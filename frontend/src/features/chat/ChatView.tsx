@@ -97,14 +97,24 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageContainerRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const handleScroll = () => {
+    if (!messageContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
+    isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
+  };
+
+  const scrollToBottom = (instant = false) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingContent, reconnectStatus]);
+    if (isAtBottomRef.current) {
+      scrollToBottom(isStreaming);
+    }
+  }, [messages, streamingContent, reconnectStatus, isStreaming]);
 
   // Sync server-cached messages into local state when conversation loads
   useEffect(() => {
@@ -370,7 +380,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   );
 
   return (
-    <div className="flex h-[calc(100dvh-8rem)] md:h-[calc(100vh-5rem)] min-h-[480px] bg-slate-950/80 border border-white/[0.08] rounded-2xl overflow-hidden shadow-subtle-elevation backdrop-blur-md transition-all duration-300">
+    <div className="flex flex-1 h-full min-h-0 bg-slate-950/80 border border-white/[0.08] rounded-2xl overflow-hidden shadow-subtle-elevation backdrop-blur-md transition-all duration-300">
       {/* Desktop Sidebar: Threads History */}
       <aside className="hidden md:flex flex-col w-64 sm:w-72 bg-slate-950/90 border-r border-white/[0.08] flex-shrink-0">
         {renderThreadList()}
@@ -450,7 +460,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         </div>
 
         {/* Message Stream Display */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-7 space-y-4 sm:space-y-6 scrollbar-thin">
+        <div
+          ref={messageContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-3.5 sm:p-7 space-y-4 sm:space-y-6 scrollbar-thin"
+        >
           {!user && (
             <div className="p-4 rounded-xl bg-champagne-950/20 border border-champagne-400/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
               <div className="flex items-center space-x-3">
@@ -647,9 +661,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
             </div>
           </form>
 
-          <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 px-1 font-mono">
+          <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-500 px-1 font-mono">
             <span className="hidden sm:inline">Enter to send &bull; Shift+Enter for newline</span>
-            <span className="ml-auto">{inputValue.length}/10000 characters</span>
+            {inputValue.length > 500 && (
+              <span className="ml-auto">{inputValue.length}/10000 characters</span>
+            )}
           </div>
         </div>
       </section>

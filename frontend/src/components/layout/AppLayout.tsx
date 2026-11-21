@@ -6,13 +6,15 @@
 
 import React, { useState } from 'react';
 import { Menu, X, Bot, Search } from 'lucide-react';
-import { Outlet, Link } from '@tanstack/react-router';
+import { Outlet, Link, useRouterState } from '@tanstack/react-router';
 import { NavigationSidebar } from './NavigationSidebar';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileMoreSheet } from './MobileMoreSheet';
 import { AuthModal } from '../auth/AuthModal';
 import { useAuth } from '../../context/AuthContext';
 import { UserProfileMenu } from '../auth/UserProfileMenu';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { InstallGuideModal } from '../pwa/InstallGuideModal';
 
 export const AppLayout: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -20,6 +22,17 @@ export const AppLayout: React.FC = () => {
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const routerState = useRouterState();
+  const isChat = routerState.location.pathname.startsWith('/chat');
+
+  const {
+    isInstalled,
+    hasDeferredPrompt,
+    platform,
+    promptInstall,
+    isInstallModalOpen,
+    setIsInstallModalOpen,
+  } = usePWAInstall();
 
   const openAuth = (mode: 'signin' | 'signup') => {
     setAuthMode(mode);
@@ -28,11 +41,19 @@ export const AppLayout: React.FC = () => {
     setIsMoreSheetOpen(false);
   };
 
+  const handleOpenInstall = () => {
+    setIsInstallModalOpen(true);
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans selection:bg-indigo-600 selection:text-white">
       {/* Desktop Sidebar (Persistent) */}
       <div className="hidden md:flex flex-shrink-0 z-20">
-        <NavigationSidebar onOpenAuth={openAuth} />
+        <NavigationSidebar
+          onOpenAuth={openAuth}
+          onOpenInstall={handleOpenInstall}
+          isInstalled={isInstalled}
+        />
       </div>
 
       {/* Mobile Drawer (Slide-over Full Navigation) */}
@@ -53,6 +74,8 @@ export const AppLayout: React.FC = () => {
             <NavigationSidebar
               onNavigate={() => setIsMobileMenuOpen(false)}
               onOpenAuth={openAuth}
+              onOpenInstall={handleOpenInstall}
+              isInstalled={isInstalled}
             />
           </div>
         </div>
@@ -110,7 +133,13 @@ export const AppLayout: React.FC = () => {
         </header>
 
         {/* Dynamic Route Content (with bottom padding for mobile navigation bar) */}
-        <main className="flex-1 overflow-y-auto p-3.5 sm:p-7 pb-20 md:pb-7 relative z-0 scrollbar-thin">
+        <main
+          className={
+            isChat
+              ? 'flex-1 flex flex-col min-h-0 overflow-hidden p-2 sm:p-4 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-4 relative z-0'
+              : 'flex-1 overflow-y-auto p-3.5 sm:p-7 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-7 relative z-0 scrollbar-thin'
+          }
+        >
           <Outlet />
         </main>
 
@@ -125,6 +154,8 @@ export const AppLayout: React.FC = () => {
           isOpen={isMoreSheetOpen}
           onClose={() => setIsMoreSheetOpen(false)}
           onOpenAuth={openAuth}
+          onOpenInstall={handleOpenInstall}
+          isInstalled={isInstalled}
         />
       </div>
 
@@ -133,6 +164,15 @@ export const AppLayout: React.FC = () => {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         defaultMode={authMode}
+      />
+
+      {/* Standalone PWA Installation Guide Modal */}
+      <InstallGuideModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+        platform={platform}
+        hasDeferredPrompt={hasDeferredPrompt}
+        onPromptInstall={promptInstall}
       />
     </div>
   );

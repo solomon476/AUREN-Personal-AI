@@ -18,19 +18,25 @@ import {
   Lock,
   LogOut,
   Cpu,
+  Smartphone,
+  Monitor,
+  ShieldCheck,
+  Layers,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, ThemeMode } from '../../context/ThemeContext';
 import { useExportUserData, useUpdateUserProfile, useUserProfile } from '../../hooks/useSettings';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 export const SettingsView: React.FC = () => {
   const { user, signOut } = useAuth();
   const { data: profile } = useUserProfile(user?.id);
   const updateProfileMutation = useUpdateUserProfile(user?.id);
   const exportDataMutation = useExportUserData();
+  const { isInstalled, hasDeferredPrompt, promptInstall } = usePWAInstall();
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'memory' | 'data'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'memory' | 'data' | 'app'>('profile');
 
   // Form State
   const [fullName, setFullName] = useState('');
@@ -178,6 +184,18 @@ export const SettingsView: React.FC = () => {
           >
             <Database className="w-4 h-4 text-champagne-400" />
             <span>Data Management &amp; Export</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('app')}
+            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target cursor-pointer ${
+              activeTab === 'app'
+                ? 'bg-white/[0.08] text-white border border-white/[0.12] shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+            }`}
+          >
+            <Smartphone className="w-4 h-4 text-champagne-400" />
+            <span>App &amp; PWA Installation</span>
           </button>
         </div>
 
@@ -462,8 +480,154 @@ export const SettingsView: React.FC = () => {
               </div>
             )}
 
+            {/* APP & PWA INSTALLATION TAB */}
+            {activeTab === 'app' && (
+              <div className="space-y-5">
+                <div className="border-b border-white/[0.06] pb-3">
+                  <h2 className="text-sm font-semibold text-white">App Installation &amp; PWA Identity</h2>
+                  <p className="text-xs text-slate-400">
+                    Install AUREN onto your smartphone or desktop for a fast, standalone application experience.
+                  </p>
+                </div>
+
+                {/* Identity & Status Overview */}
+                <div className="p-5 rounded-2xl bg-gradient-to-r from-champagne-950/30 via-[#0e111a] to-[#07080c] border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-subtle-elevation">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-14 h-14 rounded-2xl bg-[#08090C] border border-champagne-400/40 p-1 flex items-center justify-center flex-shrink-0 shadow-md">
+                      <img
+                        src="/icons/icon-192.png"
+                        alt="AUREN"
+                        className="w-full h-full object-contain rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-base font-bold text-white tracking-tight">AUREN</h3>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-champagne-950/80 text-champagne-300 border border-champagne-700/40">
+                          v0.1.0-alpha
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">Your Personal AI Command Center</p>
+                      <p className="text-[10px] text-champagne-400/80 mt-1 font-mono">
+                        Theme: Obsidian (#0C0E14) · Background: (#08090C)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 border-white/[0.06] pt-3 sm:pt-0">
+                    <span className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">
+                      Display Mode
+                    </span>
+                    {isInstalled ? (
+                      <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-emerald-950/80 text-emerald-400 border border-emerald-800/50 text-xs font-semibold mt-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Standalone Active</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-amber-950/60 text-amber-300 border border-amber-800/50 text-xs font-semibold mt-1">
+                        <Smartphone className="w-3.5 h-3.5" />
+                        <span>Browser Mode</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick 1-Click Install Button if Native Prompt is Available */}
+                {!isInstalled && hasDeferredPrompt && (
+                  <div className="p-4 rounded-2xl bg-champagne-950/30 border border-champagne-400/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                    <div>
+                      <span className="text-xs font-semibold text-champagne-300 block">
+                        Native Browser Installation Ready
+                      </span>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Add AUREN to your device home screen or application launcher with one click.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => promptInstall()}
+                      className="px-4 py-2 bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] font-semibold text-xs rounded-xl shadow-md transition flex items-center justify-center space-x-2 flex-shrink-0 touch-target cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Install AUREN App</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Installation Guides by Platform */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    Installation Instructions
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Android */}
+                    <div className="p-4 rounded-2xl bg-[#0c0e14] border border-white/[0.06] space-y-2">
+                      <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400">
+                        <Smartphone className="w-4 h-4" />
+                        <span>Android (Chrome)</span>
+                      </div>
+                      <ol className="text-[11px] text-slate-400 space-y-1.5 list-decimal list-inside leading-relaxed">
+                        <li>Open this link in Chrome.</li>
+                        <li>Tap the three dots (⋮) in the top-right.</li>
+                        <li>Select <strong>Install app</strong> or <strong>Add to Home Screen</strong>.</li>
+                      </ol>
+                    </div>
+
+                    {/* Apple iOS */}
+                    <div className="p-4 rounded-2xl bg-[#0c0e14] border border-white/[0.06] space-y-2">
+                      <div className="flex items-center space-x-2 text-xs font-semibold text-champagne-300">
+                        <Smartphone className="w-4 h-4" />
+                        <span>iPhone &amp; iPad (Safari)</span>
+                      </div>
+                      <ol className="text-[11px] text-slate-400 space-y-1.5 list-decimal list-inside leading-relaxed">
+                        <li>Open this link in <strong>Safari</strong>.</li>
+                        <li>Tap the <strong>Share</strong> icon in the bottom bar.</li>
+                        <li>Tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>
+                      </ol>
+                    </div>
+
+                    {/* Desktop */}
+                    <div className="p-4 rounded-2xl bg-[#0c0e14] border border-white/[0.06] space-y-2">
+                      <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-400">
+                        <Monitor className="w-4 h-4" />
+                        <span>Desktop (Chrome / Edge)</span>
+                      </div>
+                      <ol className="text-[11px] text-slate-400 space-y-1.5 list-decimal list-inside leading-relaxed">
+                        <li>Look at the right side of the address bar.</li>
+                        <li>Click the <strong>Install AUREN</strong> icon.</li>
+                        <li>Confirm <strong>Install</strong> to launch standalone.</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Session Persistence & Offline Guarantee */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1.5">
+                    <div className="flex items-center space-x-2 text-xs font-semibold text-slate-200">
+                      <ShieldCheck className="w-4 h-4 text-champagne-400" />
+                      <span>Persistent Supabase Session</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Your authentication token persists in local secure storage. Closing and reopening the installed application retains your active session automatically.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1.5">
+                    <div className="flex items-center space-x-2 text-xs font-semibold text-slate-200">
+                      <Layers className="w-4 h-4 text-champagne-400" />
+                      <span>Zero-Leak Offline Security</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Static application assets cache for instant launch. Private journal entries, vector memories, and AI conversations are strictly protected and never cached offline.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Save Button */}
-            {activeTab !== 'data' && (
+            {activeTab !== 'data' && activeTab !== 'app' && (
               <div className="pt-4 border-t border-white/[0.06] flex justify-end">
                 <button
                   type="submit"

@@ -98,17 +98,6 @@ export const HomeView: React.FC = () => {
     if (metaFullName?.trim()) {
       return metaFullName.trim();
     }
-    if (user?.email) {
-      const prefix = user.email.split('@')[0];
-      const cleaned = prefix.replace(/[0-9]+/g, '').replace(/[._-]/g, ' ').trim();
-      if (cleaned.length > 0) {
-        return cleaned
-          .split(/\s+/)
-          .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-          .join(' ');
-      }
-      return prefix;
-    }
     return '';
   };
 
@@ -119,6 +108,24 @@ export const HomeView: React.FC = () => {
     month: 'short',
     day: 'numeric',
   });
+
+  // Mini weekly date strip matching mobile command center ergonomics
+  const weekDays = React.useMemo(() => {
+    const now = new Date();
+    const currentDay = now.getDay();
+    const days = [];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - currentDay + i);
+      days.push({
+        name: dayNames[i],
+        dayNum: String(d.getDate()).padStart(2, '0'),
+        isToday: d.toDateString() === now.toDateString(),
+      });
+    }
+    return days;
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-y-auto text-slate-100 p-3.5 sm:p-7 space-y-5 sm:space-y-7 max-w-7xl mx-auto scrollbar-thin">
@@ -162,6 +169,25 @@ export const HomeView: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* 7-Day Quick Planner Calendar Strip */}
+      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 scrollbar-none">
+        {weekDays.map((d, idx) => (
+          <div
+            key={idx}
+            className={`flex-1 min-w-[42px] max-w-[56px] py-2 px-1.5 rounded-xl text-center border transition-all ${
+              d.isToday
+                ? 'bg-champagne-400/15 border-champagne-400/40 text-champagne-200 shadow-sm'
+                : 'bg-[#0c0e14] border-white/[0.05] text-slate-400 hover:border-white/[0.1]'
+            }`}
+          >
+            <span className="text-[10px] uppercase tracking-wider block font-medium opacity-80">{d.name}</span>
+            <span className={`text-xs sm:text-sm font-bold font-mono mt-0.5 block ${d.isToday ? 'text-champagne-300' : 'text-slate-300'}`}>
+              {d.dayNum}
+            </span>
+          </div>
+        ))}
       </div>
 
       {/* Guest Mode Banner */}
@@ -465,13 +491,13 @@ export const HomeView: React.FC = () => {
                       <span className="text-xs font-semibold text-slate-200 group-hover:text-white truncate pr-2 tracking-tight">
                         {project.name}
                       </span>
-                      <span className="text-[10px] font-mono text-emerald-400 font-semibold">
+                      <span className="text-[10px] font-mono text-champagne-300 font-semibold">
                         {project.progress_percentage ?? 0}%
                       </span>
                     </div>
                     <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="h-full bg-emerald-500 rounded-full transition-all duration-300 shadow-sm"
+                        className="h-full bg-gradient-to-r from-champagne-500 to-amber-300 rounded-full transition-all duration-300 shadow-sm"
                         style={{ width: `${project.progress_percentage ?? 0}%` }}
                       />
                     </div>

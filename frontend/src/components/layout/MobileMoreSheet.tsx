@@ -27,12 +27,16 @@ interface MobileMoreSheetProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenAuth: (mode: 'signin' | 'signup') => void;
+  onOpenInstall?: () => void;
+  isInstalled?: boolean;
 }
 
 export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
   isOpen,
   onClose,
   onOpenAuth,
+  onOpenInstall,
+  isInstalled = false,
 }) => {
   const { user, signOut, isLoading } = useAuth();
 
@@ -160,6 +164,43 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
               );
             })}
           </div>
+
+          {/* PWA Standalone Mobile Installation Banner */}
+          {!isInstalled && onOpenInstall && (
+            <div className="mt-3">
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenInstall();
+                }}
+                className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-champagne-950/40 to-[#0e111a] border border-champagne-400/30 text-left transition group touch-target shadow-sm"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#08090C] border border-champagne-400/40 p-1 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <img
+                      src="/icons/icon-192.png"
+                      alt="AUREN"
+                      className="w-full h-full object-contain rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-xs font-bold text-white tracking-tight">
+                        Install AUREN App
+                      </span>
+                      <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-champagne-400/20 text-champagne-300 border border-champagne-400/30">
+                        PWA
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      Add to Home Screen for standalone experience
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-champagne-400 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            </div>
+          )}
 
           {/* User Account / Session Section */}
           <div className="mt-4 pt-3 border-t border-slate-800/80">

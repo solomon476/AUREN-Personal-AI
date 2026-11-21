@@ -226,7 +226,7 @@ export const ProductivityDashboardView: React.FC = () => {
         <div className="p-5 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] shadow-subtle-elevation">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center">
-              <FolderKanban className="w-4 h-4 mr-2 text-emerald-400" />
+              <FolderKanban className="w-4 h-4 mr-2 text-champagne-400" />
               Active Projects
             </h3>
             <Link to="/projects" className="text-xs text-champagne-300 hover:text-champagne-200 flex items-center">
@@ -242,11 +242,11 @@ export const ProductivityDashboardView: React.FC = () => {
                 <div key={p.id} className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] text-xs">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-medium text-slate-200">{p.name}</span>
-                    <span className="font-semibold text-emerald-400 font-mono">{p.progress_percentage}%</span>
+                    <span className="font-semibold text-champagne-300 font-mono">{p.progress_percentage}%</span>
                   </div>
                   <div className="w-full h-1.5 bg-[#07080c] rounded-full overflow-hidden mb-1.5">
                     <div
-                      className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                      className="h-full rounded-full bg-gradient-to-r from-champagne-500 to-amber-300 transition-all duration-300"
                       style={{
                         width: `${p.progress_percentage}%`,
                       }}
@@ -278,16 +278,16 @@ export const ProductivityDashboardView: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {dashboard.active_goals.map((g) => (
-                <div key={g.id} className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 text-xs">
+                <div key={g.id} className="p-3.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] text-xs">
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-medium text-slate-200">{g.title}</span>
                     {g.progress_percentage != null && (
-                      <span className="font-semibold text-purple-300 font-mono">{g.progress_percentage}%</span>
+                      <span className="font-semibold text-champagne-300 font-mono">{g.progress_percentage}%</span>
                     )}
                   </div>
                   {g.target_value ? (
                     <div className="text-[10px] text-slate-400 flex items-center">
-                      <TrendingUp className="w-3 h-3 mr-1 text-purple-400" />
+                      <TrendingUp className="w-3 h-3 mr-1 text-champagne-400" />
                       {g.current_value || 0} / {g.target_value} {g.unit || ''}
                     </div>
                   ) : (

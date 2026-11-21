@@ -59,6 +59,40 @@ Supported action schemas:
 Never claim that an action has already been executed in the database before the user confirms it. Present actions as proposals ready for user confirmation."""
 
 
+# ---------------------------------------------------------------------------
+# Query Intent Classification Helpers for Latency Optimization
+# ---------------------------------------------------------------------------
+def is_trivial_chitchat(query: str) -> bool:
+    """Detect whether a query is a trivial greeting or conversational chitchat that does not require heavy vector memory search."""
+    cleaned = query.strip().lower().rstrip("!?. ")
+    if not cleaned:
+        return True
+    CHITCHAT_EXACT = {
+        "hi", "hello", "hey", "hola", "yo", "sup", "good morning", "good afternoon",
+        "good evening", "howdy", "greetings", "thanks", "thank you", "thx", "ok",
+        "okay", "bye", "goodbye", "see you", "who are you", "what can you do",
+        "what are you", "help", "ping", "test", "how are you", "how's it going",
+        "whats up", "what's up", "nice to meet you"
+    }
+    if cleaned in CHITCHAT_EXACT:
+        return True
+    if len(cleaned) <= 4 and cleaned.isalpha():
+        return True
+    return False
+
+
+def requires_productivity_context(query: str) -> bool:
+    """Determine whether a query pertains to tasks, projects, deadlines, goals, or schedule."""
+    cleaned = query.lower()
+    PRODUCTIVITY_KEYWORDS = [
+        "task", "project", "goal", "todo", "to-do", "deadline", "due", "schedule",
+        "plan", "priority", "priorities", "commitments", "agenda", "milestone",
+        "today", "tomorrow", "this week", "what do i have", "what's on my plate",
+        "overdue", "upcoming", "review", "work", "calendar", "progress", "action item"
+    ]
+    return any(kw in cleaned for kw in PRODUCTIVITY_KEYWORDS)
+
+
 class ChatService:
     """Orchestrates persistent chat flows, context management, and resilient SSE streaming."""
 
@@ -425,8 +459,11 @@ class ChatService:
         ]
 
         # Concurrent retrieval of Memory Context and Productivity Context
+        is_chitchat = is_trivial_chitchat(request.message)
+        needs_productivity = requires_productivity_context(request.message)
+
         async def _fetch_memory_context():
-            if not settings.MEMORY_RETRIEVAL_ENABLED:
+            if not settings.MEMORY_RETRIEVAL_ENABLED or is_chitchat:
                 return None, []
             try:
                 from app.services.embeddings.factory import get_embedding_provider
@@ -452,6 +489,8 @@ class ChatService:
                 return None, []
 
         async def _fetch_productivity_context():
+            if not needs_productivity:
+                return None, None
             try:
                 from app.services.productivity.repository import get_productivity_repository
                 from app.services.productivity.context_manager import ProductivityContextManager
