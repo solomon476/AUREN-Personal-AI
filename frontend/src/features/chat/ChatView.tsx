@@ -6,15 +6,15 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { 
-  Send, 
-  Square, 
-  Plus, 
-  MessageSquare, 
-  Bot, 
-  User, 
-  Sparkles, 
-  AlertCircle, 
+import {
+  Send,
+  Square,
+  Plus,
+  MessageSquare,
+  Bot,
+  User,
+  Sparkles,
+  AlertCircle,
   Loader2,
   RotateCcw,
   Edit2,
@@ -24,13 +24,13 @@ import {
 } from 'lucide-react';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useSafeSearch } from '../../hooks/useSafeSearch';
-import { 
-  ChatMessage, 
-  streamChat 
+import {
+  ChatMessage,
+  streamChat
 } from '../../api/chat';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  useConversations, 
+import {
+  useConversations,
   useCreateConversation,
   useRenameConversation,
   useDeleteConversation
@@ -59,10 +59,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   const renameConversationMutation = useRenameConversation(user?.id);
   const deleteConversationMutation = useDeleteConversation(user?.id);
 
-  const { 
-    data: fetchedMessages, 
-    isLoading: isLoadingMessages, 
-    error: messagesError 
+  const {
+    data: fetchedMessages,
+    isLoading: isLoadingMessages,
+    error: messagesError
   } = useConversationMessages(user?.id, activeConversationId || undefined);
   const invalidateMessages = useInvalidateMessages();
 
@@ -349,11 +349,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               <button
                 key={c.id}
                 onClick={() => handleSelectConversation(c.id)}
-                className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-left text-xs transition-all duration-150 truncate touch-target ${
-                  isActive
+                className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-left text-xs transition-all duration-150 truncate touch-target ${isActive
                     ? 'bg-white/[0.06] border border-white/[0.1] text-white font-medium shadow-sm'
                     : 'text-slate-400 hover:bg-white/[0.03] hover:text-slate-200 border border-transparent'
-                }`}
+                  }`}
               >
                 <MessageSquare className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
                 <span className="truncate flex-1 font-medium">{c.title}</span>
@@ -507,11 +506,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                       </div>
                     )}
                     <div
-                      className={`max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed ${
-                        isUser
+                      className={`max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed ${isUser
                           ? 'bg-[#151926] text-slate-100 border border-white/[0.08] shadow-subtle-elevation rounded-tr-sm'
                           : 'bg-[#0e111a]/90 text-slate-200 border border-white/[0.06] shadow-card-elevation rounded-tl-sm backdrop-blur-sm'
-                      }`}
+                        }`}
                     >
                       <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
                       {!isUser && (

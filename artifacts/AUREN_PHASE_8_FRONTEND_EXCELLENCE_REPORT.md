@@ -146,3 +146,4 @@ Test Files  18 passed (18)
 - [x] **Zero database schema modifications:** No migrations or RLS changes executed.
 - [x] **Zero secret leakage:** No API keys, service role secrets, or private tokens committed or exposed.
 - [x] **No unapproved production deployment:** Changes staged locally on `main`; deployment awaiting user approval.
+

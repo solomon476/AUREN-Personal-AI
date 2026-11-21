@@ -87,11 +87,10 @@ export const ProductivityDashboardView: React.FC = () => {
           <span className="text-[10px] text-slate-500">To do &amp; in progress</span>
         </div>
 
-        <div className={`p-4.5 rounded-2xl border shadow-subtle-elevation ${
-          dashboard.overdue_tasks_count > 0
-            ? 'bg-rose-950/20 border-rose-900/50 text-rose-300'
-            : 'bg-[#0e1017]/70 border-white/[0.06]'
-        }`}>
+        <div className={`p-4.5 rounded-2xl border shadow-subtle-elevation ${dashboard.overdue_tasks_count > 0
+          ? 'bg-rose-950/20 border-rose-900/50 text-rose-300'
+          : 'bg-[#0e1017]/70 border-white/[0.06]'
+          }`}>
           <div className="flex items-center justify-between text-xs mb-1.5">
             <span className={dashboard.overdue_tasks_count > 0 ? 'text-rose-400 font-medium' : 'text-slate-400'}>
               Overdue Tasks
