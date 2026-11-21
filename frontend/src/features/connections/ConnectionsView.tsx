@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Power,
+  Loader2,
 } from 'lucide-react';
 import { Connection, connectionsApi } from '../../api/connections';
 
@@ -29,6 +30,8 @@ export const ConnectionsView: React.FC = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteDisplayName, setInviteDisplayName] = useState('');
   const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [hasCopiedCode, setHasCopiedCode] = useState(false);
 
   // Accept invite input
@@ -48,10 +51,11 @@ export const ConnectionsView: React.FC = () => {
     setIsLoading(true);
     try {
       const res = await connectionsApi.list();
-      setConnections(res.items || []);
+      const list = res.items || [];
+      setConnections(list);
 
       // Check if current user has an active sharing session
-      const activeShare = res.items.find((c) => c.location_sharing_active);
+      const activeShare = list.find((c) => c.location_sharing_active);
       if (activeShare && activeShare.location_sharing_expires_at) {
         setIsSharingLocation(true);
         setSharingExpiresAt(activeShare.location_sharing_expires_at);
@@ -65,6 +69,13 @@ export const ConnectionsView: React.FC = () => {
 
   useEffect(() => {
     loadConnections();
+
+    // Check if an invitation code was passed in the URL (e.g. /connections?invite=aur_12345678)
+    const params = new URLSearchParams(window.location.search);
+    const inviteParam = params.get('invite') || params.get('code');
+    if (inviteParam) {
+      setIncomingCode(inviteParam.trim());
+    }
   }, [loadConnections]);
 
   // Handle live device location broadcast when voluntary sharing is active
@@ -120,14 +131,19 @@ export const ConnectionsView: React.FC = () => {
   // Create connection invite
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteDisplayName.trim()) return;
+    if (!inviteDisplayName.trim() || isCreatingInvite) return;
 
+    setIsCreatingInvite(true);
+    setInviteError(null);
     try {
       const conn = await connectionsApi.createInvite(inviteDisplayName.trim());
       setCreatedInviteCode(conn.invite_code);
       await loadConnections();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create invite', err);
+      setInviteError(err?.message || 'Failed to generate invitation code. Please try again.');
+    } finally {
+      setIsCreatingInvite(false);
     }
   };
 
@@ -237,12 +253,53 @@ export const ConnectionsView: React.FC = () => {
             onClick={() => {
               setShowInviteModal(true);
               setCreatedInviteCode(null);
+              setInviteDisplayName('');
+              setInviteError(null);
             }}
             className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-black font-semibold text-xs transition shadow-md shadow-amber-500/20 cursor-pointer"
           >
             <UserPlus className="w-3.5 h-3.5" />
             <span>Invite Connection</span>
           </button>
+        </div>
+      </div>
+
+      {/* 3-Step Quick Guide */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="p-3.5 rounded-2xl bg-[#0e111a] border border-white/[0.08] flex items-start space-x-3">
+          <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">
+            1
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-white">Generate Invite</h4>
+            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+              Tap &quot;Invite Connection&quot; above, enter a name, and get your private invite link & QR code.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#0e111a] border border-white/[0.08] flex items-start space-x-3">
+          <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">
+            2
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-white">Friend Accepts</h4>
+            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+              Send the code or link to your friend. They enter it in the box below to mutually connect.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#0e111a] border border-white/[0.08] flex items-start space-x-3">
+          <div className="w-7 h-7 rounded-xl bg-emerald-500/10 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
+            3
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-white">Live GPS Tracking</h4>
+            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+              Go to GPS Journeys and tap the Share button. Both of you will see each other live on the map!
+            </p>
+          </div>
         </div>
       </div>
 
@@ -532,32 +589,64 @@ export const ConnectionsView: React.FC = () => {
                   <input
                     type="text"
                     value={inviteDisplayName}
-                    onChange={(e) => setInviteDisplayName(e.target.value)}
+                    onChange={(e) => {
+                      setInviteDisplayName(e.target.value);
+                      if (inviteError) setInviteError(null);
+                    }}
                     placeholder="e.g. Elena Rostova or Partner"
                     required
+                    disabled={isCreatingInvite}
                     className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-slate-500 focus:border-amber-400 focus:outline-none"
                   />
                 </div>
 
+                {inviteError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+                    <span>{inviteError}</span>
+                  </div>
+                )}
+
                 <div className="flex justify-end space-x-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => setShowInviteModal(false)}
+                    onClick={() => {
+                      setShowInviteModal(false);
+                      setInviteError(null);
+                    }}
+                    disabled={isCreatingInvite}
                     className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-slate-300 font-medium transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={!inviteDisplayName.trim()}
-                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-semibold transition cursor-pointer"
+                    disabled={!inviteDisplayName.trim() || isCreatingInvite}
+                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-xs font-semibold transition cursor-pointer shadow-md shadow-amber-500/20"
                   >
-                    Generate Invite
+                    {isCreatingInvite ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Generating...</span>
+                      </>
+                    ) : (
+                      <span>Generate Invite</span>
+                    )}
                   </button>
                 </div>
               </form>
             ) : (
               <div className="space-y-4 text-center pt-2">
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-left text-xs text-emerald-300 space-y-1">
+                  <p className="font-semibold text-white flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Invitation Created!</span>
+                  </p>
+                  <p className="text-[11px] text-slate-300">
+                    Share this unique code or link with your connection. Once accepted, you both can track each other live on the GPS map.
+                  </p>
+                </div>
+
                 {/* Visual QR Code Representation */}
                 <div className="my-2">{renderQrSvg(createdInviteCode)}</div>
 
@@ -568,14 +657,18 @@ export const ConnectionsView: React.FC = () => {
                 <div className="flex items-center justify-center space-x-2">
                   <button
                     onClick={() => copyInviteToClipboard(createdInviteCode)}
-                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs transition cursor-pointer"
+                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs transition cursor-pointer shadow-md shadow-amber-500/20"
                   >
                     {hasCopiedCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{hasCopiedCode ? 'Copied Invite Link!' : 'Copy Link'}</span>
                   </button>
 
                   <button
-                    onClick={() => setShowInviteModal(false)}
+                    onClick={() => {
+                      setShowInviteModal(false);
+                      setCreatedInviteCode(null);
+                      setInviteDisplayName('');
+                    }}
                     className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-xs transition cursor-pointer"
                   >
                     Done

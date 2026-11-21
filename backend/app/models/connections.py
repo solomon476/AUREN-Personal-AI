@@ -75,7 +75,8 @@ class ConnectionResponse(BaseModel):
 class ConnectionListResponse(BaseModel):
     """API view for connections list."""
 
-    active_connections: List[ConnectionResponse]
-    pending_requests: List[ConnectionResponse]
-    total: int
+    active_connections: List[ConnectionResponse] = Field(default_factory=list)
+    pending_requests: List[ConnectionResponse] = Field(default_factory=list)
+    items: List[ConnectionResponse] = Field(default_factory=list)
+    total: int = 0
 

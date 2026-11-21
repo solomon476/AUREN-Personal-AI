@@ -55,9 +55,11 @@ async def list_connections(
         elif item.status == "pending":
             pending.append(resp)
 
+    all_connections = active + pending
     return ConnectionListResponse(
         active_connections=active,
         pending_requests=pending,
+        items=all_connections,
         total=len(items),
     )
 
