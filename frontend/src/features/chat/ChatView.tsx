@@ -330,7 +330,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   };
 
   useEffect(() => {
-    if (isAtBottomRef.current) {
+    if (isAtBottomRef.current && (messages.length > 0 || streamingContent)) {
       scrollToBottom(isStreaming);
     }
   }, [messages, streamingContent, reconnectStatus, isStreaming]);
@@ -775,7 +775,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               <span>Loading messages...</span>
             </div>
           ) : messages.length === 0 && !streamingContent ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-4 sm:p-6 space-y-4 sm:space-y-5">
+            <div className="flex-1 min-h-[220px] flex flex-col items-center justify-center text-center p-4 sm:p-6 space-y-4 sm:space-y-5">
               <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-sm">
                 <Bot className="h-7 w-7 sm:h-8 sm:w-8 text-emerald-600" />
               </div>
