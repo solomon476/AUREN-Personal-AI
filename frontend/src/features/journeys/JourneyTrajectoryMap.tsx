@@ -2,7 +2,10 @@
  * Interactive World Map & Offline Vector Trajectory for AUREN GPS Journeys.
  *
  * Capabilities:
- * - Real World Map: Interactive OpenStreetMap / CartoDB Street tiles & Esri Satellite imagery.
+ * - Real World Map: Interactive OpenStreetMap Standard & Esri Satellite imagery.
+ * - Destination Navigation: Plots target destination (e.g. Kisii), draws route trajectory,
+ *   calculates remaining distance and estimated time of arrival (ETA).
+ * - Peer Connections on Map: Displays live positions of connected friends/team members sharing location.
  * - Offline Resilient: Graceful one-click fallback to 2D vector radar trail when offline.
  * - Live GPS Telemetry: Polyline route tracking, start marker, live pulsing current fix,
  *   and satellite precision accuracy rings.
@@ -22,15 +25,36 @@ import {
   ZoomOut,
   Radio,
   Globe,
+  Flag,
+  Users,
 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 export type MapMode = 'streets' | 'satellite' | 'radar';
 
+export interface JourneyDestination {
+  name: string;
+  displayName: string;
+  lat: number;
+  lng: number;
+  distanceMeters?: number;
+}
+
+export interface PeerLocation {
+  id: string;
+  displayName: string;
+  avatarInitials: string;
+  lat: number;
+  lng: number;
+  lastUpdated?: string | null;
+}
+
 interface JourneyTrajectoryMapProps {
   points: GPSPoint[];
   currentLocation?: GPSPoint | null;
+  destination?: JourneyDestination | null;
+  peerLocations?: PeerLocation[];
   height?: number;
   className?: string;
   showControls?: boolean;
@@ -48,14 +72,16 @@ const TILE_SERVERS = {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: 'Tiles &copy; Esri &bull; Source: USGS, NOAA',
     maxZoom: 19,
-    maxNativeZoom: 17, // Stretches tiles at deep zoom levels to eliminate "Map data not yet available" placeholders
+    maxNativeZoom: 17, // Stretches tiles cleanly at deep zoom to eliminate "Map data not yet available" placeholders
   },
 };
 
 export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
   points,
   currentLocation,
-  height = 320,
+  destination,
+  peerLocations = [],
+  height = 340,
   className = '',
   showControls = true,
   initialMode = 'streets',
@@ -68,9 +94,12 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
+  const destinationLineRef = useRef<L.Polyline | null>(null);
+  const destinationMarkerRef = useRef<L.Marker | null>(null);
   const startMarkerRef = useRef<L.Marker | null>(null);
   const currentMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
+  const peerMarkersMapRef = useRef<Map<string, L.Marker>>(new Map());
   const hasAutoCenteredRef = useRef(false);
 
   // Combine recorded points with current fix for calculations
@@ -80,12 +109,13 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
     return points;
   }, [points, currentLocation]);
 
-  // Determine initial center and zoom
+  // Determine initial center
   const centerCoords = useMemo<[number, number]>(() => {
     if (currentLocation) return [currentLocation.lat, currentLocation.lng];
     if (points.length > 0) return [points[points.length - 1].lat, points[points.length - 1].lng];
-    return [0, 20]; // Default global view
-  }, [currentLocation, points]);
+    if (destination) return [destination.lat, destination.lng];
+    return [-1.286389, 36.817223]; // Default to Kenya / East Africa center if unlocated
+  }, [currentLocation, points, destination]);
 
   // -------------------------------------------------------------------------
   // 1. Initialize Leaflet Map Instance
@@ -95,7 +125,7 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
 
     try {
       if (!mapInstanceRef.current) {
-        const initialZoom = points.length > 0 || currentLocation ? 16 : 3;
+        const initialZoom = points.length > 0 || currentLocation ? 15 : destination ? 11 : 6;
         const map = L.map(mapContainerRef.current, {
           center: centerCoords,
           zoom: initialZoom,
@@ -122,9 +152,12 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
         mapInstanceRef.current = null;
         tileLayerRef.current = null;
         polylineRef.current = null;
+        destinationLineRef.current = null;
+        destinationMarkerRef.current = null;
         startMarkerRef.current = null;
         currentMarkerRef.current = null;
         accuracyCircleRef.current = null;
+        peerMarkersMapRef.current.clear();
         setIsMapReady(false);
       }
     };
@@ -132,7 +165,7 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
 
   // If no points or fix exist, attempt browser geolocation to center near user
   useEffect(() => {
-    if (points.length === 0 && !currentLocation && typeof window !== 'undefined' && 'geolocation' in navigator) {
+    if (points.length === 0 && !currentLocation && !destination && typeof window !== 'undefined' && 'geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           if (!hasAutoCenteredRef.current && mapInstanceRef.current) {
@@ -144,7 +177,7 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
         { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
       );
     }
-  }, [points.length, currentLocation, isMapReady]);
+  }, [points.length, currentLocation, destination, isMapReady]);
 
   // -------------------------------------------------------------------------
   // 2. Handle Tile Layer Switching (Streets vs Satellite)
@@ -180,7 +213,7 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
   }, [mapMode, isMapReady]);
 
   // -------------------------------------------------------------------------
-  // 3. Update Markers, Accuracy Circle, and Polyline
+  // 3. Update Markers, Accuracy Circle, Trajectory and Destination
   // -------------------------------------------------------------------------
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -189,7 +222,7 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
     try {
       const latLngs: L.LatLngExpression[] = allPoints.map((p) => [p.lat, p.lng]);
 
-      // Route Polyline
+      // Route Trajectory Polyline (Emerald)
       if (latLngs.length > 0) {
         if (!polylineRef.current) {
           polylineRef.current = L.polyline(latLngs, {
@@ -204,7 +237,7 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
         }
       }
 
-      // Start Marker
+      // Start Marker (Origin)
       if (allPoints.length > 0) {
         const startPoint = allPoints[0];
         const startLatLng: [number, number] = [startPoint.lat, startPoint.lng];
@@ -288,29 +321,169 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
 
         // Auto center on initial load if not previously centered
         if (!hasAutoCenteredRef.current) {
-          map.setView(currLatLng, Math.max(map.getZoom(), 16), { animate: true });
+          map.setView(currLatLng, Math.max(map.getZoom(), 15), { animate: true });
           hasAutoCenteredRef.current = true;
         }
       }
+
+      // ---------------------------------------------------------------------
+      // Destination Marker & Projected Travel Line (e.g. to Kisii)
+      // ---------------------------------------------------------------------
+      if (destination) {
+        const destLatLng: [number, number] = [destination.lat, destination.lng];
+
+        if (!destinationMarkerRef.current) {
+          const destIcon = L.divIcon({
+            className: 'auren-destination-marker',
+            html: `
+              <div style="
+                width: 28px;
+                height: 28px;
+                border-radius: 10px;
+                background: #d97706;
+                border: 2px solid #ffffff;
+                box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #ffffff;
+                font-size: 14px;
+              ">🏁</div>
+            `,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+          });
+
+          destinationMarkerRef.current = L.marker(destLatLng, { icon: destIcon, title: destination.name })
+            .bindTooltip(`Destination: ${destination.name}`, { direction: 'top', offset: [0, -14] })
+            .addTo(map);
+        } else {
+          destinationMarkerRef.current.setLatLng(destLatLng);
+          destinationMarkerRef.current.setTooltipContent(`Destination: ${destination.name}`);
+        }
+
+        // Draw projected navigation line connecting current position to destination
+        const originForDest = currentLocation
+          ? [currentLocation.lat, currentLocation.lng]
+          : allPoints.length > 0
+          ? [allPoints[allPoints.length - 1].lat, allPoints[allPoints.length - 1].lng]
+          : null;
+
+        if (originForDest) {
+          const navPath: L.LatLngExpression[] = [originForDest as [number, number], destLatLng];
+          if (!destinationLineRef.current) {
+            destinationLineRef.current = L.polyline(navPath, {
+              color: '#d97706',
+              weight: 3.5,
+              dashArray: '6, 8',
+              opacity: 0.85,
+            }).addTo(map);
+          } else {
+            destinationLineRef.current.setLatLngs(navPath);
+          }
+        }
+      } else {
+        if (destinationMarkerRef.current) {
+          map.removeLayer(destinationMarkerRef.current);
+          destinationMarkerRef.current = null;
+        }
+        if (destinationLineRef.current) {
+          map.removeLayer(destinationLineRef.current);
+          destinationLineRef.current = null;
+        }
+      }
+
+      // ---------------------------------------------------------------------
+      // Connected Peers Live Location Markers
+      // ---------------------------------------------------------------------
+      const currentPeerIds = new Set(peerLocations.map((p) => p.id));
+
+      // Remove markers for peers no longer present
+      peerMarkersMapRef.current.forEach((marker, id) => {
+        if (!currentPeerIds.has(id)) {
+          map.removeLayer(marker);
+          peerMarkersMapRef.current.delete(id);
+        }
+      });
+
+      // Add or update peer markers
+      peerLocations.forEach((peer) => {
+        const peerLatLng: [number, number] = [peer.lat, peer.lng];
+        const existingMarker = peerMarkersMapRef.current.get(peer.id);
+
+        if (!existingMarker) {
+          const peerIcon = L.divIcon({
+            className: 'auren-peer-marker',
+            html: `
+              <div style="
+                position: relative;
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                background: #4f46e5;
+                border: 2.5px solid #ffffff;
+                box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+                font-family: sans-serif;
+              ">
+                ${peer.avatarInitials || 'P'}
+                <div style="
+                  position: absolute;
+                  bottom: -1px;
+                  right: -1px;
+                  width: 9px;
+                  height: 9px;
+                  border-radius: 50%;
+                  background: #10b981;
+                  border: 1.5px solid #ffffff;
+                "></div>
+              </div>
+            `,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+          });
+
+          const newMarker = L.marker(peerLatLng, { icon: peerIcon, title: peer.displayName })
+            .bindTooltip(`${peer.displayName} (Trusted Connection)`, { direction: 'top', offset: [0, -16] })
+            .addTo(map);
+
+          peerMarkersMapRef.current.set(peer.id, newMarker);
+        } else {
+          existingMarker.setLatLng(peerLatLng);
+          existingMarker.setTooltipContent(`${peer.displayName} (Trusted Connection)`);
+        }
+      });
     } catch (err) {
-      console.warn('[AUREN Map] Marker update warning:', err);
+      console.warn('[AUREN Map] Map update warning:', err);
     }
-  }, [allPoints, currentLocation, isMapReady, mapMode]);
+  }, [allPoints, currentLocation, destination, peerLocations, isMapReady, mapMode]);
 
   // Center on current location
   const handleCenterOnMe = () => {
     const map = mapInstanceRef.current;
     if (!map || !currentLocation) return;
-    map.setView([currentLocation.lat, currentLocation.lng], 17, { animate: true });
+    map.setView([currentLocation.lat, currentLocation.lng], 16, { animate: true });
   };
 
-  // Fit all journey waypoints within view
+  // Fit all journey waypoints, destination, and peers in view
   const handleFitBounds = () => {
     const map = mapInstanceRef.current;
-    if (!map || allPoints.length === 0) return;
-    const latLngs: L.LatLngExpression[] = allPoints.map((p) => [p.lat, p.lng]);
-    const bounds = L.latLngBounds(latLngs);
-    map.fitBounds(bounds, { padding: [35, 35], maxZoom: 18, animate: true });
+    if (!map) return;
+
+    const boundsLatLngs: L.LatLngExpression[] = allPoints.map((p) => [p.lat, p.lng]);
+    if (currentLocation) boundsLatLngs.push([currentLocation.lat, currentLocation.lng]);
+    if (destination) boundsLatLngs.push([destination.lat, destination.lng]);
+    peerLocations.forEach((p) => boundsLatLngs.push([p.lat, p.lng]));
+
+    if (boundsLatLngs.length === 0) return;
+
+    const bounds = L.latLngBounds(boundsLatLngs);
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17, animate: true });
   };
 
   const handleZoomIn = () => {
@@ -542,10 +715,9 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
                 <button
                   type="button"
                   onClick={handleFitBounds}
-                  disabled={allPoints.length === 0}
-                  className="w-8 h-8 rounded-xl bg-white/95 backdrop-blur-md border border-slate-200/90 shadow-sm flex items-center justify-center text-slate-700 hover:text-emerald-600 hover:bg-white transition cursor-pointer disabled:opacity-40"
-                  title="Fit entire journey route"
-                  aria-label="Fit entire journey route"
+                  className="w-8 h-8 rounded-xl bg-white/95 backdrop-blur-md border border-slate-200/90 shadow-sm flex items-center justify-center text-slate-700 hover:text-emerald-600 hover:bg-white transition cursor-pointer"
+                  title="Fit entire journey and destination"
+                  aria-label="Fit entire journey and destination"
                 >
                   <Maximize2 className="w-4 h-4" />
                 </button>
@@ -580,7 +752,7 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
             )}
           </div>
 
-          {/* Bottom-Left: Live GPS Telemetry Pill */}
+          {/* Bottom-Left: Live GPS Telemetry & Active Indicators */}
           <div className="absolute bottom-3 left-3 z-[400] flex items-center space-x-1.5 flex-wrap gap-y-1">
             <div className="px-2.5 py-1 rounded-lg bg-white/95 backdrop-blur-md border border-slate-200/90 text-[10px] font-mono text-emerald-700 font-bold flex items-center space-x-1.5 shadow-xs">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -590,6 +762,20 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
             {currentLocation && (
               <div className="px-2.5 py-1 rounded-lg bg-white/95 backdrop-blur-md border border-slate-200/90 text-[10px] font-mono text-slate-700 shadow-xs">
                 &plusmn;{Math.round(currentLocation.accuracy)}m GPS ACCURACY
+              </div>
+            )}
+
+            {destination && (
+              <div className="px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[10px] font-mono font-bold flex items-center space-x-1 shadow-xs">
+                <Flag className="w-3 h-3 fill-white" />
+                <span>TO: {destination.name}</span>
+              </div>
+            )}
+
+            {peerLocations.length > 0 && (
+              <div className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-[10px] font-mono font-bold flex items-center space-x-1 shadow-xs">
+                <Users className="w-3 h-3" />
+                <span>{peerLocations.length} PEER{peerLocations.length > 1 ? 'S' : ''} ON MAP</span>
               </div>
             )}
 

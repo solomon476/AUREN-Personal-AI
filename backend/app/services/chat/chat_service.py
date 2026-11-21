@@ -295,15 +295,31 @@ class ChatService:
                         yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
                         return
 
-                # State 2: PROCESSING -> reject duplicate in-flight request
+                # State 2: PROCESSING -> check if genuinely in-flight or orphaned/stale
                 if existing_req.status == "processing":
-                    logger.warning("Duplicate request while key=%s is still processing", request.idempotency_key)
-                    error_event = {
-                        "detail": "A request with this idempotency key is already in progress. Please wait for it to complete.",
-                        "code": "idempotency_in_flight",
-                    }
-                    yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
-                    return
+                    is_stale = False
+                    if existing_req.created_at:
+                        now_utc = datetime.now(timezone.utc)
+                        req_time = existing_req.created_at
+                        if req_time.tzinfo is None:
+                            req_time = req_time.replace(tzinfo=timezone.utc)
+                        age_seconds = (now_utc - req_time).total_seconds()
+                        if age_seconds > 20:
+                            is_stale = True
+
+                    if not is_stale:
+                        logger.warning("Duplicate request while key=%s is still processing", request.idempotency_key)
+                        error_event = {
+                            "detail": "A request with this idempotency key is already in progress. Please wait for it to complete.",
+                            "code": "idempotency_in_flight",
+                        }
+                        yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+                        return
+                    else:
+                        logger.info("Auto-reclaiming stale in-flight request key=%s after %ss", request.idempotency_key, age_seconds)
+                        await repo.update_chat_request_status(user.id, request.idempotency_key, status="interrupted")
+                        is_retry = True
+                        retry_assistant_msg_id = existing_req.assistant_message_id
 
                 # State 3 & 4: FAILED or INTERRUPTED -> deliberate retry / recovery
                 if existing_req.status in ("failed", "interrupted"):

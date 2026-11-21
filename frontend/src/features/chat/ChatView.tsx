@@ -559,10 +559,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
 
   const handleRetry = async () => {
     if (!pendingRetry || isStreaming) return;
+    const retryKey = `req-${crypto.randomUUID()}`;
     await executeChatStream(
       pendingRetry.message,
       pendingRetry.conversationId,
-      pendingRetry.idempotencyKey,
+      retryKey,
       0,
       pendingRetry.attachments,
     );
