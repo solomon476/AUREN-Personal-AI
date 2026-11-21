@@ -31,9 +31,9 @@ export const UserProfileMenu: React.FC = () => {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-left transition focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+        className="flex items-center space-x-2.5 px-3 py-1.5 rounded-xl bg-[#0e111a] hover:bg-[#141722] border border-white/[0.08] text-left transition focus:outline-none focus:ring-2 focus:ring-champagne-400/50"
       >
-        <div className="h-7 w-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white font-bold text-xs shadow-md">
+        <div className="h-7 w-7 rounded-lg bg-[#141722] border border-champagne-400/30 flex items-center justify-center text-champagne-300 font-bold text-xs shadow-sm">
           {initial}
         </div>
         <div className="hidden sm:block text-xs">
@@ -44,8 +44,8 @@ export const UserProfileMenu: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-          <div className="px-4 py-2 border-b border-slate-800">
+        <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[#0e111a] border border-white/[0.08] shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="px-4 py-2 border-b border-white/[0.06]">
             <p className="text-xs font-semibold text-white truncate">{displayName}</p>
             <p className="text-[11px] text-slate-400 truncate mt-0.5">{displayEmail}</p>
             <div className="mt-2 flex items-center space-x-1.5 text-[10px] text-indigo-400 bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-900/60 w-fit">

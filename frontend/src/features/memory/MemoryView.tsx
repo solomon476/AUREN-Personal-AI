@@ -223,7 +223,7 @@ export const MemoryView: React.FC = () => {
           </div>
           <button
             onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center justify-center px-4 py-2.5 min-h-[44px] rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all duration-200 self-start sm:self-auto touch-target cursor-pointer"
+            className="inline-flex items-center justify-center px-4 py-2.5 min-h-[44px] rounded-xl bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] text-xs font-semibold shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] transition-all duration-200 self-start sm:self-auto touch-target cursor-pointer"
           >
             <Plus className="w-4 h-4 mr-1.5" />
             Add Memory
@@ -311,7 +311,7 @@ export const MemoryView: React.FC = () => {
               setSelectedLifecycle(e.target.value);
               setPage(1);
             }}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition min-h-[42px]"
+            className="bg-[#07080c]/80 border border-white/[0.08] rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-champagne-500/50 transition min-h-[42px]"
             aria-label="Filter by lifecycle status"
           >
             <option value="active">Active Only</option>
@@ -325,7 +325,7 @@ export const MemoryView: React.FC = () => {
           {hasActiveFilters && (
             <button
               onClick={handleResetFilters}
-              className="text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-slate-800 border border-slate-800 transition"
+              className="text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-white/[0.06] border border-white/[0.08] transition"
             >
               Reset Filters
             </button>
@@ -337,7 +337,7 @@ export const MemoryView: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
         {isLoading && (
           <div className="py-24 flex flex-col items-center justify-center space-y-3 text-slate-400">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+            <Loader2 className="w-8 h-8 animate-spin text-champagne-400" />
             <p className="text-xs">Loading memories...</p>
           </div>
         )}
@@ -350,7 +350,7 @@ export const MemoryView: React.FC = () => {
             </p>
             <button
               onClick={() => refetch()}
-              className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-white transition"
+              className="px-3.5 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-xs text-white transition"
             >
               Retry
             </button>
@@ -359,8 +359,8 @@ export const MemoryView: React.FC = () => {
 
         {!isLoading && !isError && data && data.items.length === 0 && (
           <div className="py-24 text-center space-y-3 max-w-md mx-auto">
-            <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 inline-block text-slate-500 shadow-sm">
-              <Brain className="w-8 h-8" />
+            <div className="p-3.5 rounded-2xl bg-[#0e111a] border border-white/[0.08] inline-block text-slate-500 shadow-sm">
+              <Brain className="w-8 h-8 text-champagne-400/60" />
             </div>
             <h3 className="text-base font-semibold text-white tracking-tight">No memories found</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
@@ -371,7 +371,7 @@ export const MemoryView: React.FC = () => {
             {hasActiveFilters && (
               <button
                 onClick={handleResetFilters}
-                className="inline-flex items-center px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-indigo-300 border border-slate-700 transition"
+                className="inline-flex items-center px-3.5 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-xs text-champagne-300 border border-white/[0.08] transition"
               >
                 Clear all filters
               </button>
@@ -624,7 +624,7 @@ export const MemoryView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={createMutation.isPending}
-                  className="inline-flex items-center px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition cursor-pointer"
+                  className="inline-flex items-center px-4 py-1.5 rounded-lg bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] text-xs font-semibold shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] transition cursor-pointer"
                 >
                   {createMutation.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
                   Save Confirmed Memory

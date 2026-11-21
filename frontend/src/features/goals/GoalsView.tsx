@@ -95,7 +95,7 @@ export const GoalsView: React.FC = () => {
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center justify-center space-x-2 px-4 py-2.5 min-h-[44px] bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-indigo-600/20 self-start md:self-auto touch-target cursor-pointer"
+          className="flex items-center justify-center space-x-2 px-4 py-2.5 min-h-[44px] bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] text-xs font-semibold rounded-xl transition-all shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] self-start md:self-auto touch-target cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>New Goal</span>
@@ -214,11 +214,11 @@ export const GoalsView: React.FC = () => {
                     <div className="mt-4 pt-3 border-t border-white/[0.06]">
                       <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
                         <span className="text-slate-400">{currentVal} / {targetVal} {goal.unit || '%'}</span>
-                        <span className="text-purple-400 font-mono font-semibold">{percent}%</span>
+                        <span className="text-champagne-300 font-mono font-semibold">{percent}%</span>
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-[#07080c] overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-300"
+                          className="h-full bg-champagne-400 rounded-full transition-all duration-300 shadow-sm"
                           style={{ width: `${percent}%` }}
                         />
                       </div>

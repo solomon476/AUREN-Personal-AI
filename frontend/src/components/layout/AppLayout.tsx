@@ -61,23 +61,25 @@ export const AppLayout: React.FC = () => {
       {/* Main Execution View */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Subtle Ambient Background Gradient */}
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.06),rgba(255,255,255,0))]" />
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(215,186,131,0.04),rgba(255,255,255,0))]" />
 
         {/* Mobile Header Bar */}
-        <header className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-slate-800/80 bg-slate-950/95 backdrop-blur-md z-30 pt-[env(safe-area-inset-top,0.5rem)]">
+        <header className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06] bg-[#07080c]/95 backdrop-blur-md z-30 pt-[env(safe-area-inset-top,0.5rem)]">
           <div className="flex items-center space-x-2.5">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 border border-slate-800/80 touch-target flex items-center justify-center transition"
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.04] border border-white/[0.08] touch-target flex items-center justify-center transition"
               aria-label="Open navigation menu"
             >
               <Menu className="h-5 w-5" />
             </button>
             <Link to="/home" className="flex items-center space-x-2">
-              <div className="h-7 w-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-sky-500 p-0.5 flex items-center justify-center text-white shadow-sm">
-                <Bot className="h-4 w-4 text-white" />
+              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#d7ba83] via-[#be8c42] to-[#6c4327] p-0.5 flex items-center justify-center text-white shadow-sm">
+                <div className="w-full h-full bg-[#07080c] rounded-[6px] flex items-center justify-center">
+                  <Bot className="h-3.5 w-3.5 text-champagne-300" />
+                </div>
               </div>
-              <span className="text-sm font-extrabold tracking-widest bg-gradient-to-r from-slate-100 via-sky-200 to-indigo-200 bg-clip-text text-transparent">
+              <span className="text-sm font-extrabold tracking-[0.16em] text-white">
                 AUREN
               </span>
             </Link>
@@ -86,20 +88,20 @@ export const AppLayout: React.FC = () => {
           <div className="flex items-center space-x-2">
             <Link
               to="/search"
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 border border-slate-800/80 touch-target flex items-center justify-center transition"
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.04] border border-white/[0.08] touch-target flex items-center justify-center transition"
               aria-label="Search"
             >
               <Search className="h-4 w-4" />
             </Link>
 
             {isLoading ? (
-              <div className="h-7 w-16 bg-slate-800/50 rounded-xl animate-pulse" />
+              <div className="h-7 w-16 bg-white/[0.04] rounded-xl animate-pulse" />
             ) : user ? (
               <UserProfileMenu />
             ) : (
               <button
                 onClick={() => openAuth('signin')}
-                className="px-3.5 py-1.5 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl shadow-sm transition"
+                className="px-3.5 py-1.5 text-xs font-semibold bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] rounded-xl shadow-sm transition"
               >
                 Sign In
               </button>

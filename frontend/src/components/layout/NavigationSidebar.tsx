@@ -163,7 +163,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             <div className="flex items-center space-x-2.5">
               <Icon
                 className={`h-4 w-4 transition-colors ${
-                  active ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-200'
+                  active ? 'text-champagne-300' : 'text-slate-400 group-hover:text-slate-200'
                 }`}
               />
               <span className="tracking-tight">{item.label}</span>
@@ -172,14 +172,14 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               <span
                 className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border transition-colors ${
                   active
-                    ? 'bg-indigo-950/90 text-indigo-300 border-indigo-700/60'
+                    ? 'bg-champagne-950/80 text-champagne-300 border-champagne-700/50'
                     : item.badgeColor
                 }`}
               >
                 {item.badge}
               </span>
             ) : active ? (
-              <span className="w-1.5 h-1.5 rounded-full bg-champagne-300/80 shadow-glow-champagne" />
+              <span className="w-1.5 h-1.5 rounded-full bg-champagne-400 shadow-[0_0_8px_rgba(215,186,131,0.6)]" />
             ) : null}
           </Link>
         );
@@ -188,18 +188,18 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   );
 
   return (
-    <aside className="w-64 bg-slate-950/95 border-r border-slate-800/80 flex flex-col h-full select-none backdrop-blur-md">
+    <aside className="w-64 bg-[#07080c]/95 border-r border-white/[0.06] flex flex-col h-full select-none backdrop-blur-md">
       {/* Brand Header */}
-      <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
+      <div className="p-4 border-b border-white/[0.06] flex items-center justify-between">
         <Link to="/home" onClick={onNavigate} className="flex items-center space-x-2.5 group">
-          <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-sky-500 to-champagne-300 p-0.5 flex items-center justify-center text-white shadow-md shadow-indigo-600/20 group-hover:scale-105 transition-transform duration-200">
-            <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-              <Bot className="h-4 w-4 text-indigo-400 group-hover:text-champagne-300 transition-colors" />
+          <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-[#d7ba83] via-[#be8c42] to-[#6c4327] p-0.5 flex items-center justify-center text-white shadow-md shadow-[#d7ba83]/10 group-hover:scale-105 transition-transform duration-200">
+            <div className="w-full h-full bg-[#07080c] rounded-[10px] flex items-center justify-center">
+              <Bot className="h-4 w-4 text-champagne-300 group-hover:text-[#e6d4b0] transition-colors" />
             </div>
           </div>
           <div className="flex flex-col">
             <div className="flex items-center">
-              <span className="text-base font-extrabold tracking-widest bg-gradient-to-r from-slate-100 via-sky-200 to-indigo-200 bg-clip-text text-transparent">
+              <span className="text-base font-extrabold tracking-[0.18em] text-white">
                 AUREN
               </span>
               <span className="ml-1.5 text-[8px] text-champagne-300 uppercase tracking-widest font-semibold px-1 py-0.2 bg-champagne-950/70 rounded border border-champagne-800/40">
@@ -239,23 +239,23 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       </div>
 
       {/* Persistent User Account Footer */}
-      <div className="p-3 border-t border-slate-800/80 bg-slate-950/90">
+      <div className="p-3 border-t border-white/[0.06] bg-[#07080c]/90">
         {isLoading ? (
-          <div className="h-10 w-full rounded-xl bg-slate-800/40 animate-pulse border border-slate-800/50" />
+          <div className="h-10 w-full rounded-xl bg-white/[0.04] animate-pulse border border-white/[0.05]" />
         ) : user ? (
           <UserProfileMenu />
         ) : (
           <div className="space-y-2">
             <button
               onClick={() => onOpenAuth?.('signin')}
-              className="w-full flex items-center justify-center space-x-1.5 py-2 px-3 text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.04] rounded-xl transition border border-slate-800 hover:border-slate-700"
+              className="w-full flex items-center justify-center space-x-1.5 py-2 px-3 text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.04] rounded-xl transition border border-white/[0.08] hover:border-white/[0.14]"
             >
               <LogIn className="h-3.5 w-3.5" />
               <span>Sign In</span>
             </button>
             <button
               onClick={() => onOpenAuth?.('signup')}
-              className="w-full flex items-center justify-center py-2 px-3 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl shadow-md shadow-indigo-600/20 hover:shadow-indigo-600/35 transition"
+              className="w-full flex items-center justify-center py-2 px-3 text-xs font-semibold bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] rounded-xl shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] border border-[#e6d4b0]/40 transition"
             >
               Get Started
             </button>

@@ -315,7 +315,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         <button
           onClick={handleNewConversation}
           disabled={isStreaming || createConversationMutation.isPending}
-          className="w-full flex items-center justify-center space-x-2 py-2.5 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all duration-200 touch-target"
+          className="w-full flex items-center justify-center space-x-2 py-2.5 px-3.5 bg-[#d7ba83] hover:bg-[#e6d4b0] disabled:opacity-50 text-[#07080c] rounded-xl text-xs font-semibold shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] transition-all duration-200 touch-target"
         >
           <Plus className="h-4 w-4" />
           <span className="tracking-wide">New Conversation</span>
@@ -444,8 +444,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           </div>
           <div className="flex items-center space-x-2">
             <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-white/[0.04] text-slate-300 border border-white/[0.08] hidden sm:inline-flex items-center space-x-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></span>
-              <span>Gemini 3.8 Flash &bull; SSE Stream &bull; KaTeX</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-champagne-400 shadow-[0_0_8px_rgba(215,186,131,0.5)]"></span>
+              <span>Gemini Flash &bull; SSE Stream &bull; KaTeX</span>
             </span>
           </div>
         </div>
@@ -502,15 +502,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                     className={`flex items-start space-x-2.5 sm:space-x-3.5 ${isUser ? 'justify-end' : 'justify-start'}`}
                   >
                     {!isUser && (
-                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-gradient-to-tr from-indigo-950 to-slate-900 border border-indigo-500/30 flex items-center justify-center text-champagne-300 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-[#121622] border border-champagne-400/20 flex items-center justify-center text-champagne-300 flex-shrink-0 text-xs mt-0.5 shadow-sm">
                         <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
                     )}
                     <div
                       className={`max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed ${
                         isUser
-                          ? 'bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-700 text-white shadow-subtle-elevation rounded-tr-sm'
-                          : 'bg-white/[0.035] text-slate-200 border border-white/[0.08] shadow-card-elevation rounded-tl-sm backdrop-blur-sm'
+                          ? 'bg-[#151926] text-slate-100 border border-white/[0.08] shadow-subtle-elevation rounded-tr-sm'
+                          : 'bg-[#0e111a]/90 text-slate-200 border border-white/[0.06] shadow-card-elevation rounded-tl-sm backdrop-blur-sm'
                       }`}
                     >
                       <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
@@ -546,10 +546,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               {/* In-Flight Streaming Assistant Bubble */}
               {isStreaming && (
                 <div className="flex items-start space-x-2.5 sm:space-x-3.5 justify-start animate-in fade-in duration-150">
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-gradient-to-tr from-indigo-950 to-slate-900 border border-indigo-500/30 flex items-center justify-center text-champagne-300 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-[#121622] border border-champagne-400/20 flex items-center justify-center text-champagne-300 flex-shrink-0 text-xs mt-0.5 shadow-sm">
                     <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
-                  <div className="max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed bg-white/[0.035] text-slate-200 border border-white/[0.08] shadow-card-elevation rounded-tl-sm backdrop-blur-sm">
+                  <div className="max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed bg-[#0e111a]/90 text-slate-200 border border-white/[0.06] shadow-card-elevation rounded-tl-sm backdrop-blur-sm">
                     {streamingContent ? (
                       <MessageContent content={streamingContent} role="assistant" conversationId={activeConversationId || undefined} />
                     ) : (
@@ -639,7 +639,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 <button
                   type="submit"
                   disabled={!inputValue.trim()}
-                  className="p-2 sm:p-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:opacity-40 text-white rounded-xl transition shadow-md shadow-indigo-600/25 touch-target flex items-center justify-center hover:scale-105 active:scale-95"
+                  className="p-2 sm:p-2.5 bg-champagne-400 hover:bg-champagne-300 disabled:opacity-30 text-slate-950 font-semibold rounded-xl transition shadow-md shadow-champagne-400/20 touch-target flex items-center justify-center hover:scale-105 active:scale-95"
                   title="Send message"
                   aria-label="Send message"
                 >

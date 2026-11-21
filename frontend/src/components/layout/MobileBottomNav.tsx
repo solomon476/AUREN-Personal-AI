@@ -36,16 +36,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           to="/home"
           className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 touch-target ${
             isHomeActive
-              ? 'text-indigo-400 font-semibold'
+              ? 'text-champagne-300 font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           aria-label="Mobile Home"
           aria-current={isHomeActive ? 'page' : undefined}
         >
           <div className="relative">
-            <Home className={`w-5 h-5 transition-transform duration-150 ${isHomeActive ? 'scale-110' : ''}`} />
+            <Home className={`w-5 h-5 transition-transform duration-150 ${isHomeActive ? 'scale-110 text-champagne-300' : ''}`} />
             {isHomeActive && (
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-indigo-400" />
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-champagne-300 shadow-glow-champagne" />
             )}
           </div>
           <span className="text-[10px] tracking-tight mt-1">Home</span>
@@ -56,16 +56,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           to="/chat"
           className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 touch-target ${
             isChatActive
-              ? 'text-indigo-400 font-semibold'
+              ? 'text-champagne-300 font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           aria-label="Mobile Assistant"
           aria-current={isChatActive ? 'page' : undefined}
         >
           <div className="relative">
-            <MessageSquare className={`w-5 h-5 transition-transform duration-150 ${isChatActive ? 'scale-110' : ''}`} />
+            <MessageSquare className={`w-5 h-5 transition-transform duration-150 ${isChatActive ? 'scale-110 text-champagne-300' : ''}`} />
             {isChatActive && (
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-indigo-400" />
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-champagne-300 shadow-glow-champagne" />
             )}
           </div>
           <span className="text-[10px] tracking-tight mt-1">Assistant</span>
@@ -76,16 +76,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           to="/tasks"
           className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 touch-target ${
             isTasksActive
-              ? 'text-indigo-400 font-semibold'
+              ? 'text-champagne-300 font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           aria-label="Mobile Tasks"
           aria-current={isTasksActive ? 'page' : undefined}
         >
           <div className="relative">
-            <CheckSquare className={`w-5 h-5 transition-transform duration-150 ${isTasksActive ? 'scale-110' : ''}`} />
+            <CheckSquare className={`w-5 h-5 transition-transform duration-150 ${isTasksActive ? 'scale-110 text-champagne-300' : ''}`} />
             {isTasksActive && (
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-indigo-400" />
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-champagne-300 shadow-glow-champagne" />
             )}
           </div>
           <span className="text-[10px] tracking-tight mt-1">Tasks</span>
@@ -96,16 +96,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           to="/journal"
           className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 touch-target ${
             isJournalActive
-              ? 'text-indigo-400 font-semibold'
+              ? 'text-champagne-300 font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           aria-label="Mobile Journal"
           aria-current={isJournalActive ? 'page' : undefined}
         >
           <div className="relative">
-            <BookOpen className={`w-5 h-5 transition-transform duration-150 ${isJournalActive ? 'scale-110' : ''}`} />
+            <BookOpen className={`w-5 h-5 transition-transform duration-150 ${isJournalActive ? 'scale-110 text-champagne-300' : ''}`} />
             {isJournalActive && (
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-indigo-400" />
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-champagne-300 shadow-glow-champagne" />
             )}
           </div>
           <span className="text-[10px] tracking-tight mt-1">Journal</span>

@@ -295,6 +295,7 @@ export const SettingsView: React.FC = () => {
                       onChange={(e) => setAiModel(e.target.value)}
                       className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-champagne-500/50 transition"
                     >
+                      <option value="gemini-3.5-flash-lite">Google Gemini 3.5 Flash Lite (Recommended, Blazing Fast &amp; Resilient)</option>
                       <option value="gemini-3.8-flash">Google Gemini 3.8 Flash (Fast, High Intelligence, Native)</option>
                       <option value="gemini-3.8-pro">Google Gemini 3.8 Pro (Deep Reasoning &amp; Complex Analysis)</option>
                       <option value="gemini-2.5-flash">Google Gemini 2.5 Flash (Legacy / Compatible)</option>
@@ -302,7 +303,7 @@ export const SettingsView: React.FC = () => {
                       <option value="gemini-2.0-flash">Google Gemini 2.0 Flash (High Throughput &amp; Low Latency)</option>
                       <option value="mock">Local Development Mock (Offline testing)</option>
                     </select>
-                    {!['gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'mock'].includes(aiModel) && (
+                    {!['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'mock'].includes(aiModel) && (
                       <p className="text-[11px] text-amber-400 mt-1">
                         Currently saved model ({aiModel}) is not supported by the operational Gemini provider. Please select a supported model above.
                       </p>
@@ -467,7 +468,7 @@ export const SettingsView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={updateProfileMutation.isPending}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold transition shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
+                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] text-xs font-semibold transition shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] disabled:opacity-50 cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   <span>Save Changes</span>

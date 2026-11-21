@@ -174,13 +174,13 @@ export const ProductivityDashboardView: React.FC = () => {
         </div>
 
         {/* Upcoming Tasks */}
-        <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800/80 flex flex-col shadow-subtle-elevation">
+        <div className="p-5 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] flex flex-col shadow-subtle-elevation">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center">
-              <Calendar className="w-4 h-4 mr-2 text-indigo-400" />
+              <Calendar className="w-4 h-4 mr-2 text-champagne-400" />
               Upcoming &amp; Priority Tasks
             </h3>
-            <Link to="/tasks" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center">
+            <Link to="/tasks" className="text-xs text-champagne-300 hover:text-champagne-200 flex items-center">
               View all <ArrowRight className="w-3 h-3 ml-1" />
             </Link>
           </div>
@@ -195,7 +195,7 @@ export const ProductivityDashboardView: React.FC = () => {
               {dashboard.upcoming_tasks.map((task) => (
                 <div
                   key={task.id}
-                  className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80 flex items-center justify-between text-xs"
+                  className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between text-xs"
                 >
                   <div className="truncate mr-3">
                     <div className="font-medium text-slate-200 truncate">{task.title}</div>
@@ -211,7 +211,7 @@ export const ProductivityDashboardView: React.FC = () => {
                       {task.project_name && ` · ${task.project_name}`}
                     </div>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700 flex-shrink-0">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#07080c] text-champagne-300 border border-white/[0.08] flex-shrink-0">
                     {task.priority}
                   </span>
                 </div>
@@ -224,13 +224,13 @@ export const ProductivityDashboardView: React.FC = () => {
       {/* Projects and Goals In Progress */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Active Projects */}
-        <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800/80 shadow-subtle-elevation">
+        <div className="p-5 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] shadow-subtle-elevation">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center">
               <FolderKanban className="w-4 h-4 mr-2 text-emerald-400" />
               Active Projects
             </h3>
-            <Link to="/projects" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center">
+            <Link to="/projects" className="text-xs text-champagne-300 hover:text-champagne-200 flex items-center">
               View all <ArrowRight className="w-3 h-3 ml-1" />
             </Link>
           </div>
@@ -240,14 +240,14 @@ export const ProductivityDashboardView: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {dashboard.active_projects.map((p) => (
-                <div key={p.id} className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 text-xs">
+                <div key={p.id} className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] text-xs">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-medium text-slate-200">{p.name}</span>
-                    <span className="font-semibold text-slate-300 font-mono">{p.progress_percentage}%</span>
+                    <span className="font-semibold text-emerald-400 font-mono">{p.progress_percentage}%</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden mb-1.5">
+                  <div className="w-full h-1.5 bg-[#07080c] rounded-full overflow-hidden mb-1.5">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400"
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-300"
                       style={{
                         width: `${p.progress_percentage}%`,
                       }}
@@ -263,13 +263,13 @@ export const ProductivityDashboardView: React.FC = () => {
         </div>
 
         {/* Strategic Goals */}
-        <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800/80 shadow-subtle-elevation">
+        <div className="p-5 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] shadow-subtle-elevation">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center">
-              <Target className="w-4 h-4 mr-2 text-purple-400" />
+              <Target className="w-4 h-4 mr-2 text-champagne-400" />
               Goals In Progress
             </h3>
-            <Link to="/goals" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center">
+            <Link to="/goals" className="text-xs text-champagne-300 hover:text-champagne-200 flex items-center">
               View all <ArrowRight className="w-3 h-3 ml-1" />
             </Link>
           </div>

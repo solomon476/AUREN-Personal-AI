@@ -210,7 +210,7 @@ export const JournalView: React.FC = () => {
           <div className="p-4 border-b border-white/[0.06] space-y-3 bg-[#0e1017]/30">
             <button
               onClick={() => handleOpenNewEntry()}
-              className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold text-xs transition shadow-md shadow-indigo-600/20 cursor-pointer touch-target min-h-[42px]"
+              className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] font-semibold text-xs transition shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] cursor-pointer touch-target min-h-[42px]"
             >
               <Plus className="w-4 h-4" />
               <span>Write Reflection</span>
@@ -232,11 +232,10 @@ export const JournalView: React.FC = () => {
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] scrollbar-none">
               <button
                 onClick={() => setSelectedMood('')}
-                className={`px-2.5 py-1 rounded-lg font-medium border transition cursor-pointer ${
-                  selectedMood === ''
+                className={`px-2.5 py-1 rounded-lg font-medium border transition cursor-pointer ${selectedMood === ''
                     ? 'bg-white/[0.08] text-white border-white/[0.12] shadow-sm'
                     : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.04]'
-                }`}
+                  }`}
               >
                 All
               </button>
@@ -244,11 +243,10 @@ export const JournalView: React.FC = () => {
                 <button
                   key={m.value}
                   onClick={() => setSelectedMood(selectedMood === m.value ? '' : m.value)}
-                  className={`px-2 py-1 rounded-lg font-medium border whitespace-nowrap transition cursor-pointer ${
-                    selectedMood === m.value
+                  className={`px-2 py-1 rounded-lg font-medium border whitespace-nowrap transition cursor-pointer ${selectedMood === m.value
                       ? m.color
                       : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.04]'
-                  }`}
+                    }`}
                 >
                   {m.label}
                 </button>
@@ -288,11 +286,10 @@ export const JournalView: React.FC = () => {
                   <div
                     key={entry.id}
                     onClick={() => handleSelectEntry(entry)}
-                    className={`p-4 cursor-pointer transition select-none ${
-                      isSelected
+                    className={`p-4 cursor-pointer transition select-none ${isSelected
                         ? 'bg-[#0e1017] border-l-2 border-l-champagne-400 shadow-sm'
                         : 'hover:bg-white/[0.02]'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5">
                       <span className="flex items-center space-x-1 font-mono">
@@ -361,22 +358,20 @@ export const JournalView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setEditorTab('write')}
-                      className={`px-3 py-1 text-xs font-medium rounded-lg transition cursor-pointer ${
-                        editorTab === 'write'
+                      className={`px-3 py-1 text-xs font-medium rounded-lg transition cursor-pointer ${editorTab === 'write'
                           ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
                           : 'text-slate-400 hover:text-slate-200'
-                      }`}
+                        }`}
                     >
                       Write
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditorTab('preview')}
-                      className={`px-3 py-1 text-xs font-medium rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
-                        editorTab === 'preview'
+                      className={`px-3 py-1 text-xs font-medium rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${editorTab === 'preview'
                           ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
                           : 'text-slate-400 hover:text-slate-200'
-                      }`}
+                        }`}
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>Preview</span>
@@ -398,7 +393,7 @@ export const JournalView: React.FC = () => {
                   <button
                     type="submit"
                     disabled={createMutation.isPending || updateMutation.isPending || !content.trim()}
-                    className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
+                    className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] text-xs font-semibold transition shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] disabled:opacity-50 cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
                     <span>Save</span>
@@ -542,7 +537,7 @@ export const JournalView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleStartEdit(selectedEntry)}
-                    className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 cursor-pointer"
+                    className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] text-xs font-semibold transition shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] cursor-pointer"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                     <span>Edit</span>
@@ -621,7 +616,7 @@ export const JournalView: React.FC = () => {
 
               <button
                 onClick={() => handleOpenNewEntry()}
-                className="flex items-center space-x-2 py-2.5 px-5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-medium text-xs transition shadow-lg shadow-indigo-600/20 cursor-pointer"
+                className="flex items-center space-x-2 py-2.5 px-5 rounded-xl bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] font-semibold text-xs transition shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Start Blank Reflection</span>

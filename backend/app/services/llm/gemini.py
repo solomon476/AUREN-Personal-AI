@@ -24,7 +24,7 @@ class GeminiProvider(BaseLLMProvider):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_id: str = "gemini-3.8-flash",
+        model_id: str = "gemini-3.5-flash-lite",
         timeout_seconds: float = 60.0,
     ):
         self.api_key = api_key
@@ -32,8 +32,8 @@ class GeminiProvider(BaseLLMProvider):
 
         # Gracefully remap deprecated or alias models when invoking Google API
         api_model = model_id
-        if api_model in ("gemini-2.5-flash", "models/gemini-2.5-flash"):
-            api_model = "gemini-3.8-flash"
+        if api_model in ("gemini-2.5-flash", "models/gemini-2.5-flash", "gemini-2.0-flash", "models/gemini-2.0-flash"):
+            api_model = "gemini-3.5-flash-lite"
         elif api_model in ("gemini-2.5-pro", "models/gemini-2.5-pro"):
             api_model = "gemini-3.8-pro"
         self._api_model = api_model
@@ -51,6 +51,14 @@ class GeminiProvider(BaseLLMProvider):
 
     def get_model_id(self) -> str:
         return self.model_id
+
+    def _get_candidate_models(self) -> List[str]:
+        """Return prioritized list of models to try for maximum availability and resilience."""
+        candidates = [self._api_model]
+        for fallback in ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite"):
+            if fallback not in candidates:
+                candidates.append(fallback)
+        return candidates
 
     def _convert_messages(self, messages: List[ChatMessage]):
         """Convert standard ChatMessages into Gemini contents and system instruction."""
@@ -75,7 +83,7 @@ class GeminiProvider(BaseLLMProvider):
         max_tokens: Optional[int] = None,
         **kwargs,
     ) -> LLMResponse:
-        """Execute a non-streaming completion using Gemini."""
+        """Execute a non-streaming completion using Gemini with automatic fallback."""
         if not self.api_key or self._client is None:
             raise LLMAuthenticationError(
                 "Gemini API key is not configured. Set LLM_API_KEY in backend/.env"
@@ -83,39 +91,55 @@ class GeminiProvider(BaseLLMProvider):
 
         contents, system_instruction = self._convert_messages(messages)
 
-        try:
-            from google.genai import types
+        from google.genai import types
 
-            config = types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-                system_instruction=system_instruction,
-            )
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            system_instruction=system_instruction,
+        )
 
-            response = await asyncio.wait_for(
-                self._client.aio.models.generate_content(
-                    model=self._api_model,
-                    contents=contents,
-                    config=config,
-                ),
-                timeout=self.timeout_seconds,
-            )
+        last_error = None
+        candidates = self._get_candidate_models()
+        for idx, candidate in enumerate(candidates):
+            has_fallback = idx < len(candidates) - 1
+            candidate_timeout = min(self.timeout_seconds, 8.0) if has_fallback else self.timeout_seconds
+            try:
+                response = await asyncio.wait_for(
+                    self._client.aio.models.generate_content(
+                        model=candidate,
+                        contents=contents,
+                        config=config,
+                    ),
+                    timeout=candidate_timeout,
+                )
 
-            text_content = response.text or ""
-            return LLMResponse(
-                content=text_content,
-                model=self.model_id,
-                finish_reason="stop",
-            )
-        except asyncio.TimeoutError:
-            raise LLMTimeoutError(f"Gemini request timed out after {self.timeout_seconds}s")
-        except Exception as exc:
-            error_str = str(exc)
+                text_content = response.text or ""
+                return LLMResponse(
+                    content=text_content,
+                    model=self.model_id,
+                    finish_reason="stop",
+                )
+            except asyncio.TimeoutError:
+                last_error = LLMTimeoutError(f"Gemini request timed out on {candidate} after {candidate_timeout}s")
+                logger.warning("Gemini timeout on model %s, trying fallback...", candidate)
+                continue
+            except Exception as exc:
+                error_str = str(exc)
+                if "API_KEY_INVALID" in error_str or "401" in error_str or "403" in error_str:
+                    raise LLMAuthenticationError(f"Gemini authentication failed: {error_str}")
+                logger.warning("Gemini generation error on model %s: %s (trying fallback)", candidate, error_str)
+                last_error = exc
+                continue
+
+        if last_error:
+            error_str = str(last_error)
             if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
                 raise LLMQuotaExceededError(f"Gemini quota exceeded: {error_str}")
-            if "API_KEY_INVALID" in error_str or "401" in error_str or "403" in error_str:
-                raise LLMAuthenticationError(f"Gemini authentication failed: {error_str}")
+            if isinstance(last_error, LLMTimeoutError):
+                raise last_error
             raise LLMProviderError(f"Gemini generation error: {error_str}")
+        raise LLMProviderError("No response received from any model candidate")
 
     async def stream_response(
         self,
@@ -124,7 +148,7 @@ class GeminiProvider(BaseLLMProvider):
         max_tokens: Optional[int] = None,
         **kwargs,
     ) -> AsyncIterator[str]:
-        """Stream chunks from Gemini model in real time."""
+        """Stream chunks from Gemini model in real time with resilient multi-model failover."""
         if not self.api_key or self._client is None:
             raise LLMAuthenticationError(
                 "Gemini API key is not configured. Set LLM_API_KEY in backend/.env"
@@ -132,35 +156,57 @@ class GeminiProvider(BaseLLMProvider):
 
         contents, system_instruction = self._convert_messages(messages)
 
-        try:
-            from google.genai import types
+        from google.genai import types
 
-            config = types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-                system_instruction=system_instruction,
-            )
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            system_instruction=system_instruction,
+        )
 
-            stream = await self._client.aio.models.generate_content_stream(
-                model=self._api_model,
-                contents=contents,
-                config=config,
-            )
+        last_error = None
+        for candidate in self._get_candidate_models():
+            try:
+                stream = await self._client.aio.models.generate_content_stream(
+                    model=candidate,
+                    contents=contents,
+                    config=config,
+                )
 
-            async for chunk in stream:
-                if chunk.text:
-                    yield chunk.text
+                # Verify connectivity and pull first token with short initial timeout
+                stream_iter = stream.__aiter__()
+                try:
+                    first_chunk = await asyncio.wait_for(stream_iter.__anext__(), timeout=8.0)
+                except StopAsyncIteration:
+                    return
 
-        except asyncio.TimeoutError:
-            raise LLMTimeoutError(f"Gemini stream timed out after {self.timeout_seconds}s")
-        except LLMException:
-            raise
-        except Exception as exc:
-            error_str = str(exc)
+                if first_chunk.text:
+                    yield first_chunk.text
+
+                # Stream remaining tokens
+                async for chunk in stream_iter:
+                    if chunk.text:
+                        yield chunk.text
+                return
+
+            except asyncio.TimeoutError:
+                logger.warning("Gemini initial stream timed out on model %s (trying fallback)", candidate)
+                last_error = LLMTimeoutError(f"Gemini stream timed out on {candidate}")
+                continue
+            except Exception as exc:
+                error_str = str(exc)
+                if "API_KEY_INVALID" in error_str or "401" in error_str or "403" in error_str:
+                    raise LLMAuthenticationError(f"Gemini authentication failed: {error_str}")
+                logger.warning("Gemini streaming failed on model %s: %s (trying fallback)", candidate, error_str)
+                last_error = exc
+                continue
+
+        if last_error:
+            error_str = str(last_error)
             if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
                 raise LLMQuotaExceededError(f"Gemini quota exceeded: {error_str}")
-            if "API_KEY_INVALID" in error_str or "401" in error_str or "403" in error_str:
-                raise LLMAuthenticationError(f"Gemini authentication failed: {error_str}")
+            if isinstance(last_error, LLMTimeoutError):
+                raise last_error
             raise LLMProviderError(f"Gemini streaming error: {error_str}")
 
     async def count_tokens(self, text: str) -> Optional[int]:

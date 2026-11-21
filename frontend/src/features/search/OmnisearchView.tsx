@@ -94,7 +94,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ item }) => {
   return (
     <button
       onClick={handleClick}
-      className="w-full text-left bg-slate-900/60 border border-slate-800/60 rounded-lg p-4 hover:bg-slate-800/60 hover:border-slate-700/60 transition-all group"
+      className="w-full text-left bg-[#0e111a]/80 border border-white/[0.06] rounded-xl p-4 hover:bg-white/[0.03] hover:border-white/[0.1] transition-all group shadow-sm"
     >
       <div className="flex items-start gap-3">
         {/* Source icon */}
@@ -184,22 +184,22 @@ export const OmnisearchView: React.FC = () => {
   const hasQuery = query.trim().length >= 2;
 
   return (
-    <div className="flex flex-col h-full bg-slate-950">
+    <div className="flex flex-col h-full bg-[#07080c]">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-slate-800/60 px-4 py-4 sm:px-6 sm:py-5">
+      <div className="flex-shrink-0 border-b border-white/[0.06] px-4 py-4 sm:px-6 sm:py-5 bg-[#0e111a]/40">
         <div className="flex items-center gap-3 mb-1">
-          <Search className="w-5 h-5 text-violet-400" />
-          <h1 className="text-lg font-semibold text-slate-100">Omnisearch</h1>
-          <span className="text-xs text-slate-500 bg-slate-800/60 border border-slate-700/40 px-2 py-0.5 rounded-full">
-            Phase 3C.5
+          <Search className="w-5 h-5 text-champagne-400" />
+          <h1 className="text-lg font-semibold text-slate-100 tracking-tight">Omnisearch</h1>
+          <span className="text-xs text-champagne-300 bg-champagne-400/10 border border-champagne-400/20 px-2.5 py-0.5 rounded-full font-mono">
+            Unified Knowledge
           </span>
         </div>
-        <p className="text-slate-500 text-xs sm:text-sm">
+        <p className="text-slate-400 text-xs sm:text-sm">
           Search across conversations, memories, tasks, projects, and goals.
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 space-y-4 scrollbar-thin">
         {/* Search input */}
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
@@ -208,7 +208,7 @@ export const OmnisearchView: React.FC = () => {
             value={rawQuery}
             onChange={handleQueryChange}
             placeholder="Search everything… (min 2 characters)"
-            className="w-full bg-slate-900/80 border border-slate-700/60 rounded-xl pl-10 pr-10 py-3 text-xs sm:text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-violet-600/60 focus:ring-1 focus:ring-violet-600/20 transition-all min-h-[44px]"
+            className="w-full bg-[#0e111a] border border-white/[0.09] rounded-xl pl-10 pr-10 py-3 text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-champagne-400/60 focus:ring-1 focus:ring-champagne-400/20 transition-all min-h-[44px]"
           />
           {rawQuery && (
             <button

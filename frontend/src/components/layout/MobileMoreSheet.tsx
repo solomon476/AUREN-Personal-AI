@@ -168,7 +168,7 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
             ) : user ? (
               <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.07] flex items-center justify-between">
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-champagne-300 p-0.5 flex items-center justify-center text-white flex-shrink-0 shadow-sm">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-champagne-500/40 to-champagne-300/80 p-0.5 flex items-center justify-center text-white flex-shrink-0 shadow-sm">
                     <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center font-bold text-xs text-champagne-300">
                       {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
                     </div>
@@ -204,7 +204,7 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
                 </button>
                 <button
                   onClick={() => onOpenAuth('signup')}
-                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition touch-target flex items-center justify-center"
+                  className="w-full py-2.5 px-3 rounded-xl bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] text-xs font-semibold shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] transition touch-target flex items-center justify-center"
                 >
                   Create Account
                 </button>

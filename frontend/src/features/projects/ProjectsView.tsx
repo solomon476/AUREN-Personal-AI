@@ -111,7 +111,7 @@ export const ProjectsView: React.FC = () => {
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center justify-center space-x-2 px-4 py-2.5 min-h-[44px] bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-indigo-600/20 self-start md:self-auto touch-target cursor-pointer"
+          className="flex items-center justify-center space-x-2 px-4 py-2.5 min-h-[44px] bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] text-xs font-semibold rounded-xl transition-all shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] self-start md:self-auto touch-target cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>New Project</span>

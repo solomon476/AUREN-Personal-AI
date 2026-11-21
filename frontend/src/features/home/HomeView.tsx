@@ -118,19 +118,19 @@ export const HomeView: React.FC = () => {
         {/* Quick KPI Snapshot */}
         {dashboard && (
           <div className="flex items-center gap-2.5 sm:gap-3.5 overflow-x-auto w-full md:w-auto scrollbar-none py-1">
-            <div className="flex-1 md:flex-none px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-white/[0.03] border border-white/[0.08] shadow-subtle-elevation text-center min-w-[80px] hover:border-white/[0.15] transition-all group">
+            <div className="flex-1 md:flex-none px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] shadow-subtle-elevation text-center min-w-[80px] hover:border-white/[0.15] transition-all group">
               <span className="text-[10px] text-slate-400 uppercase tracking-widest block font-semibold">Tasks</span>
-              <span className="text-xl sm:text-2xl font-bold text-indigo-400 tracking-tight group-hover:scale-105 transition-transform inline-block">
+              <span className="text-xl sm:text-2xl font-bold text-champagne-300 tracking-tight group-hover:scale-105 transition-transform inline-block">
                 {dashboard.active_tasks_count ?? 0}
               </span>
             </div>
-            <div className="flex-1 md:flex-none px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-white/[0.03] border border-white/[0.08] shadow-subtle-elevation text-center min-w-[80px] hover:border-white/[0.15] transition-all group">
+            <div className="flex-1 md:flex-none px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] shadow-subtle-elevation text-center min-w-[80px] hover:border-white/[0.15] transition-all group">
               <span className="text-[10px] text-slate-400 uppercase tracking-widest block font-semibold">Projects</span>
               <span className="text-xl sm:text-2xl font-bold text-emerald-400 tracking-tight group-hover:scale-105 transition-transform inline-block">
                 {dashboard.active_projects_count ?? 0}
               </span>
             </div>
-            <div className="flex-1 md:flex-none px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-white/[0.03] border border-white/[0.08] shadow-subtle-elevation text-center min-w-[80px] hover:border-white/[0.15] transition-all group">
+            <div className="flex-1 md:flex-none px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-[#0e111a]/80 border border-white/[0.07] shadow-subtle-elevation text-center min-w-[80px] hover:border-white/[0.15] transition-all group">
               <span className="text-[10px] text-slate-400 uppercase tracking-widest block font-semibold">Goals</span>
               <span className="text-xl sm:text-2xl font-bold text-champagne-300 tracking-tight group-hover:scale-105 transition-transform inline-block">
                 {dashboard.active_goals_count ?? 0}
@@ -142,9 +142,9 @@ export const HomeView: React.FC = () => {
 
       {/* Guest Mode Banner */}
       {!isAuthLoading && !user && (
-        <div className="rounded-2xl bg-gradient-to-r from-indigo-950/40 via-slate-900/60 to-champagne-950/20 border border-indigo-800/40 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-subtle-elevation backdrop-blur-md">
+        <div className="rounded-2xl bg-[#0e111a]/90 border border-white/[0.08] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-subtle-elevation backdrop-blur-md">
           <div className="flex items-center space-x-3.5">
-            <div className="p-2.5 rounded-xl bg-indigo-600/20 text-indigo-400 flex-shrink-0 border border-indigo-500/30 shadow-glow-indigo">
+            <div className="p-2.5 rounded-xl bg-champagne-400/10 text-champagne-300 flex-shrink-0 border border-champagne-400/20">
               <Bot className="w-5 h-5" />
             </div>
             <div>
@@ -156,7 +156,7 @@ export const HomeView: React.FC = () => {
           </div>
           <Link
             to="/chat"
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold transition whitespace-nowrap text-center shadow-md shadow-indigo-600/25 hover:shadow-indigo-600/40"
+            className="px-4 py-2 rounded-xl bg-champagne-400 hover:bg-champagne-300 text-slate-950 text-xs font-semibold transition whitespace-nowrap text-center shadow-md shadow-champagne-400/20"
           >
             Open Assistant
           </Link>
@@ -164,9 +164,9 @@ export const HomeView: React.FC = () => {
       )}
 
       {/* Central AI Assistant Entry Point (Raycast/Linear Style Command Bar) */}
-      <div className="relative rounded-2xl bg-gradient-to-r from-indigo-950/30 via-slate-900/80 to-slate-950/90 border border-white/[0.09] p-5 sm:p-6 shadow-card-elevation space-y-4">
+      <div className="relative rounded-2xl bg-[#0e111a]/90 border border-white/[0.08] p-5 sm:p-6 shadow-card-elevation space-y-4">
         {/* Subtle Ambient Ray */}
-        <div className="absolute top-0 right-1/4 w-72 h-32 bg-indigo-500/10 blur-3xl pointer-events-none rounded-full" />
+        <div className="absolute top-0 right-1/4 w-72 h-32 bg-champagne-400/5 blur-3xl pointer-events-none rounded-full" />
 
         <div className="flex items-center justify-between relative z-10">
           <div className="flex items-center space-x-2 text-xs font-semibold text-champagne-300">
@@ -191,11 +191,11 @@ export const HomeView: React.FC = () => {
             value={promptInput}
             onChange={(e) => setPromptInput(e.target.value)}
             placeholder="Ask AUREN anything, plan today's priorities, or break down a project..."
-            className="w-full bg-slate-950/90 border border-white/[0.1] rounded-xl pl-11 pr-12 py-3.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-champagne-400/70 focus:ring-1 focus:ring-champagne-400/40 shadow-inner transition-all"
+            className="w-full bg-[#07080c] border border-white/[0.09] rounded-xl pl-11 pr-12 py-3.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-champagne-400/70 focus:ring-1 focus:ring-champagne-400/40 shadow-inner transition-all"
           />
           <button
             type="submit"
-            className="absolute right-2.5 p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-md shadow-indigo-600/30 hover:scale-105 active:scale-95"
+            className="absolute right-2.5 p-2 rounded-lg bg-champagne-400 hover:bg-champagne-300 text-slate-950 font-semibold transition shadow-md shadow-champagne-400/25 hover:scale-105 active:scale-95"
             title="Ask AUREN"
           >
             <Send className="w-3.5 h-3.5" />
@@ -279,10 +279,10 @@ export const HomeView: React.FC = () => {
         {/* Left Column (2 spans): Tasks and Active Projects */}
         <div className="lg:col-span-2 space-y-6">
           {/* Priority Tasks Radar */}
-          <div className="rounded-2xl bg-white/[0.02] border border-white/[0.08] p-5 space-y-4 shadow-subtle-elevation">
+          <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <CheckSquare className="w-4 h-4 text-indigo-400" />
+                <CheckSquare className="w-4 h-4 text-champagne-400" />
                 <h2 className="text-sm font-semibold text-slate-100 tracking-tight">Priority Next Actions</h2>
               </div>
               <Link
@@ -297,8 +297,8 @@ export const HomeView: React.FC = () => {
             {isAuthLoading || isLoadingTasks ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading priority tasks...</div>
             ) : !user ? (
-              <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">
-                <CheckSquare className="w-6 h-6 text-indigo-400 mx-auto opacity-80" />
+              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
+                <CheckSquare className="w-6 h-6 text-champagne-400 mx-auto opacity-80" />
                 <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
                   Sign in to view, prioritize, and check off your personal tasks.
@@ -309,7 +309,7 @@ export const HomeView: React.FC = () => {
                 Tasks temporarily unavailable.
               </div>
             ) : !tasksData?.items.length ? (
-              <div className="p-7 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2.5">
+              <div className="p-7 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2.5">
                 <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
                 <p className="text-xs text-slate-300 font-medium">All tasks cleared</p>
                 <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
@@ -327,7 +327,7 @@ export const HomeView: React.FC = () => {
                 {tasksData.items.map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] hover:border-white/[0.1] transition-all shadow-sm"
+                    className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] hover:border-white/[0.09] transition-all shadow-sm"
                   >
                     <div className="flex items-center space-x-2.5 min-w-0">
                       <button
@@ -373,7 +373,7 @@ export const HomeView: React.FC = () => {
                               : task.priority === 'high'
                               ? 'bg-amber-950/60 text-amber-300 border-amber-800/50'
                               : task.priority === 'medium'
-                              ? 'bg-indigo-950/60 text-indigo-300 border-indigo-800/50'
+                              ? 'bg-champagne-950/40 text-champagne-300 border-champagne-700/40'
                               : 'bg-slate-800/80 text-slate-400 border-slate-700/80'
                           }`}
                         >
@@ -388,7 +388,7 @@ export const HomeView: React.FC = () => {
           </div>
 
           {/* Active Projects Radar */}
-          <div className="rounded-2xl bg-white/[0.02] border border-white/[0.08] p-5 space-y-4 shadow-subtle-elevation">
+          <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <FolderKanban className="w-4 h-4 text-emerald-400" />
@@ -406,7 +406,7 @@ export const HomeView: React.FC = () => {
             {isAuthLoading || isLoadingProjects ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading projects...</div>
             ) : !user ? (
-              <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">
+              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
                 <FolderKanban className="w-6 h-6 text-emerald-400 mx-auto opacity-80" />
                 <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
@@ -418,7 +418,7 @@ export const HomeView: React.FC = () => {
                 Projects temporarily unavailable.
               </div>
             ) : !projectsData?.items.length ? (
-              <div className="p-7 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2.5">
+              <div className="p-7 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2.5">
                 <FolderKanban className="w-6 h-6 text-slate-600 mx-auto" />
                 <p className="text-xs text-slate-300 font-medium">No active projects</p>
                 <p className="text-[11px] text-slate-500">Create a project workspace to coordinate complex goals.</p>
@@ -435,7 +435,7 @@ export const HomeView: React.FC = () => {
                   <Link
                     key={project.id}
                     to="/projects"
-                    className="p-4 rounded-xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] hover:border-white/[0.1] transition-all space-y-3 block shadow-sm group"
+                    className="p-4 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] hover:border-white/[0.09] transition-all space-y-3 block shadow-sm group"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-slate-200 group-hover:text-white truncate pr-2 tracking-tight">
@@ -464,7 +464,7 @@ export const HomeView: React.FC = () => {
         {/* Right Column: Strategic Goals & Recent Dialogue */}
         <div className="space-y-6">
           {/* Strategic Goals Radar */}
-          <div className="rounded-2xl bg-white/[0.02] border border-white/[0.08] p-5 space-y-4 shadow-subtle-elevation">
+          <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Target className="w-4 h-4 text-champagne-400" />
@@ -482,7 +482,7 @@ export const HomeView: React.FC = () => {
             {isAuthLoading || isLoadingGoals ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading goals...</div>
             ) : !user ? (
-              <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">
+              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
                 <Target className="w-5 h-5 text-champagne-400 mx-auto opacity-80" />
                 <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
@@ -494,7 +494,7 @@ export const HomeView: React.FC = () => {
                 Goals temporarily unavailable.
               </div>
             ) : !goalsData?.items.length ? (
-              <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">
+              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
                 <Target className="w-5 h-5 text-slate-600 mx-auto" />
                 <p className="text-xs text-slate-300 font-medium">No active goals</p>
                 <p className="text-[11px] text-slate-500">Set strategic horizons to orient your day-to-day work.</p>
@@ -508,7 +508,7 @@ export const HomeView: React.FC = () => {
             ) : (
               <div className="space-y-3">
                 {goalsData.items.map((goal) => (
-                  <div key={goal.id} className="p-3.5 rounded-xl bg-white/[0.025] hover:bg-white/[0.055] border border-white/[0.06] space-y-2.5 shadow-sm transition-all">
+                  <div key={goal.id} className="p-3.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] space-y-2.5 shadow-sm transition-all">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-200 truncate pr-2 tracking-tight">{goal.title}</span>
                       <span className="font-mono text-champagne-300 text-[11px] font-semibold flex-shrink-0">
@@ -531,10 +531,10 @@ export const HomeView: React.FC = () => {
           </div>
 
           {/* Recent Conversations */}
-          <div className="rounded-2xl bg-white/[0.02] border border-white/[0.08] p-5 space-y-4 shadow-subtle-elevation">
+          <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <MessageSquare className="w-4 h-4 text-sky-400" />
+                <MessageSquare className="w-4 h-4 text-champagne-300" />
                 <h2 className="text-sm font-semibold text-slate-100 tracking-tight">Recent Conversations</h2>
               </div>
               <Link
@@ -549,15 +549,15 @@ export const HomeView: React.FC = () => {
             {isAuthLoading || isLoadingConversations ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading dialogue...</div>
             ) : !user ? (
-              <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">
-                <MessageSquare className="w-5 h-5 text-sky-400 mx-auto opacity-80" />
+              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
+                <MessageSquare className="w-5 h-5 text-champagne-400 mx-auto opacity-80" />
                 <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Sign in to access your persistent conversations across devices.
                 </p>
                 <Link
                   to="/chat"
-                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition shadow-sm"
+                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-champagne-400 hover:bg-champagne-300 text-xs font-semibold text-slate-950 transition shadow-sm"
                 >
                   Start Dialogue
                 </Link>
@@ -567,12 +567,12 @@ export const HomeView: React.FC = () => {
                 Dialogue history temporarily unavailable.
               </div>
             ) : !conversations.length ? (
-              <div className="p-6 text-center rounded-2xl bg-slate-950/60 border border-white/[0.06] space-y-2">
+              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
                 <MessageSquare className="w-5 h-5 text-slate-600 mx-auto" />
                 <p className="text-xs text-slate-400">No active conversations</p>
                 <Link
                   to="/chat"
-                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition shadow-sm"
+                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-champagne-400 hover:bg-champagne-300 text-xs font-semibold text-slate-950 transition shadow-sm"
                 >
                   Start Dialogue
                 </Link>

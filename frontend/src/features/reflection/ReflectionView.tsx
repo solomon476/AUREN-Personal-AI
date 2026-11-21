@@ -213,8 +213,8 @@ export const ReflectionView: React.FC = () => {
                 <Sparkles className="w-5 h-5" />
               </div>
               <h1 className="text-xl font-bold text-white tracking-tight">Reflective Intelligence</h1>
-              <span className="text-xs text-champagne-300 bg-graphite-800/90 border border-champagne-500/20 px-2.5 py-0.5 rounded-full font-mono">
-                Phase 3C.5
+              <span className="text-xs text-champagne-300 bg-champagne-400/10 border border-champagne-400/20 px-2.5 py-0.5 rounded-full font-mono">
+                Cognitive Audit
               </span>
             </div>
             <p className="text-slate-400 text-xs">
@@ -234,8 +234,8 @@ export const ReflectionView: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 scrollbar-thin">
         {/* Epistemic note */}
-        <div className="flex items-start gap-2.5 bg-slate-900/50 border border-slate-800/80 rounded-xl p-3.5 shadow-sm">
-          <Info className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2.5 bg-[#0e111a]/80 border border-white/[0.06] rounded-xl p-3.5 shadow-sm">
+          <Info className="w-4 h-4 text-champagne-400 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-slate-400 leading-relaxed">
             All findings are <strong className="text-slate-200">suggestions for your review</strong>,
             not established facts. No records are modified through this view.
@@ -246,7 +246,7 @@ export const ReflectionView: React.FC = () => {
         {/* Loading */}
         {isLoading && (
           <div className="flex items-center gap-2 text-slate-400 text-xs py-4">
-            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+            <Loader2 className="w-4 h-4 animate-spin text-champagne-400" />
             <span>Analysing your data…</span>
           </div>
         )}
@@ -276,12 +276,12 @@ export const ReflectionView: React.FC = () => {
         )}
 
         {/* Tab navigation */}
-        <div className="flex gap-1.5 bg-slate-900/50 border border-slate-800/80 rounded-xl p-1.5">
+        <div className="flex gap-1.5 bg-[#0e111a]/80 border border-white/[0.06] rounded-xl p-1.5">
           <button
             onClick={() => setActiveTab('staleness')}
             className={`flex-1 text-xs py-2 px-3 rounded-lg transition-all ${
               activeTab === 'staleness'
-                ? 'bg-slate-800 text-slate-100 font-semibold shadow-sm'
+                ? 'bg-white/[0.08] text-champagne-300 font-semibold shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -294,7 +294,7 @@ export const ReflectionView: React.FC = () => {
             onClick={() => setActiveTab('contradictions')}
             className={`flex-1 text-xs py-2 px-3 rounded-lg transition-all ${
               activeTab === 'contradictions'
-                ? 'bg-slate-800 text-slate-100 font-semibold shadow-sm'
+                ? 'bg-white/[0.08] text-champagne-300 font-semibold shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
