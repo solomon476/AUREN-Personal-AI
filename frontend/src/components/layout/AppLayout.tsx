@@ -97,10 +97,8 @@ export const AppLayout: React.FC = () => {
               <Menu className="h-5 w-5" />
             </button>
             <Link to="/home" className="flex items-center space-x-2">
-              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#d7ba83] via-[#be8c42] to-[#6c4327] p-0.5 flex items-center justify-center text-white shadow-sm">
-                <div className="w-full h-full bg-[#07080c] rounded-[6px] flex items-center justify-center">
-                  <Bot className="h-3.5 w-3.5 text-champagne-300" />
-                </div>
+              <div className="h-7 w-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-sm">
+                <Bot className="h-4 w-4 text-emerald-400" />
               </div>
               <span className="text-sm font-extrabold tracking-[0.16em] text-white">
                 AUREN
@@ -124,7 +122,7 @@ export const AppLayout: React.FC = () => {
             ) : (
               <button
                 onClick={() => openAuth('signin')}
-                className="px-3.5 py-1.5 text-xs font-semibold bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] rounded-xl shadow-sm transition"
+                className="px-3.5 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl shadow-sm transition"
               >
                 Sign In
               </button>

@@ -1,7 +1,7 @@
 /**
  * Mobile-First Bottom Navigation Bar for AUREN.
  * Provides accessible, one-handed touch navigation across primary surfaces
- * with safe-area insets, clear active state indicators, and secondary drawer access.
+ * with safe-area insets, clear active state indicators, and professional white, black, and emerald styling.
  */
 
 import React from 'react';
@@ -27,7 +27,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/80 pb-[env(safe-area-inset-bottom,0px)] shadow-2xl transition-all duration-200"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#07080c]/95 backdrop-blur-xl border-t border-white/[0.08] pb-[env(safe-area-inset-bottom,0px)] shadow-2xl transition-all duration-200"
       aria-label="Mobile Bottom Navigation"
     >
       <div className="flex items-center justify-around h-16 px-2 max-w-md mx-auto">
@@ -36,16 +36,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           to="/home"
           className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 touch-target ${
             isHomeActive
-              ? 'text-champagne-300 font-semibold'
+              ? 'text-white font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           aria-label="Mobile Home"
           aria-current={isHomeActive ? 'page' : undefined}
         >
           <div className="relative">
-            <Home className={`w-5 h-5 transition-transform duration-150 ${isHomeActive ? 'scale-110 text-champagne-300' : ''}`} />
+            <Home className={`w-5 h-5 transition-transform duration-150 ${isHomeActive ? 'scale-110 text-emerald-400' : ''}`} />
             {isHomeActive && (
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-champagne-300 shadow-glow-champagne" />
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
             )}
           </div>
           <span className="text-[10px] tracking-tight mt-1">Home</span>
@@ -56,16 +56,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           to="/chat"
           className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 touch-target ${
             isChatActive
-              ? 'text-champagne-300 font-semibold'
+              ? 'text-white font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           aria-label="Mobile Assistant"
           aria-current={isChatActive ? 'page' : undefined}
         >
           <div className="relative">
-            <MessageSquare className={`w-5 h-5 transition-transform duration-150 ${isChatActive ? 'scale-110 text-champagne-300' : ''}`} />
+            <MessageSquare className={`w-5 h-5 transition-transform duration-150 ${isChatActive ? 'scale-110 text-emerald-400' : ''}`} />
             {isChatActive && (
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-champagne-300 shadow-glow-champagne" />
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
             )}
           </div>
           <span className="text-[10px] tracking-tight mt-1">Assistant</span>
@@ -76,16 +76,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           to="/tasks"
           className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 touch-target ${
             isTasksActive
-              ? 'text-champagne-300 font-semibold'
+              ? 'text-white font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           aria-label="Mobile Tasks"
           aria-current={isTasksActive ? 'page' : undefined}
         >
           <div className="relative">
-            <CheckSquare className={`w-5 h-5 transition-transform duration-150 ${isTasksActive ? 'scale-110 text-champagne-300' : ''}`} />
+            <CheckSquare className={`w-5 h-5 transition-transform duration-150 ${isTasksActive ? 'scale-110 text-emerald-400' : ''}`} />
             {isTasksActive && (
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-champagne-300 shadow-glow-champagne" />
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
             )}
           </div>
           <span className="text-[10px] tracking-tight mt-1">Tasks</span>
@@ -96,16 +96,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           to="/journal"
           className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 touch-target ${
             isJournalActive
-              ? 'text-champagne-300 font-semibold'
+              ? 'text-white font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           aria-label="Mobile Journal"
           aria-current={isJournalActive ? 'page' : undefined}
         >
           <div className="relative">
-            <BookOpen className={`w-5 h-5 transition-transform duration-150 ${isJournalActive ? 'scale-110 text-champagne-300' : ''}`} />
+            <BookOpen className={`w-5 h-5 transition-transform duration-150 ${isJournalActive ? 'scale-110 text-emerald-400' : ''}`} />
             {isJournalActive && (
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-champagne-300 shadow-glow-champagne" />
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
             )}
           </div>
           <span className="text-[10px] tracking-tight mt-1">Journal</span>
@@ -117,16 +117,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           onClick={onOpenMore}
           className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 touch-target ${
             isMoreOpen
-              ? 'text-champagne-300 font-semibold'
+              ? 'text-white font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           aria-label="Mobile More Menu"
           aria-expanded={isMoreOpen}
         >
           <div className="relative">
-            <Grid className={`w-5 h-5 transition-transform duration-150 ${isMoreOpen ? 'scale-110 text-champagne-300' : ''}`} />
+            <Grid className={`w-5 h-5 transition-transform duration-150 ${isMoreOpen ? 'scale-110 text-emerald-400' : ''}`} />
             {isMoreOpen && (
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-champagne-300" />
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
             )}
           </div>
           <span className="text-[10px] tracking-tight mt-1">More</span>
@@ -135,4 +135,3 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     </nav>
   );
 };
-

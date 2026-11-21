@@ -325,7 +325,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         <button
           onClick={handleNewConversation}
           disabled={isStreaming || createConversationMutation.isPending}
-          className="w-full flex items-center justify-center space-x-2 py-2.5 px-3.5 bg-[#d7ba83] hover:bg-[#e6d4b0] disabled:opacity-50 text-[#07080c] rounded-xl text-xs font-semibold shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] transition-all duration-200 touch-target"
+          className="w-full flex items-center justify-center space-x-2 py-2.5 px-3.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-sm hover:shadow-[0_0_16px_rgba(16,185,129,0.3)] transition-all duration-200 touch-target"
         >
           <Plus className="h-4 w-4" />
           <span className="tracking-wide">New Conversation</span>
@@ -412,49 +412,68 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
       {/* Main Chat Workspace */}
       <section className="flex-1 flex flex-col bg-slate-900/25 min-w-0">
         {/* Active Thread Header */}
-        <div className="h-14 border-b border-white/[0.08] px-3.5 sm:px-5 flex items-center justify-between bg-slate-950/80 backdrop-blur">
+        <div className="h-14 border-b border-white/[0.08] px-3 sm:px-5 flex items-center justify-between bg-[#08090c]/90 backdrop-blur">
           <div className="flex items-center space-x-2 min-w-0">
             {/* Mobile Threads Drawer Trigger Button */}
             <button
               onClick={() => setIsMobileThreadDrawerOpen(true)}
-              className="md:hidden flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs text-slate-300 hover:text-white transition touch-target flex-shrink-0"
+              className="md:hidden flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs text-slate-300 hover:text-white transition touch-target flex-shrink-0"
               aria-label="Open conversation threads"
             >
-              <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+              <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
               <span className="text-[11px] font-medium">Threads</span>
             </button>
 
-            <div className="h-7 w-7 rounded-lg bg-gradient-to-tr from-indigo-950 to-slate-900 border border-indigo-500/30 hidden sm:flex items-center justify-center text-indigo-400 flex-shrink-0 shadow-sm">
-              <Sparkles className="h-3.5 w-3.5 text-champagne-300" />
+            {/* Direct New Chat Action Button (Always Accessible on Mobile & Desktop) */}
+            <button
+              onClick={handleNewConversation}
+              disabled={isStreaming || createConversationMutation.isPending}
+              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition touch-target flex-shrink-0 active:scale-95"
+              title="Start a new dialogue"
+              aria-label="Start new chat"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>New Chat</span>
+            </button>
+
+            <div className="h-4 w-[1px] bg-white/[0.1] hidden sm:block" />
+
+            <div className="flex items-center space-x-1.5 min-w-0">
+              <h3
+                onClick={!activeConv ? handleNewConversation : undefined}
+                className={`text-xs sm:text-sm font-semibold text-white tracking-tight truncate max-w-[110px] xs:max-w-[160px] sm:max-w-md ${
+                  !activeConv ? 'cursor-pointer hover:text-emerald-400 transition' : ''
+                }`}
+                title={activeConv ? activeConv.title : 'Click to start new conversation'}
+              >
+                {activeConv ? activeConv.title : 'New Dialogue'}
+              </h3>
+              {activeConv && (
+                <div className="flex items-center space-x-0.5 pl-0.5">
+                  <button
+                    onClick={() => setIsRenameModalOpen(true)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition touch-target flex items-center justify-center"
+                    title="Rename conversation"
+                    aria-label="Rename conversation"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setIsDeleteModalOpen(true)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition touch-target flex items-center justify-center"
+                    title="Delete conversation"
+                    aria-label="Delete conversation"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
-            <h3 className="text-xs sm:text-sm font-semibold text-white tracking-tight truncate max-w-[140px] xs:max-w-xs sm:max-w-md">
-              {activeConv ? activeConv.title : 'New Dialogue'}
-            </h3>
-            {activeConv && (
-              <div className="flex items-center space-x-1 pl-1">
-                <button
-                  onClick={() => setIsRenameModalOpen(true)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition touch-target flex items-center justify-center"
-                  title="Rename conversation"
-                  aria-label="Rename conversation"
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => setIsDeleteModalOpen(true)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition touch-target flex items-center justify-center"
-                  title="Delete conversation"
-                  aria-label="Delete conversation"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
           </div>
           <div className="flex items-center space-x-2">
             <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-white/[0.04] text-slate-300 border border-white/[0.08] hidden sm:inline-flex items-center space-x-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-champagne-400 shadow-[0_0_8px_rgba(215,186,131,0.5)]"></span>
-              <span>Gemini Flash &bull; SSE Stream &bull; KaTeX</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] animate-pulse"></span>
+              <span>Gemini Flash &bull; Sub-Second Stream</span>
             </span>
           </div>
         </div>
@@ -515,7 +534,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                     className={`flex items-start space-x-2.5 sm:space-x-3.5 ${isUser ? 'justify-end' : 'justify-start'}`}
                   >
                     {!isUser && (
-                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-[#121622] border border-champagne-400/20 flex items-center justify-center text-champagne-300 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-[#121622] border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0 text-xs mt-0.5 shadow-sm">
                         <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
                     )}
@@ -531,11 +550,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                           <button
                             type="button"
                             onClick={() => setContextInspectorMessageId(msg.id)}
-                            className="inline-flex items-center space-x-1.5 text-slate-400 hover:text-champagne-300 transition-colors touch-target py-1"
+                            className="inline-flex items-center space-x-1.5 text-slate-400 hover:text-emerald-300 transition-colors touch-target py-1"
                             title="Inspect memory context used for this response"
                             aria-label="Inspect context provenance"
                           >
-                            <Brain className="w-3.5 h-3.5 text-champagne-400" />
+                            <Brain className="w-3.5 h-3.5 text-emerald-400" />
                             <span className="font-medium">Context Inspector</span>
                           </button>
                           {Boolean(msg.metadata?.interrupted) && (
@@ -558,7 +577,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               {/* In-Flight Streaming Assistant Bubble */}
               {isStreaming && (
                 <div className="flex items-start space-x-2.5 sm:space-x-3.5 justify-start animate-in fade-in duration-150">
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-[#121622] border border-champagne-400/20 flex items-center justify-center text-champagne-300 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-[#121622] border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0 text-xs mt-0.5 shadow-sm">
                     <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
                   <div className="max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed bg-[#0e111a]/90 text-slate-200 border border-white/[0.06] shadow-card-elevation rounded-tl-sm backdrop-blur-sm">
@@ -566,8 +585,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                       <MessageContent content={streamingContent} role="assistant" conversationId={activeConversationId || undefined} />
                     ) : (
                       <span className="inline-flex items-center space-x-2 text-slate-400 text-xs animate-pulse">
-                        <span className="font-medium text-champagne-300">AUREN is thinking</span>
-                        <span className="inline-block w-1.5 h-1.5 bg-champagne-400 rounded-full animate-bounce"></span>
+                        <span className="font-medium text-emerald-400">AUREN is thinking</span>
+                        <span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce"></span>
                       </span>
                     )}
                   </div>
@@ -619,7 +638,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         </div>
 
         {/* Input Composer Bar */}
-        <div className="p-3.5 sm:p-5 border-t border-white/[0.08] bg-slate-950/95 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="p-3.5 sm:p-5 border-t border-white/[0.08] bg-[#07080c]/95 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <form onSubmit={handleSendMessage} className="relative flex items-center">
             <textarea
               rows={1}
@@ -633,29 +652,29 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               }}
               placeholder="Ask AUREN anything..."
               disabled={isStreaming}
-              className="w-full resize-none py-3 sm:py-3.5 pl-4 sm:pl-5 pr-20 sm:pr-24 bg-white/[0.035] border border-white/[0.09] rounded-2xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-champagne-400/70 focus:ring-1 focus:ring-champagne-400/40 transition-all duration-200 disabled:opacity-50 shadow-inner"
+              className="w-full resize-none py-3 sm:py-3.5 pl-4 sm:pl-5 pr-14 sm:pr-16 bg-white/[0.035] border border-white/[0.09] rounded-2xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/70 focus:ring-1 focus:ring-emerald-500/40 transition-all duration-200 disabled:opacity-50 shadow-inner"
             />
 
-            <div className="absolute right-2.5 flex items-center space-x-1.5">
+            <div className="absolute right-2.5 sm:right-3 flex items-center space-x-1.5">
               {isStreaming ? (
                 <button
                   type="button"
                   onClick={handleStopStreaming}
-                  className="p-2 sm:p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl transition touch-target flex items-center justify-center shadow-md shadow-rose-600/30"
+                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-rose-600 hover:bg-rose-500 text-white transition touch-target flex items-center justify-center shadow-md shadow-rose-600/30 flex-shrink-0 cursor-pointer"
                   title="Stop generating"
                   aria-label="Stop generating"
                 >
-                  <Square className="h-4 w-4 fill-white" />
+                  <Square className="h-3.5 w-3.5 fill-white" />
                 </button>
               ) : (
                 <button
                   type="submit"
                   disabled={!inputValue.trim()}
-                  className="p-2 sm:p-2.5 bg-champagne-400 hover:bg-champagne-300 disabled:opacity-30 text-slate-950 font-semibold rounded-xl transition shadow-md shadow-champagne-400/20 touch-target flex items-center justify-center hover:scale-105 active:scale-95"
+                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 disabled:bg-white/[0.08] disabled:text-slate-500 text-white font-medium transition-all shadow-md shadow-emerald-500/25 disabled:shadow-none flex items-center justify-center flex-shrink-0 touch-target cursor-pointer"
                   title="Send message"
                   aria-label="Send message"
                 >
-                  <Send className="h-4 w-4" />
+                  <Send className="h-3.5 w-3.5 ml-0.5" />
                 </button>
               )}
             </div>

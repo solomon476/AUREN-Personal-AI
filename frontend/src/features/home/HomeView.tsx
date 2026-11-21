@@ -132,13 +132,13 @@ export const HomeView: React.FC = () => {
       {/* Top Briefing Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 sm:pb-6 border-b border-white/[0.08] gap-4 sm:gap-6 relative">
         <div className="space-y-1">
-          <div className="flex items-center space-x-2 text-xs font-medium text-champagne-300 mb-1">
-            <Calendar className="w-3.5 h-3.5 text-champagne-400" />
+          <div className="flex items-center space-x-2 text-xs font-medium text-emerald-400 mb-1">
+            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
             <span className="tracking-tight">{todayFormatted}</span>
             <span className="text-slate-600">•</span>
             <span className="text-slate-400 font-normal">Personal Command Center</span>
           </div>
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-100 via-slate-200 to-champagne-200 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
             {getGreeting()}{displayName ? `, ${displayName}` : ''}
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 max-w-xl leading-relaxed">
@@ -146,24 +146,24 @@ export const HomeView: React.FC = () => {
           </p>
         </div>
 
-        {/* Quick KPI Snapshot - Minimal Obsidian & Champagne Design */}
+        {/* Quick KPI Snapshot - Minimal Obsidian & Emerald Design */}
         {dashboard && (
           <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto w-full md:w-auto scrollbar-none py-1">
-            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-champagne-400/20 transition-all group">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-emerald-500/30 transition-all group">
               <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-medium">Tasks</span>
-              <span className="text-lg sm:text-xl font-bold text-slate-100 tracking-tight font-mono inline-block">
+              <span className="text-lg sm:text-xl font-bold text-white tracking-tight font-mono inline-block">
                 {dashboard.active_tasks_count ?? 0}
               </span>
             </div>
-            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-champagne-400/20 transition-all group">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-emerald-500/30 transition-all group">
               <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-medium">Projects</span>
-              <span className="text-lg sm:text-xl font-bold text-slate-100 tracking-tight font-mono inline-block">
+              <span className="text-lg sm:text-xl font-bold text-white tracking-tight font-mono inline-block">
                 {dashboard.active_projects_count ?? 0}
               </span>
             </div>
-            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-champagne-400/20 transition-all group">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-emerald-500/30 transition-all group">
               <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-medium">Goals</span>
-              <span className="text-lg sm:text-xl font-bold text-champagne-200/90 tracking-tight font-mono inline-block">
+              <span className="text-lg sm:text-xl font-bold text-emerald-400 tracking-tight font-mono inline-block">
                 {dashboard.active_goals_count ?? 0}
               </span>
             </div>
@@ -178,12 +178,12 @@ export const HomeView: React.FC = () => {
             key={idx}
             className={`flex-1 min-w-[42px] max-w-[56px] py-2 px-1.5 rounded-xl text-center border transition-all ${
               d.isToday
-                ? 'bg-champagne-400/15 border-champagne-400/40 text-champagne-200 shadow-sm'
+                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 shadow-sm'
                 : 'bg-[#0c0e14] border-white/[0.05] text-slate-400 hover:border-white/[0.1]'
             }`}
           >
             <span className="text-[10px] uppercase tracking-wider block font-medium opacity-80">{d.name}</span>
-            <span className={`text-xs sm:text-sm font-bold font-mono mt-0.5 block ${d.isToday ? 'text-champagne-300' : 'text-slate-300'}`}>
+            <span className={`text-xs sm:text-sm font-bold font-mono mt-0.5 block ${d.isToday ? 'text-emerald-400' : 'text-slate-300'}`}>
               {d.dayNum}
             </span>
           </div>
@@ -194,7 +194,7 @@ export const HomeView: React.FC = () => {
       {!isAuthLoading && !user && (
         <div className="rounded-2xl bg-[#0e111a]/90 border border-white/[0.08] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-subtle-elevation backdrop-blur-md">
           <div className="flex items-center space-x-3.5">
-            <div className="p-2.5 rounded-xl bg-champagne-400/10 text-champagne-300 flex-shrink-0 border border-champagne-400/20">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 flex-shrink-0 border border-emerald-500/20">
               <Bot className="w-5 h-5" />
             </div>
             <div>
@@ -206,7 +206,7 @@ export const HomeView: React.FC = () => {
           </div>
           <Link
             to="/chat"
-            className="px-4 py-2 rounded-xl bg-champagne-400 hover:bg-champagne-300 text-slate-950 text-xs font-semibold transition whitespace-nowrap text-center shadow-md shadow-champagne-400/20"
+            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-semibold transition whitespace-nowrap text-center shadow-md shadow-emerald-500/20"
           >
             Open Assistant
           </Link>
@@ -216,16 +216,16 @@ export const HomeView: React.FC = () => {
       {/* Central AI Assistant Entry Point (Raycast/Linear Style Command Bar) */}
       <div className="relative rounded-2xl bg-[#0e111a]/90 border border-white/[0.08] p-5 sm:p-6 shadow-card-elevation space-y-4">
         {/* Subtle Ambient Ray */}
-        <div className="absolute top-0 right-1/4 w-72 h-32 bg-champagne-400/5 blur-3xl pointer-events-none rounded-full" />
+        <div className="absolute top-0 right-1/4 w-72 h-32 bg-emerald-500/5 blur-3xl pointer-events-none rounded-full" />
 
         <div className="flex items-center justify-between relative z-10">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-champagne-300">
-            <Sparkles className="w-4 h-4 text-champagne-400 animate-pulse" />
+          <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400">
+            <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
             <span className="tracking-tight">AUREN Intelligence Composer</span>
           </div>
           <Link
             to="/chat"
-            className="text-[11px] text-slate-400 hover:text-champagne-300 font-medium flex items-center space-x-1 transition-colors"
+            className="text-[11px] text-slate-400 hover:text-emerald-300 font-medium flex items-center space-x-1 transition-colors"
           >
             <span>Open Dedicated Assistant</span>
             <ChevronRight className="w-3.5 h-3.5" />
@@ -241,14 +241,14 @@ export const HomeView: React.FC = () => {
             value={promptInput}
             onChange={(e) => setPromptInput(e.target.value)}
             placeholder="Ask AUREN anything, plan today's priorities, or break down a project..."
-            className="w-full bg-[#07080c] border border-white/[0.09] rounded-xl pl-11 pr-12 py-3.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-champagne-400/70 focus:ring-1 focus:ring-champagne-400/40 shadow-inner transition-all"
+            className="w-full bg-[#07080c] border border-white/[0.09] rounded-xl pl-11 pr-12 py-3.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/70 focus:ring-1 focus:ring-emerald-500/40 shadow-inner transition-all"
           />
           <button
             type="submit"
-            className="absolute right-2.5 p-2 rounded-lg bg-champagne-400 hover:bg-champagne-300 text-slate-950 font-semibold transition shadow-md shadow-champagne-400/25 hover:scale-105 active:scale-95"
+            className="absolute right-2.5 h-8 w-8 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white flex items-center justify-center shadow-md shadow-emerald-500/25 transition cursor-pointer"
             title="Ask AUREN"
           >
-            <Send className="w-3.5 h-3.5" />
+            <Send className="w-3.5 h-3.5 ml-0.5" />
           </button>
         </form>
 
@@ -491,13 +491,13 @@ export const HomeView: React.FC = () => {
                       <span className="text-xs font-semibold text-slate-200 group-hover:text-white truncate pr-2 tracking-tight">
                         {project.name}
                       </span>
-                      <span className="text-[10px] font-mono text-champagne-300 font-semibold">
+                      <span className="text-[10px] font-mono text-emerald-400 font-semibold">
                         {project.progress_percentage ?? 0}%
                       </span>
                     </div>
                     <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-champagne-500 to-amber-300 rounded-full transition-all duration-300 shadow-sm"
+                        className="h-full bg-emerald-500 rounded-full transition-all duration-300 shadow-sm"
                         style={{ width: `${project.progress_percentage ?? 0}%` }}
                       />
                     </div>
@@ -517,12 +517,12 @@ export const HomeView: React.FC = () => {
           <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Target className="w-4 h-4 text-champagne-400" />
+                <Target className="w-4 h-4 text-emerald-400" />
                 <h2 className="text-sm font-semibold text-slate-100 tracking-tight">Strategic Goals</h2>
               </div>
               <Link
                 to="/goals"
-                className="text-[11px] text-slate-400 hover:text-champagne-300 flex items-center space-x-1 transition"
+                className="text-[11px] text-slate-400 hover:text-emerald-300 flex items-center space-x-1 transition"
               >
                 <span>View Goals</span>
                 <ArrowRight className="w-3 h-3" />
@@ -533,7 +533,7 @@ export const HomeView: React.FC = () => {
               <div className="p-6 text-center text-xs text-slate-500">Loading goals...</div>
             ) : !user ? (
               <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
-                <Target className="w-5 h-5 text-champagne-400 mx-auto opacity-80" />
+                <Target className="w-5 h-5 text-emerald-400 mx-auto opacity-80" />
                 <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Sign in to track strategic objectives, measurable milestones, and deadlines.
@@ -561,13 +561,13 @@ export const HomeView: React.FC = () => {
                   <div key={goal.id} className="p-3.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] space-y-2.5 shadow-sm transition-all">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-200 truncate pr-2 tracking-tight">{goal.title}</span>
-                      <span className="font-mono text-champagne-300 text-[11px] font-semibold flex-shrink-0">
+                      <span className="font-mono text-emerald-400 text-[11px] font-semibold flex-shrink-0">
                         {goal.progress_percentage ?? 0}%
                       </span>
                     </div>
                     <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="h-full bg-champagne-400 rounded-full transition-all duration-300"
+                        className="h-full bg-emerald-500 rounded-full transition-all duration-300"
                         style={{ width: `${goal.progress_percentage ?? 0}%` }}
                       />
                     </div>
@@ -584,12 +584,12 @@ export const HomeView: React.FC = () => {
           <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <MessageSquare className="w-4 h-4 text-champagne-300" />
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
                 <h2 className="text-sm font-semibold text-slate-100 tracking-tight">Recent Conversations</h2>
               </div>
               <Link
                 to="/chat"
-                className="text-[11px] text-slate-400 hover:text-champagne-300 flex items-center space-x-1 transition"
+                className="text-[11px] text-slate-400 hover:text-emerald-300 flex items-center space-x-1 transition"
               >
                 <span>New Dialogue</span>
                 <ArrowRight className="w-3 h-3" />
@@ -600,14 +600,14 @@ export const HomeView: React.FC = () => {
               <div className="p-6 text-center text-xs text-slate-500">Loading dialogue...</div>
             ) : !user ? (
               <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
-                <MessageSquare className="w-5 h-5 text-champagne-400 mx-auto opacity-80" />
+                <MessageSquare className="w-5 h-5 text-emerald-400 mx-auto opacity-80" />
                 <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Sign in to access your persistent conversations across devices.
                 </p>
                 <Link
                   to="/chat"
-                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-champagne-400 hover:bg-champagne-300 text-xs font-semibold text-slate-950 transition shadow-sm"
+                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-xs font-semibold text-white transition shadow-sm"
                 >
                   Start Dialogue
                 </Link>
@@ -622,7 +622,7 @@ export const HomeView: React.FC = () => {
                 <p className="text-xs text-slate-400">No active conversations</p>
                 <Link
                   to="/chat"
-                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-champagne-400 hover:bg-champagne-300 text-xs font-semibold text-slate-950 transition shadow-sm"
+                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-xs font-semibold text-white transition shadow-sm"
                 >
                   Start Dialogue
                 </Link>

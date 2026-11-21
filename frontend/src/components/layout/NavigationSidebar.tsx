@@ -168,7 +168,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             <div className="flex items-center space-x-2.5">
               <Icon
                 className={`h-4 w-4 transition-colors ${
-                  active ? 'text-champagne-300' : 'text-slate-400 group-hover:text-slate-200'
+                  active ? 'text-emerald-400' : 'text-slate-400 group-hover:text-slate-200'
                 }`}
               />
               <span className="tracking-tight">{item.label}</span>
@@ -177,14 +177,14 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               <span
                 className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border transition-colors ${
                   active
-                    ? 'bg-champagne-950/80 text-champagne-300 border-champagne-700/50'
+                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/50'
                     : item.badgeColor
                 }`}
               >
                 {item.badge}
               </span>
             ) : active ? (
-              <span className="w-1.5 h-1.5 rounded-full bg-champagne-400 shadow-[0_0_8px_rgba(215,186,131,0.6)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
             ) : null}
           </Link>
         );
@@ -197,17 +197,15 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       {/* Brand Header */}
       <div className="p-4 border-b border-white/[0.06] flex items-center justify-between">
         <Link to="/home" onClick={onNavigate} className="flex items-center space-x-2.5 group">
-          <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-[#d7ba83] via-[#be8c42] to-[#6c4327] p-0.5 flex items-center justify-center text-white shadow-md shadow-[#d7ba83]/10 group-hover:scale-105 transition-transform duration-200">
-            <div className="w-full h-full bg-[#07080c] rounded-[10px] flex items-center justify-center">
-              <Bot className="h-4 w-4 text-champagne-300 group-hover:text-[#e6d4b0] transition-colors" />
-            </div>
+          <div className="h-8 w-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-md shadow-emerald-500/10 group-hover:scale-105 transition-transform duration-200">
+            <Bot className="h-4 w-4 text-emerald-400 group-hover:text-emerald-300 transition-colors" />
           </div>
           <div className="flex flex-col">
             <div className="flex items-center">
               <span className="text-base font-extrabold tracking-[0.18em] text-white">
                 AUREN
               </span>
-              <span className="ml-1.5 text-[8px] text-champagne-300 uppercase tracking-widest font-semibold px-1 py-0.2 bg-champagne-950/70 rounded border border-champagne-800/40">
+              <span className="ml-1.5 text-[8px] text-emerald-400 uppercase tracking-widest font-semibold px-1 py-0.2 bg-emerald-950/70 rounded border border-emerald-800/40">
                 Personal AI
               </span>
             </div>
@@ -279,7 +277,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             </button>
             <button
               onClick={() => onOpenAuth?.('signup')}
-              className="w-full flex items-center justify-center py-2 px-3 text-xs font-semibold bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] rounded-xl shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] border border-[#e6d4b0]/40 transition"
+              className="w-full flex items-center justify-center py-2 px-3 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl shadow-sm hover:shadow-[0_0_16px_rgba(16,185,129,0.3)] border border-emerald-400/40 transition"
             >
               Get Started
             </button>

@@ -30,11 +30,19 @@ class GeminiProvider(BaseLLMProvider):
         self.api_key = api_key
         self.model_id = model_id
 
-        # Gracefully remap deprecated or alias models when invoking Google API
+        # Gracefully remap deprecated, experimental, or alias models when invoking Google API
         api_model = model_id
-        if api_model in ("gemini-2.5-flash", "models/gemini-2.5-flash", "gemini-2.0-flash", "models/gemini-2.0-flash"):
+        FLASH_ALIASES = {
+            "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-2.5-flash",
+            "gemini-2.0-flash", "models/gemini-2.5-flash", "models/gemini-2.0-flash",
+        }
+        PRO_ALIASES = {
+            "gemini-3.8-pro", "gemini-2.5-pro", "models/gemini-2.5-pro",
+        }
+        if api_model in FLASH_ALIASES:
             api_model = "gemini-3.1-flash-lite"
-        elif api_model in ("gemini-2.5-pro", "models/gemini-2.5-pro"):
+        elif api_model in PRO_ALIASES:
             api_model = "gemini-3.8-pro"
         self._api_model = api_model
 
@@ -53,9 +61,9 @@ class GeminiProvider(BaseLLMProvider):
         return self.model_id
 
     def _get_candidate_models(self) -> List[str]:
-        """Return prioritized list of models to try for maximum availability and resilience."""
+        """Return prioritized list of verified fast models for minimum latency and resilience."""
         candidates = [self._api_model]
-        for fallback in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite"):
+        for fallback in ("gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.5-flash-lite"):
             if fallback not in candidates:
                 candidates.append(fallback)
         return candidates
@@ -103,7 +111,7 @@ class GeminiProvider(BaseLLMProvider):
         candidates = self._get_candidate_models()
         for idx, candidate in enumerate(candidates):
             has_fallback = idx < len(candidates) - 1
-            candidate_timeout = min(self.timeout_seconds, 8.0) if has_fallback else self.timeout_seconds
+            candidate_timeout = min(self.timeout_seconds, 3.5) if has_fallback else self.timeout_seconds
             try:
                 response = await asyncio.wait_for(
                     self._client.aio.models.generate_content(
@@ -176,7 +184,7 @@ class GeminiProvider(BaseLLMProvider):
                 # Verify connectivity and pull first token with short initial timeout
                 stream_iter = stream.__aiter__()
                 try:
-                    first_chunk = await asyncio.wait_for(stream_iter.__anext__(), timeout=8.0)
+                    first_chunk = await asyncio.wait_for(stream_iter.__anext__(), timeout=3.5)
                 except StopAsyncIteration:
                     return
 

@@ -478,11 +478,14 @@ class ChatService:
 
                 retriever = MemoryRetriever(repository=repo)
                 ctx_mgr = MemoryContextManager(retriever=retriever, embedding_provider=embedding_provider)
-                return await ctx_mgr.assemble_memory_context(
-                    user_id=user.id,
-                    query_text=request.message,
-                    provider=provider,
-                    budget_tokens=settings.MEMORY_CONTEXT_BUDGET_TOKENS,
+                return await asyncio.wait_for(
+                    ctx_mgr.assemble_memory_context(
+                        user_id=user.id,
+                        query_text=request.message,
+                        provider=provider,
+                        budget_tokens=settings.MEMORY_CONTEXT_BUDGET_TOKENS,
+                    ),
+                    timeout=0.8,
                 )
             except Exception as mem_err:
                 logger.warning("Failed injecting memory context (safe continue): %s", mem_err)
@@ -497,9 +500,12 @@ class ChatService:
 
                 prod_repo = get_productivity_repository(user_token=user_token)
                 prod_ctx_mgr = ProductivityContextManager(repository=prod_repo)
-                return await prod_ctx_mgr.assemble_productivity_context(
-                    user_id=user.id,
-                    query_text=request.message,
+                return await asyncio.wait_for(
+                    prod_ctx_mgr.assemble_productivity_context(
+                        user_id=user.id,
+                        query_text=request.message,
+                    ),
+                    timeout=0.8,
                 )
             except Exception as prod_err:
                 logger.warning("Failed injecting productivity context (safe continue): %s", prod_err)

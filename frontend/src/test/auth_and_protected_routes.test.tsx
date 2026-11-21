@@ -108,7 +108,7 @@ describe('Authentication State and Session Controls', () => {
     await user.click(userMenuButton);
 
     await waitFor(() => {
-      expect(screen.getByText('RLS Protected User ID')).toBeInTheDocument();
+      expect(screen.getByText('Account Active')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
     });
   });

@@ -1,9 +1,12 @@
 /**
  * Authenticated User Menu and Avatar Widget.
+ * Clean, professional account presentation with white, black, and emerald accents.
+ * Technical debug identifiers (raw database UUIDs and internal RLS markers) are omitted.
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { LogOut, Shield, ChevronDown } from 'lucide-react';
+import { LogOut, Settings, ChevronDown } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
 
 export const UserProfileMenu: React.FC = () => {
@@ -38,9 +41,9 @@ export const UserProfileMenu: React.FC = () => {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2.5 px-3 py-1.5 rounded-xl bg-[#0e111a] hover:bg-[#141722] border border-white/[0.08] text-left transition focus:outline-none focus:ring-2 focus:ring-champagne-400/50"
+        className="flex items-center space-x-2.5 px-3 py-1.5 rounded-xl bg-[#0e111a] hover:bg-[#141722] border border-white/[0.08] text-left transition focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
       >
-        <div className="h-7 w-7 rounded-lg bg-[#141722] border border-champagne-400/30 flex items-center justify-center text-champagne-300 font-bold text-xs shadow-sm">
+        <div className="h-7 w-7 rounded-lg bg-[#141722] border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shadow-sm">
           {initial}
         </div>
         <div className="hidden sm:block text-xs">
@@ -51,26 +54,31 @@ export const UserProfileMenu: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[#0e111a] border border-white/[0.08] shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-          <div className="px-4 py-2 border-b border-white/[0.06]">
+        <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[#0a0d14] border border-white/[0.08] shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="px-4 py-2.5 border-b border-white/[0.06]">
             <p className="text-xs font-semibold text-white truncate">{displayName}</p>
             <p className="text-[11px] text-slate-400 truncate mt-0.5">{displayEmail}</p>
-            <div className="mt-2 flex items-center space-x-1.5 text-[10px] text-indigo-400 bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-900/60 w-fit">
-              <Shield className="h-3 w-3" />
-              <span>RLS Protected User ID</span>
+            <div className="mt-2.5 flex items-center space-x-1.5 text-[10px] text-emerald-400 bg-emerald-950/40 px-2.5 py-0.5 rounded-md border border-emerald-800/40 w-fit">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] animate-pulse" />
+              <span>Account Active</span>
             </div>
-            <code className="text-[9px] text-slate-500 block mt-1 font-mono truncate" title={user.id}>
-              {user.id}
-            </code>
           </div>
 
           <div className="py-1">
+            <Link
+              to="/settings"
+              onClick={() => setIsOpen(false)}
+              className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-slate-300 hover:bg-white/[0.04] hover:text-white transition text-left"
+            >
+              <Settings className="h-3.5 w-3.5 text-slate-400" />
+              <span>Settings & Preferences</span>
+            </Link>
             <button
               onClick={() => {
                 setIsOpen(false);
                 signOut();
               }}
-              className="w-full flex items-center space-x-2 px-4 py-2 text-xs text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition text-left"
+              className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition text-left"
             >
               <LogOut className="h-3.5 w-3.5" />
               <span>Sign Out</span>
