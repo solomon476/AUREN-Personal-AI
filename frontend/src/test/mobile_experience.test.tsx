@@ -197,7 +197,7 @@ describe('Mobile-First Phone Experience', () => {
     expect(within(sheetDialog).getByRole('link', { name: /goals & milestones/i })).toBeInTheDocument();
     expect(within(sheetDialog).getByRole('link', { name: /omnisearch/i })).toBeInTheDocument();
     expect(within(sheetDialog).getByRole('link', { name: /settings & preferences/i })).toBeInTheDocument();
-    expect(within(sheetDialog).getByRole('link', { name: /system & database/i })).toBeInTheDocument();
+    expect(within(sheetDialog).queryByRole('link', { name: /system & database/i })).not.toBeInTheDocument();
 
     // Click Long-term Memory from the More Sheet
     await user.click(memoryLink);

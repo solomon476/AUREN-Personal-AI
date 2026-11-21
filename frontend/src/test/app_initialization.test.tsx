@@ -48,7 +48,8 @@ describe('Application Initialization', () => {
 
       // Verify primary navigation items
       expect(screen.getByText('AI Assistant')).toBeInTheDocument();
-      expect(screen.getByText('System & Database')).toBeInTheDocument();
+      expect(screen.getByText('Settings & Privacy')).toBeInTheDocument();
+      expect(screen.queryByText('System & Database')).not.toBeInTheDocument();
 
       // Verify roadmap sections
       expect(screen.getByText('Long-term Memory')).toBeInTheDocument();

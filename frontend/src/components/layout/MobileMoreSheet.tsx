@@ -15,7 +15,6 @@ import {
   Sparkles,
   Search,
   Settings,
-  Activity,
   LogOut,
   ChevronRight,
   ShieldCheck,
@@ -99,13 +98,6 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       desc: 'Model, theme & GDPR export',
       icon: Settings,
       color: 'text-slate-300 bg-slate-900 border-slate-800',
-    },
-    {
-      to: '/system',
-      label: 'System & Database',
-      desc: 'API health & PostgreSQL RLS',
-      icon: Activity,
-      color: 'text-teal-400 bg-teal-950/60 border-teal-800/40',
     },
   ];
 

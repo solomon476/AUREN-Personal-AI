@@ -29,17 +29,16 @@ describe('Navigation and Browser History', () => {
     vi.clearAllMocks();
   });
 
-  it('navigates from /chat to /system when clicking System & Database', async () => {
+  it('navigates from /chat to /settings when clicking Settings & Privacy', async () => {
     const user = userEvent.setup();
     const { history } = await renderRouter('/chat');
 
-    const systemNavLink = screen.getByRole('link', { name: /system & database/i });
-    await user.click(systemNavLink);
+    const settingsNavLink = screen.getByRole('link', { name: /settings & privacy/i });
+    await user.click(settingsNavLink);
 
     await waitFor(() => {
-      expect(history.location.pathname).toBe('/system');
-      expect(screen.getByText('PostgreSQL Schemas & RLS Policies')).toBeInTheDocument();
-      expect(screen.getByText('FastAPI Backend & Streaming Health')).toBeInTheDocument();
+      expect(history.location.pathname).toBe('/settings');
+      expect(screen.getByRole('heading', { name: /settings & preferences/i })).toBeInTheDocument();
     });
   });
 
@@ -72,21 +71,21 @@ describe('Navigation and Browser History', () => {
     const user = userEvent.setup();
     const { history } = await renderRouter('/chat');
 
-    // 1. Navigate to /system
-    const systemLink = screen.getByRole('link', { name: /system & database/i });
-    await user.click(systemLink);
-    await waitFor(() => expect(history.location.pathname).toBe('/system'));
+    // 1. Navigate to /settings
+    const settingsLink = screen.getByRole('link', { name: /settings & privacy/i });
+    await user.click(settingsLink);
+    await waitFor(() => expect(history.location.pathname).toBe('/settings'));
 
     // 2. Navigate to /tasks
     const tasksLink = screen.getByRole('link', { name: /tasks & timetable/i });
     await user.click(tasksLink);
     await waitFor(() => expect(history.location.pathname).toBe('/tasks'));
 
-    // 3. Browser Back -> should return to /system
+    // 3. Browser Back -> should return to /settings
     history.back();
     await waitFor(() => {
-      expect(history.location.pathname).toBe('/system');
-      expect(screen.getByText('PostgreSQL Schemas & RLS Policies')).toBeInTheDocument();
+      expect(history.location.pathname).toBe('/settings');
+      expect(screen.getByRole('heading', { name: /settings & preferences/i })).toBeInTheDocument();
     });
 
     // 4. Browser Forward -> should return to /tasks

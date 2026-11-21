@@ -13,7 +13,6 @@ import {
 import { AppLayout } from './components/layout/AppLayout';
 import { HomeView } from './features/home/HomeView';
 import { ChatView } from './features/chat/ChatView';
-import { SystemView } from './features/system/SystemView';
 import { MemoryView } from './features/memory/MemoryView';
 import { TasksView } from './features/tasks/TasksView';
 import { ProjectsView } from './features/projects/ProjectsView';
@@ -124,17 +123,21 @@ export const settingsRoute = createRoute({
   component: SettingsView,
 });
 
-// Search & System Observability
+// Search Route
 export const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search',
   component: OmnisearchView,
 });
 
+// Legacy /system redirected to /settings
 export const systemRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/system',
-  component: SystemView,
+  beforeLoad: () => {
+    throw redirect({ to: '/settings' });
+  },
+  component: () => null,
 });
 
 // Area 7: Operations & GPS Hub (/operations)
