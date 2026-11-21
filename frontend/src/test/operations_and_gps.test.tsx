@@ -4,7 +4,6 @@
  * staff roster, and field check-in logging.
  */
 
-import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { OperationsView } from '../features/operations/OperationsView';
@@ -42,7 +41,7 @@ describe('Operations & GPS Hub', () => {
         });
       }),
     };
-    Object.defineProperty(global.navigator, 'geolocation', {
+    Object.defineProperty(window.navigator, 'geolocation', {
       value: mockGeolocation,
       writable: true,
       configurable: true,
