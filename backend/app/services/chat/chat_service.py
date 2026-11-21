@@ -513,7 +513,7 @@ class ChatService:
                         provider=provider,
                         budget_tokens=settings.MEMORY_CONTEXT_BUDGET_TOKENS,
                     ),
-                    timeout=2.5,
+                    timeout=1.2,
                 )
             except Exception as mem_err:
                 logger.warning("Failed injecting memory context (safe continue): %s", mem_err)
@@ -533,7 +533,7 @@ class ChatService:
                         user_id=user.id,
                         query_text=request.message,
                     ),
-                    timeout=2.5,
+                    timeout=1.2,
                 )
             except Exception as prod_err:
                 logger.warning("Failed injecting productivity context (safe continue): %s", prod_err)
@@ -789,8 +789,8 @@ class ChatService:
             # - Completed stays completed
             if not is_completed:
                 target_status = terminal_state or "interrupted"
-                if accumulated_chunks:
-                    partial_text = "".join(accumulated_chunks)
+                partial_text = "".join(accumulated_chunks) if accumulated_chunks else ""
+                if partial_text.strip():
                     if retry_assistant_msg_id:
                         interrupted_msg = await repo.update_assistant_message(
                             user_id=user.id,

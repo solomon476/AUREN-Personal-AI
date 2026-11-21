@@ -25,6 +25,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import { useNavigate, useParams } from '@tanstack/react-router';
+import { API_BASE_URL } from '../../api/client';
 import { useSafeSearch } from '../../hooks/useSafeSearch';
 import {
   AttachmentItem,
@@ -83,7 +84,33 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   }, [initialPrompt]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [thinkingSeconds, setThinkingSeconds] = useState(0);
   const [reconnectStatus, setReconnectStatus] = useState<string | null>(null);
+
+  // Keep-warm ping to eliminate Railway cold starts while app is open
+  useEffect(() => {
+    const pingBackend = () => {
+      fetch(`${API_BASE_URL}/health`).catch(() => {});
+    };
+    pingBackend();
+    const pingInterval = setInterval(pingBackend, 4 * 60 * 1000);
+    return () => clearInterval(pingInterval);
+  }, []);
+
+  // Track elapsed thinking time to inform user of pipeline progress
+  useEffect(() => {
+    let timer: any = null;
+    if (isStreaming && !streamingContent) {
+      timer = setInterval(() => {
+        setThinkingSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setThinkingSeconds(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isStreaming, streamingContent]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingRetry, setPendingRetry] = useState<{
     message: string;
@@ -905,10 +932,24 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                     {streamingContent ? (
                       <MessageContent content={streamingContent} role="assistant" conversationId={activeConversationId || undefined} />
                     ) : (
-                      <span className="inline-flex items-center space-x-2 text-slate-500 text-xs animate-pulse">
-                        <span className="font-semibold text-emerald-700">AUREN is thinking</span>
-                        <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce"></span>
-                      </span>
+                      <div className="flex flex-col space-y-1">
+                        <span className="inline-flex items-center space-x-2 text-slate-600 text-xs font-medium">
+                          <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
+                          <span className="font-semibold text-emerald-700">
+                            {thinkingSeconds < 3
+                              ? 'AUREN is thinking...'
+                              : thinkingSeconds < 6
+                              ? 'Scanning schedule & relevant context...'
+                              : 'Formulating structured response...'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">({thinkingSeconds}s)</span>
+                        </span>
+                        {thinkingSeconds >= 7 && (
+                          <span className="text-[10px] text-slate-400 italic">
+                            Connecting to neural engine (warming server container)...
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
