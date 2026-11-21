@@ -39,14 +39,16 @@ interface JourneyTrajectoryMapProps {
 
 const TILE_SERVERS = {
   streets: {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &bull; &copy; OpenStreetMap',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
     maxZoom: 19,
+    maxNativeZoom: 19,
   },
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri, USGS, NOAA',
-    maxZoom: 18,
+    attribution: 'Tiles &copy; Esri &bull; Source: USGS, NOAA',
+    maxZoom: 19,
+    maxNativeZoom: 17, // Stretches tiles at deep zoom levels to eliminate "Map data not yet available" placeholders
   },
 };
 
@@ -128,6 +130,22 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
     };
   }, [mapMode]);
 
+  // If no points or fix exist, attempt browser geolocation to center near user
+  useEffect(() => {
+    if (points.length === 0 && !currentLocation && typeof window !== 'undefined' && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (!hasAutoCenteredRef.current && mapInstanceRef.current) {
+            mapInstanceRef.current.setView([pos.coords.latitude, pos.coords.longitude], 14, { animate: true });
+            hasAutoCenteredRef.current = true;
+          }
+        },
+        () => {},
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+      );
+    }
+  }, [points.length, currentLocation, isMapReady]);
+
   // -------------------------------------------------------------------------
   // 2. Handle Tile Layer Switching (Streets vs Satellite)
   // -------------------------------------------------------------------------
@@ -145,7 +163,7 @@ export const JourneyTrajectoryMap: React.FC<JourneyTrajectoryMapProps> = ({
         const layer = L.tileLayer(config.url, {
           attribution: config.attribution,
           maxZoom: config.maxZoom,
-          subdomains: mapMode === 'streets' ? 'abcd' : '',
+          maxNativeZoom: (config as any).maxNativeZoom || config.maxZoom,
         });
 
         layer.on('tileerror', () => {
