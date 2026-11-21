@@ -23,6 +23,7 @@ import { OmnisearchView } from './features/search/OmnisearchView';
 import { ReflectionView } from './features/reflection/ReflectionView';
 import { JournalView } from './features/journal/JournalView';
 import { SettingsView } from './features/settings/SettingsView';
+import { OperationsView } from './features/operations/OperationsView';
 import { NotFound } from './components/common/NotFound';
 
 // Root Application Route with Shared Shell Layout
@@ -136,6 +137,13 @@ export const systemRoute = createRoute({
   component: SystemView,
 });
 
+// Area 7: Operations & GPS Hub (/operations)
+export const operationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/operations',
+  component: OperationsView,
+});
+
 // Route Tree Definition
 export const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -152,6 +160,7 @@ export const routeTree = rootRoute.addChildren([
   settingsRoute,
   searchRoute,
   systemRoute,
+  operationsRoute,
 ]);
 
 export function createAppRouter() {

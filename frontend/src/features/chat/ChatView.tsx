@@ -638,8 +638,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         </div>
 
         {/* Input Composer Bar */}
-        <div className="p-3.5 sm:p-5 border-t border-white/[0.08] bg-[#07080c]/95 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <form onSubmit={handleSendMessage} className="relative flex items-center">
+        <div className="p-2.5 sm:p-4 border-t border-white/[0.08] bg-[#07080c]/98 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <form
+            onSubmit={handleSendMessage}
+            className="flex items-center gap-2 p-1.5 sm:p-2 bg-[#0e111a] border border-white/[0.12] rounded-2xl focus-within:border-emerald-500/70 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all shadow-lg"
+          >
             <textarea
               rows={1}
               value={inputValue}
@@ -652,15 +655,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               }}
               placeholder="Ask AUREN anything..."
               disabled={isStreaming}
-              className="w-full resize-none py-3 sm:py-3.5 pl-4 sm:pl-5 pr-14 sm:pr-16 bg-white/[0.035] border border-white/[0.09] rounded-2xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/70 focus:ring-1 focus:ring-emerald-500/40 transition-all duration-200 disabled:opacity-50 shadow-inner"
+              className="flex-1 bg-transparent border-0 outline-none px-3 py-1.5 text-xs sm:text-sm text-white placeholder-slate-400 focus:ring-0 resize-none min-h-[36px] max-h-[130px] leading-relaxed"
             />
 
-            <div className="absolute right-2.5 sm:right-3 flex items-center space-x-1.5">
+            <div className="flex items-center flex-shrink-0 pr-1">
               {isStreaming ? (
                 <button
                   type="button"
                   onClick={handleStopStreaming}
-                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-rose-600 hover:bg-rose-500 text-white transition touch-target flex items-center justify-center shadow-md shadow-rose-600/30 flex-shrink-0 cursor-pointer"
+                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition touch-target flex items-center justify-center shadow-md shadow-rose-600/30 cursor-pointer"
                   title="Stop generating"
                   aria-label="Stop generating"
                 >
@@ -670,7 +673,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 <button
                   type="submit"
                   disabled={!inputValue.trim()}
-                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 disabled:bg-white/[0.08] disabled:text-slate-500 text-white font-medium transition-all shadow-md shadow-emerald-500/25 disabled:shadow-none flex items-center justify-center flex-shrink-0 touch-target cursor-pointer"
+                  className={`h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer ${
+                    inputValue.trim()
+                      ? 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md shadow-emerald-500/30'
+                      : 'bg-white/[0.05] text-slate-500 hover:text-slate-400 border border-white/[0.06]'
+                  }`}
                   title="Send message"
                   aria-label="Send message"
                 >

@@ -23,6 +23,7 @@ import {
   ChevronRight,
   Sparkles,
   Command,
+  MapPin,
 } from 'lucide-react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
@@ -172,20 +173,25 @@ export const HomeView: React.FC = () => {
       </div>
 
       {/* 7-Day Quick Planner Calendar Strip */}
-      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 scrollbar-none">
+      <div className="flex items-center gap-2 overflow-x-auto py-2 scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {weekDays.map((d, idx) => (
           <div
             key={idx}
-            className={`flex-1 min-w-[42px] max-w-[56px] py-2 px-1.5 rounded-xl text-center border transition-all ${
+            className={`flex-shrink-0 w-[46px] xs:w-[50px] sm:w-[56px] h-[64px] sm:h-[70px] rounded-2xl flex flex-col items-center justify-center border transition-all select-none ${
               d.isToday
-                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 shadow-sm'
-                : 'bg-[#0c0e14] border-white/[0.05] text-slate-400 hover:border-white/[0.1]'
+                ? 'bg-emerald-500/15 border-emerald-400 text-white shadow-[0_0_12px_rgba(16,185,129,0.25)]'
+                : 'bg-[#10131d] border-white/[0.08] text-slate-300 hover:border-white/[0.18]'
             }`}
           >
-            <span className="text-[10px] uppercase tracking-wider block font-medium opacity-80">{d.name}</span>
-            <span className={`text-xs sm:text-sm font-bold font-mono mt-0.5 block ${d.isToday ? 'text-emerald-400' : 'text-slate-300'}`}>
+            <span className={`text-[10px] uppercase tracking-wider font-semibold ${d.isToday ? 'text-emerald-400' : 'text-slate-400'}`}>
+              {d.name}
+            </span>
+            <span className="text-sm sm:text-base font-bold font-mono mt-0.5 text-white">
               {d.dayNum}
             </span>
+            {d.isToday && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] mt-0.5" />
+            )}
           </div>
         ))}
       </div>
@@ -219,21 +225,21 @@ export const HomeView: React.FC = () => {
         <div className="absolute top-0 right-1/4 w-72 h-32 bg-emerald-500/5 blur-3xl pointer-events-none rounded-full" />
 
         <div className="flex items-center justify-between relative z-10">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400">
-            <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
-            <span className="tracking-tight">AUREN Intelligence Composer</span>
+          <div className="flex items-center space-x-2 text-xs font-semibold text-[#d7ba83]">
+            <Sparkles className="w-4 h-4 text-[#d7ba83] animate-pulse" />
+            <span className="tracking-tight text-white font-bold">AUREN Intelligence Composer</span>
           </div>
           <Link
             to="/chat"
-            className="text-[11px] text-slate-400 hover:text-emerald-300 font-medium flex items-center space-x-1 transition-colors"
+            className="text-[11px] text-slate-400 hover:text-[#d7ba83] font-medium flex items-center space-x-1 transition-colors"
           >
             <span>Open Dedicated Assistant</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
-        <form onSubmit={handleQuickAsk} className="relative flex items-center z-10">
-          <div className="absolute left-4 text-slate-500 pointer-events-none">
+        <form onSubmit={handleQuickAsk} className="flex items-center gap-2 p-1.5 sm:p-2 bg-[#07080c] border border-white/[0.12] rounded-2xl focus-within:border-emerald-500/70 focus-within:ring-1 focus-within:ring-emerald-500/40 transition-all shadow-inner relative z-10">
+          <div className="pl-3 text-slate-400 pointer-events-none flex-shrink-0">
             <Command className="w-4 h-4" />
           </div>
           <input
@@ -241,12 +247,17 @@ export const HomeView: React.FC = () => {
             value={promptInput}
             onChange={(e) => setPromptInput(e.target.value)}
             placeholder="Ask AUREN anything, plan today's priorities, or break down a project..."
-            className="w-full bg-[#07080c] border border-white/[0.09] rounded-xl pl-11 pr-12 py-3.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/70 focus:ring-1 focus:ring-emerald-500/40 shadow-inner transition-all"
+            className="flex-1 bg-transparent border-0 outline-none px-2 py-2 text-xs sm:text-sm text-white placeholder-slate-400 focus:ring-0"
           />
           <button
             type="submit"
-            className="absolute right-2.5 h-8 w-8 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white flex items-center justify-center shadow-md shadow-emerald-500/25 transition cursor-pointer"
+            className={`h-8 w-8 sm:h-9 sm:w-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${
+              promptInput.trim()
+                ? 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md shadow-emerald-500/30'
+                : 'bg-white/[0.06] hover:bg-white/[0.1] text-slate-400 hover:text-white border border-white/[0.08]'
+            }`}
             title="Ask AUREN"
+            aria-label="Ask AUREN"
           >
             <Send className="w-3.5 h-3.5 ml-0.5" />
           </button>
@@ -286,34 +297,41 @@ export const HomeView: React.FC = () => {
       </div>
 
       {/* Quick Actions Bar */}
-      <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
         <Link
           to="/tasks"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/[0.14] text-xs font-medium text-slate-300 hover:text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/40 text-xs font-medium text-emerald-300 hover:text-white transition shadow-sm"
         >
-          <Plus className="w-3.5 h-3.5 text-champagne-300" />
+          <Plus className="w-3.5 h-3.5 text-emerald-400" />
           <span>New Task</span>
         </Link>
         <Link
           to="/projects"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/[0.14] text-xs font-medium text-slate-300 hover:text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] hover:border-white/[0.16] text-xs font-semibold text-white transition shadow-sm"
         >
-          <Plus className="w-3.5 h-3.5 text-champagne-300" />
+          <Plus className="w-3.5 h-3.5 text-white" />
           <span>New Project</span>
         </Link>
         <Link
           to="/goals"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/[0.14] text-xs font-medium text-slate-300 hover:text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-amber-950/30 hover:bg-amber-900/40 border border-amber-800/40 text-xs font-medium text-amber-200 hover:text-white transition shadow-sm"
         >
-          <Plus className="w-3.5 h-3.5 text-champagne-300" />
+          <Plus className="w-3.5 h-3.5 text-amber-400" />
           <span>New Goal</span>
         </Link>
         <Link
           to="/journal"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/[0.14] text-xs font-medium text-slate-300 hover:text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-rose-950/35 hover:bg-rose-900/45 border border-rose-800/45 text-xs font-medium text-rose-200 hover:text-white transition shadow-sm"
         >
-          <BookOpen className="w-3.5 h-3.5 text-champagne-300" />
+          <BookOpen className="w-3.5 h-3.5 text-rose-300" />
           <span>Write Reflection</span>
+        </Link>
+        <Link
+          to="/operations"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-700/50 text-xs font-semibold text-emerald-300 hover:text-white transition shadow-sm"
+        >
+          <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Operations & GPS</span>
         </Link>
         <Link
           to="/search"

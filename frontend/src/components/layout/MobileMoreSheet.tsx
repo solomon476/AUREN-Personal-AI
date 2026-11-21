@@ -19,6 +19,7 @@ import {
   LogOut,
   ChevronRight,
   ShieldCheck,
+  MapPin,
 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
@@ -70,6 +71,13 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       desc: 'Execution KPIs & velocity',
       icon: LayoutDashboard,
       color: 'text-sky-400 bg-sky-950/60 border-sky-800/40',
+    },
+    {
+      to: '/operations',
+      label: 'Operations & GPS',
+      desc: 'Live location & field dispatch',
+      icon: MapPin,
+      color: 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40',
     },
     {
       to: '/reflection',

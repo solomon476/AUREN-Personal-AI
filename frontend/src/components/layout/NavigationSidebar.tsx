@@ -27,6 +27,7 @@ import {
   Search,
   Sparkles,
   Download,
+  MapPin,
 } from 'lucide-react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
@@ -101,6 +102,13 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       icon: LayoutDashboard,
       badge: null,
       badgeColor: '',
+    },
+    {
+      to: '/operations',
+      label: 'Operations & GPS',
+      icon: MapPin,
+      badge: 'Live',
+      badgeColor: 'bg-emerald-950/70 text-emerald-300 border-emerald-800/40',
     },
   ];
 

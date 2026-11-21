@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { UserProfileMenu } from '../auth/UserProfileMenu';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { InstallGuideModal } from '../pwa/InstallGuideModal';
+import { PWAInstallBanner } from '../pwa/PWAInstallBanner';
 
 export const AppLayout: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -85,6 +86,9 @@ export const AppLayout: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Subtle Ambient Background Gradient */}
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(215,186,131,0.04),rgba(255,255,255,0))]" />
+
+        {/* Global PWA Installation Alert Notification */}
+        <PWAInstallBanner />
 
         {/* Mobile Header Bar */}
         <header className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06] bg-[#07080c]/95 backdrop-blur-md z-30 pt-[env(safe-area-inset-top,0.5rem)]">
