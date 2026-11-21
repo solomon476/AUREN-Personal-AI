@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import AsyncIterator, List, Optional
+from typing import Any, AsyncIterator, List, Optional
 
 from app.services.llm.base import (
     BaseLLMProvider,
@@ -16,6 +16,21 @@ from app.services.llm.base import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Connection-pooled singleton client cache across requests to eliminate TLS handshake latency
+_genai_client_cache: dict[str, Any] = {}
+
+
+def _get_or_create_genai_client(api_key: str):
+    """Retrieve existing cached genai.Client or initialize new one with connection pooling."""
+    if api_key not in _genai_client_cache:
+        try:
+            from google import genai
+            _genai_client_cache[api_key] = genai.Client(api_key=api_key)
+        except Exception as exc:
+            logger.warning("Could not initialize google-genai Client: %s", exc)
+            return None
+    return _genai_client_cache[api_key]
 
 
 class GeminiProvider(BaseLLMProvider):
@@ -47,15 +62,7 @@ class GeminiProvider(BaseLLMProvider):
         self._api_model = api_model
 
         self.timeout_seconds = timeout_seconds
-        self._client = None
-
-        if self.api_key:
-            try:
-                from google import genai
-                self._client = genai.Client(api_key=self.api_key)
-            except Exception as exc:
-                logger.warning("Could not initialize google-genai Client: %s", exc)
-                self._client = None
+        self._client = _get_or_create_genai_client(self.api_key) if self.api_key else None
 
     def get_model_id(self) -> str:
         return self.model_id
@@ -63,7 +70,7 @@ class GeminiProvider(BaseLLMProvider):
     def _get_candidate_models(self) -> List[str]:
         """Return prioritized list of verified fast models for minimum latency and resilience."""
         candidates = [self._api_model]
-        for fallback in ("gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"):
+        for fallback in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"):
             if fallback not in candidates:
                 candidates.append(fallback)
         return candidates
@@ -134,7 +141,7 @@ class GeminiProvider(BaseLLMProvider):
         candidates = self._get_candidate_models()
         for idx, candidate in enumerate(candidates):
             has_fallback = idx < len(candidates) - 1
-            candidate_timeout = min(self.timeout_seconds, 15.0) if has_fallback else self.timeout_seconds
+            candidate_timeout = min(self.timeout_seconds, 4.0) if has_fallback else self.timeout_seconds
             try:
                 response = await asyncio.wait_for(
                     self._client.aio.models.generate_content(
@@ -196,7 +203,10 @@ class GeminiProvider(BaseLLMProvider):
         )
 
         last_error = None
-        for candidate in self._get_candidate_models():
+        candidates = self._get_candidate_models()
+        for idx, candidate in enumerate(candidates):
+            has_fallback = idx < len(candidates) - 1
+            first_token_timeout = 3.5 if has_fallback else min(self.timeout_seconds, 12.0)
             try:
                 stream = await self._client.aio.models.generate_content_stream(
                     model=candidate,
@@ -204,10 +214,10 @@ class GeminiProvider(BaseLLMProvider):
                     config=config,
                 )
 
-                # Verify connectivity and pull first token with resilient initial timeout
+                # Verify connectivity and pull first token with fast failover timeout
                 stream_iter = stream.__aiter__()
                 try:
-                    first_chunk = await asyncio.wait_for(stream_iter.__anext__(), timeout=min(self.timeout_seconds, 20.0))
+                    first_chunk = await asyncio.wait_for(stream_iter.__anext__(), timeout=first_token_timeout)
                 except StopAsyncIteration:
                     return
 
@@ -221,7 +231,7 @@ class GeminiProvider(BaseLLMProvider):
                 return
 
             except asyncio.TimeoutError:
-                logger.warning("Gemini initial stream timed out on model %s (trying fallback)", candidate)
+                logger.warning("Gemini initial stream timed out after %.1fs on model %s (trying fast fallback)", first_token_timeout, candidate)
                 last_error = LLMTimeoutError(f"Gemini stream timed out on {candidate}")
                 continue
             except Exception as exc:

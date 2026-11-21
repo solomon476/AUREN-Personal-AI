@@ -597,11 +597,14 @@ class ChatService:
                     memory_repo=get_memory_repository(user_token=user_token),
                     productivity_repo=_get_prod_repo(user_token=user_token),
                 )
-                _search_resp = await _search_svc.search(
-                    user_id=user.id,
-                    query=request.message,
-                    page=1,
-                    page_size=5,
+                _search_resp = await asyncio.wait_for(
+                    _search_svc.search(
+                        user_id=user.id,
+                        query=request.message,
+                        page=1,
+                        page_size=5,
+                    ),
+                    timeout=0.8,
                 )
                 if _search_resp.results:
                     _search_lines = [

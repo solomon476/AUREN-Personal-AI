@@ -5,6 +5,7 @@ from typing import AsyncIterator, List, Optional
 from app.core.config import Settings, settings as default_settings
 from app.services.llm.base import BaseLLMProvider, ChatMessage, LLMProviderError, LLMResponse
 from app.services.llm.gemini import GeminiProvider
+from app.services.llm.groq import GroqProvider
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,14 @@ SUPPORTED_GEMINI_MODELS = {
 }
 
 
+SUPPORTED_GROQ_MODELS = {
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it",
+}
+
+
 def get_llm_provider(
     settings: Settings = default_settings,
     model_id: Optional[str] = None,
@@ -80,10 +89,16 @@ def get_llm_provider(
             model_id=active_model,
             timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
         )
+    elif provider_name == "groq":
+        return GroqProvider(
+            api_key=settings.LLM_API_KEY,
+            model_id=active_model if active_model in SUPPORTED_GROQ_MODELS else "llama-3.3-70b-versatile",
+            timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
+        )
     elif provider_name == "mock":
         return MockLLMProvider(model_id=active_model)
     else:
         raise LLMProviderError(
-            f"Unsupported LLM provider '{provider_name}'. Supported providers: 'gemini', 'mock'."
+            f"Unsupported LLM provider '{provider_name}'. Supported providers: 'gemini', 'groq', 'mock'."
         )
 
