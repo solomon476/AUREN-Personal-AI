@@ -36,7 +36,7 @@ export const SettingsView: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const { theme, setTheme } = useTheme();
-  const [aiModel, setAiModel] = useState('gemini-2.5-flash');
+  const [aiModel, setAiModel] = useState('gemini-3.8-flash');
   const [aiTone, setAiTone] = useState('concise');
   const [aiCustomInstructions, setAiCustomInstructions] = useState('');
   const [memoryAutoExtraction, setMemoryAutoExtraction] = useState(true);
@@ -295,12 +295,14 @@ export const SettingsView: React.FC = () => {
                       onChange={(e) => setAiModel(e.target.value)}
                       className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-champagne-500/50 transition"
                     >
-                      <option value="gemini-2.5-flash">Google Gemini 2.5 Flash (Fast, High Intelligence, Native)</option>
+                      <option value="gemini-3.8-flash">Google Gemini 3.8 Flash (Fast, High Intelligence, Native)</option>
+                      <option value="gemini-3.8-pro">Google Gemini 3.8 Pro (Deep Reasoning &amp; Complex Analysis)</option>
+                      <option value="gemini-2.5-flash">Google Gemini 2.5 Flash (Legacy / Compatible)</option>
                       <option value="gemini-2.5-pro">Google Gemini 2.5 Pro (Deep Reasoning &amp; Complex Analysis)</option>
                       <option value="gemini-2.0-flash">Google Gemini 2.0 Flash (High Throughput &amp; Low Latency)</option>
                       <option value="mock">Local Development Mock (Offline testing)</option>
                     </select>
-                    {!['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'mock'].includes(aiModel) && (
+                    {!['gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'mock'].includes(aiModel) && (
                       <p className="text-[11px] text-amber-400 mt-1">
                         Currently saved model ({aiModel}) is not supported by the operational Gemini provider. Please select a supported model above.
                       </p>

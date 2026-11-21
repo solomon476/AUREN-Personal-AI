@@ -24,11 +24,20 @@ class GeminiProvider(BaseLLMProvider):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_id: str = "gemini-2.5-flash",
+        model_id: str = "gemini-3.8-flash",
         timeout_seconds: float = 60.0,
     ):
         self.api_key = api_key
         self.model_id = model_id
+
+        # Gracefully remap deprecated or alias models when invoking Google API
+        api_model = model_id
+        if api_model in ("gemini-2.5-flash", "models/gemini-2.5-flash"):
+            api_model = "gemini-3.8-flash"
+        elif api_model in ("gemini-2.5-pro", "models/gemini-2.5-pro"):
+            api_model = "gemini-3.8-pro"
+        self._api_model = api_model
+
         self.timeout_seconds = timeout_seconds
         self._client = None
 
@@ -85,7 +94,7 @@ class GeminiProvider(BaseLLMProvider):
 
             response = await asyncio.wait_for(
                 self._client.aio.models.generate_content(
-                    model=self.model_id,
+                    model=self._api_model,
                     contents=contents,
                     config=config,
                 ),
@@ -133,7 +142,7 @@ class GeminiProvider(BaseLLMProvider):
             )
 
             stream = await self._client.aio.models.generate_content_stream(
-                model=self.model_id,
+                model=self._api_model,
                 contents=contents,
                 config=config,
             )
@@ -165,7 +174,7 @@ class GeminiProvider(BaseLLMProvider):
         try:
             response = await asyncio.wait_for(
                 self._client.aio.models.count_tokens(
-                    model=self.model_id,
+                    model=self._api_model,
                     contents=text,
                 ),
                 timeout=10.0,

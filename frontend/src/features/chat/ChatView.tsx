@@ -445,7 +445,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           <div className="flex items-center space-x-2">
             <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-white/[0.04] text-slate-300 border border-white/[0.08] hidden sm:inline-flex items-center space-x-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></span>
-              <span>Gemini 2.5 Flash &bull; SSE Stream &bull; KaTeX</span>
+              <span>Gemini 3.8 Flash &bull; SSE Stream &bull; KaTeX</span>
             </span>
           </div>
         </div>
