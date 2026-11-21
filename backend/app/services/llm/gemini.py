@@ -41,9 +41,9 @@ class GeminiProvider(BaseLLMProvider):
             "gemini-3.8-pro", "gemini-2.5-pro", "models/gemini-2.5-pro",
         }
         if api_model in FLASH_ALIASES:
-            api_model = "gemini-3.1-flash-lite"
+            api_model = "gemini-2.0-flash"
         elif api_model in PRO_ALIASES:
-            api_model = "gemini-3.8-pro"
+            api_model = "gemini-2.5-pro"
         self._api_model = api_model
 
         self.timeout_seconds = timeout_seconds
@@ -63,7 +63,7 @@ class GeminiProvider(BaseLLMProvider):
     def _get_candidate_models(self) -> List[str]:
         """Return prioritized list of verified fast models for minimum latency and resilience."""
         candidates = [self._api_model]
-        for fallback in ("gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.5-flash-lite"):
+        for fallback in ("gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"):
             if fallback not in candidates:
                 candidates.append(fallback)
         return candidates
@@ -77,9 +77,32 @@ class GeminiProvider(BaseLLMProvider):
             if msg.role == "system":
                 system_instructions.append(msg.content)
             elif msg.role in ("user", "human"):
-                contents.append({"role": "user", "parts": [{"text": msg.content}]})
+                parts = []
+                if msg.content and msg.content.strip():
+                    parts.append({"text": msg.content})
+                # Check for multimodal image attachments
+                images = getattr(msg, "images", None) or []
+                if images:
+                    import base64
+                    from google.genai import types
+                    for img in images:
+                        mime_type = "image/jpeg"
+                        img_data = img
+                        if img.startswith("data:"):
+                            header, _, encoded = img.partition(",")
+                            if ";base64" in header:
+                                mime_type = header.split(";")[0].replace("data:", "")
+                                img_data = encoded
+                        try:
+                            raw_bytes = base64.b64decode(img_data)
+                            parts.append(types.Part.from_bytes(data=raw_bytes, mime_type=mime_type))
+                        except Exception as exc:
+                            logger.warning("Failed to decode base64 image: %s", exc)
+                if not parts:
+                    parts.append({"text": msg.content or " "})
+                contents.append({"role": "user", "parts": parts})
             elif msg.role in ("assistant", "model"):
-                contents.append({"role": "model", "parts": [{"text": msg.content}]})
+                contents.append({"role": "model", "parts": [{"text": msg.content or " "}]})
 
         system_instruction = "\n\n".join(system_instructions) if system_instructions else None
         return contents, system_instruction

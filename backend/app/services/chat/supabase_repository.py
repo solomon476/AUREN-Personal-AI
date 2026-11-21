@@ -391,6 +391,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
         conversation_id: UUID,
         content: str,
         idempotency_key: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> MessageModel:
         """Persist user message in PostgreSQL, reusing existing message on idempotency match."""
         if idempotency_key:
@@ -435,7 +436,7 @@ class SupabasePostgresChatRepository(BaseChatRepository):
             "role": "user",
             "content": content,
             "idempotency_key": idempotency_key,
-            "metadata": {},
+            "metadata": metadata or {},
         }
         res = await self._request(
             method="POST",

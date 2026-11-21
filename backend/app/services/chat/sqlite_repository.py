@@ -458,10 +458,12 @@ class SQLiteChatRepository(BaseChatRepository):
         conversation_id: UUID,
         content: str,
         idempotency_key: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> MessageModel:
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
         msg_id = uuid4()
+        msg_metadata = metadata or {}
 
         with self._get_connection() as conn:
             if idempotency_key:
@@ -499,7 +501,7 @@ class SQLiteChatRepository(BaseChatRepository):
                     INSERT INTO messages (id, conversation_id, user_id, role, content, idempotency_key, metadata, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (str(msg_id), str(conversation_id), str(user_id), "user", content, idempotency_key, "{}", now_iso),
+                    (str(msg_id), str(conversation_id), str(user_id), "user", content, idempotency_key, json.dumps(msg_metadata), now_iso),
                 )
                 conn.execute(
                     "UPDATE conversations SET updated_at = ? WHERE id = ? AND user_id = ?",
@@ -887,8 +889,9 @@ class SQLiteChatRepository(BaseChatRepository):
         conversation_id: UUID,
         content: str,
         idempotency_key: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> MessageModel:
-        return await asyncio.to_thread(self._sync_persist_user_message, user_id, conversation_id, content, idempotency_key)
+        return await asyncio.to_thread(self._sync_persist_user_message, user_id, conversation_id, content, idempotency_key, metadata)
 
     async def claim_chat_request(
         self,

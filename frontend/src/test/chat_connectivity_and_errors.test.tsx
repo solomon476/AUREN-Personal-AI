@@ -165,4 +165,94 @@ describe('Chat Connectivity and Error Handling', () => {
       expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
     });
   });
+
+  describe('Chat Attachments, Voice Notes & Empty Response Guard', () => {
+    it('renders attach image and voice note recording buttons', async () => {
+      await renderRouter('/chat');
+
+      expect(screen.getByRole('button', { name: /attach image/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /record voice note/i })).toBeInTheDocument();
+    });
+
+    it('renders fallback retry card and hides Context Inspector when assistant response is empty', async () => {
+      vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue([
+        {
+          id: 'user-msg-1',
+          conversation_id: 'conv-1',
+          role: 'user',
+          content: 'Can we set the program now',
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'assistant-msg-empty',
+          conversation_id: 'conv-1',
+          role: 'assistant',
+          content: '', // Empty response bug from screenshot
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      vi.spyOn(chatApi, 'listConversations').mockResolvedValue([
+        {
+          id: 'conv-1',
+          title: 'My Program',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          message_count: 2,
+        },
+      ]);
+
+      await renderRouter('/chat/conv-1');
+
+      await waitFor(() => {
+        expect(screen.getByText('Can we set the program now')).toBeInTheDocument();
+        expect(screen.getByText(/Response could not be retrieved/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+        // Crucial: ensure empty response does NOT display Context Inspector button!
+        expect(screen.queryByText(/Context Inspector/i)).not.toBeInTheDocument();
+      });
+    });
+
+    it('renders image and audio attachments within conversation messages', async () => {
+      vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue([
+        {
+          id: 'user-msg-attachments',
+          conversation_id: 'conv-2',
+          role: 'user',
+          content: 'Here is my photo and voice memo',
+          created_at: new Date().toISOString(),
+          metadata: {
+            attachments: [
+              {
+                type: 'image',
+                url: 'https://images.example.com/photo.png',
+                name: 'sample_photo.png',
+              },
+              {
+                type: 'audio',
+                url: 'https://audio.example.com/note.webm',
+                duration: 5,
+              },
+            ],
+          },
+        },
+      ]);
+      vi.spyOn(chatApi, 'listConversations').mockResolvedValue([
+        {
+          id: 'conv-2',
+          title: 'Multimedia Dialogue',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          message_count: 1,
+        },
+      ]);
+
+      await renderRouter('/chat/conv-2');
+
+      await waitFor(() => {
+        const img = screen.getByAltText('sample_photo.png');
+        expect(img).toBeInTheDocument();
+        expect(img).toHaveAttribute('src', 'https://images.example.com/photo.png');
+      });
+    });
+  });
 });

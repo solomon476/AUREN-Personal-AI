@@ -61,8 +61,7 @@ class ChatCompletionRequest(BaseModel):
     """Incoming request payload for streaming chat completions."""
 
     message: str = Field(
-        ...,
-        min_length=1,
+        default="",
         max_length=10000,
         description="User text prompt for the assistant",
     )
@@ -74,6 +73,14 @@ class ChatCompletionRequest(BaseModel):
         default=None,
         max_length=128,
         description="Client-generated unique ID to prevent duplicates on network reconnection.",
+    )
+    attachments: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="Optional list of attachments (images, voice notes, media)",
+    )
+    images: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of base64 image data strings or data URLs",
     )
 
 

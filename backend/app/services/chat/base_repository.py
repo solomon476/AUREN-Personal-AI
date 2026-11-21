@@ -95,6 +95,7 @@ class BaseChatRepository(ABC):
         conversation_id: UUID,
         content: str,
         idempotency_key: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> MessageModel:
         """Persist user message, reusing existing message if idempotency_key already exists."""
         pass

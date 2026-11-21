@@ -14,6 +14,14 @@ export interface Conversation {
   message_count: number;
 }
 
+export interface AttachmentItem {
+  type: 'image' | 'audio';
+  url: string;
+  name?: string;
+  size?: number;
+  duration?: number;
+}
+
 export interface ChatMessage {
   id: string;
   conversation_id: string;
@@ -21,7 +29,11 @@ export interface ChatMessage {
   content: string;
   created_at: string;
   idempotency_key?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: {
+    attachments?: AttachmentItem[];
+    interrupted?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export interface ChatStreamCallbacks {
@@ -57,6 +69,7 @@ export async function streamChat(
   callbacks?: ChatStreamCallbacks,
   signal?: AbortSignal,
   idempotencyKey?: string,
+  attachments?: AttachmentItem[],
 ): Promise<void> {
   const url = `${API_BASE_URL.replace(/\/$/, '')}/chat/completions`;
   const resolvedIdempotencyKey = idempotencyKey || `req-${crypto.randomUUID()}`;
@@ -84,9 +97,13 @@ export async function streamChat(
       method: 'POST',
       headers,
       body: JSON.stringify({
-        message,
+        message: message || '',
         conversation_id: conversationId || null,
         idempotency_key: resolvedIdempotencyKey,
+        attachments: attachments && attachments.length > 0 ? attachments : undefined,
+        images: attachments
+          ? attachments.filter((a) => a.type === 'image' && a.url).map((a) => a.url)
+          : undefined,
       }),
       signal,
     });

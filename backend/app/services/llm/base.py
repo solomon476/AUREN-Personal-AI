@@ -35,6 +35,7 @@ class ChatMessage(BaseModel):
 
     role: str = Field(..., description="Role of the author: system, user, or assistant")
     content: str = Field(..., description="Message text content")
+    images: Optional[List[str]] = Field(default=None, description="Optional list of base64 image strings or data URLs")
 
 
 class LLMResponse(BaseModel):

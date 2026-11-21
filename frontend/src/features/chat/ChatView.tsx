@@ -21,10 +21,14 @@ import {
   Trash2,
   Brain,
   X,
+  Mic,
+  Check,
+  Volume2,
 } from 'lucide-react';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useSafeSearch } from '../../hooks/useSafeSearch';
 import {
+  AttachmentItem,
   ChatMessage,
   streamChat
 } from '../../api/chat';
@@ -86,7 +90,222 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
     message: string;
     conversationId?: string;
     idempotencyKey: string;
+    attachments?: AttachmentItem[];
   } | null>(null);
+
+  // Image Attachments State
+  const [selectedImages, setSelectedImages] = useState<Array<{
+    name: string;
+    size: number;
+    previewUrl: string;
+    dataUrl: string;
+  }>>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Voice Note Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+  const [recordedAudioBase64, setRecordedAudioBase64] = useState<string | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const recordingTimerRef = useRef<any>(null);
+  const speechRecognitionRef = useRef<any>(null);
+
+  // Format seconds to mm:ss
+  const formatDuration = (sec: number) => {
+    const mins = Math.floor(sec / 60);
+    const secs = sec % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  // Image Selection Handler
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith('image/')) return;
+      const previewUrl = URL.createObjectURL(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setSelectedImages((prev) => [
+            ...prev,
+            {
+              name: file.name,
+              size: file.size,
+              previewUrl,
+              dataUrl: reader.result as string,
+            },
+          ]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    e.target.value = '';
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setSelectedImages((prev) => {
+      const target = prev[index];
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  // Voice Recording Handlers
+  const startVoiceRecording = async () => {
+    if (isStreaming) return;
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setErrorMessage('Voice recording is not supported in this browser environment.');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+
+      let mimeType = '';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        }
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      const chunks: BlobPart[] = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setRecordedAudioUrl(audioUrl);
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            setRecordedAudioBase64(reader.result);
+          }
+        };
+        reader.readAsDataURL(audioBlob);
+
+        // Stop tracks for privacy
+        if (audioStreamRef.current) {
+          audioStreamRef.current.getTracks().forEach((track) => track.stop());
+          audioStreamRef.current = null;
+        }
+      };
+
+      recorder.start(250);
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      // Start duration timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+
+      // Web Speech API real-time speech-to-text
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        try {
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = 'en-US';
+          recognition.onresult = (event: any) => {
+            let transcriptText = '';
+            for (let i = 0; i < event.results.length; i++) {
+              transcriptText += event.results[i][0].transcript;
+            }
+            if (transcriptText) {
+              setInputValue((prev) => {
+                const base = prev.trim();
+                return base ? `${base} ${transcriptText.trim()}` : transcriptText.trim();
+              });
+            }
+          };
+          recognition.start();
+          speechRecognitionRef.current = recognition;
+        } catch (recErr) {
+          console.warn('Speech recognition start failed (non-critical):', recErr);
+        }
+      }
+    } catch (err: any) {
+      console.error('Microphone access failed:', err);
+      setErrorMessage(
+        err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'
+          ? 'Microphone permission denied. Please allow microphone access in your browser settings.'
+          : 'Unable to access microphone. Please check audio device settings.'
+      );
+      setIsRecording(false);
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.stop();
+      } catch {
+        // Recognition already stopped
+      }
+      speechRecognitionRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  const discardVoiceRecording = () => {
+    if (isRecording) {
+      stopVoiceRecording();
+    }
+    if (recordedAudioUrl) {
+      URL.revokeObjectURL(recordedAudioUrl);
+    }
+    setRecordedAudioUrl(null);
+    setRecordedAudioBase64(null);
+    setRecordingDuration(0);
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      audioStreamRef.current = null;
+    }
+  };
+
+  // Cleanup audio tracks and timer on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.stop();
+        } catch {}
+      }
+    };
+  }, []);
 
   // Modals and Drawers
   const [isMobileThreadDrawerOpen, setIsMobileThreadDrawerOpen] = useState(false);
@@ -189,6 +408,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
     targetConversationId: string | undefined,
     idempotencyKey: string,
     attempt = 0,
+    attachmentsToSend?: AttachmentItem[],
   ) => {
     setIsStreaming(true);
     setErrorMessage(null);
@@ -238,6 +458,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         },
         abortControllerRef.current.signal,
         idempotencyKey,
+        attachmentsToSend,
       );
     } catch (err: any) {
       if (abortControllerRef.current?.signal.aborted) {
@@ -266,13 +487,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
 
         await new Promise((resolve) => setTimeout(resolve, backoffDelay));
         if (!abortControllerRef.current?.signal.aborted) {
-          return executeChatStream(messageText, targetConversationId, idempotencyKey, nextAttempt);
+          return executeChatStream(messageText, targetConversationId, idempotencyKey, nextAttempt, attachmentsToSend);
         }
       }
 
       setErrorMessage(errMsg || 'Streaming failed');
       setReconnectStatus(null);
-      setPendingRetry({ message: messageText, conversationId: targetConversationId, idempotencyKey });
+      setPendingRetry({ message: messageText, conversationId: targetConversationId, idempotencyKey, attachments: attachmentsToSend });
       setIsStreaming(false);
     }
   };
@@ -280,7 +501,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = inputValue.trim();
-    if (!trimmed || isStreaming) return;
+    const hasAttachments = selectedImages.length > 0 || Boolean(recordedAudioBase64);
+    if ((!trimmed && !hasAttachments) || isStreaming) return;
 
     if (!user) {
       setIsAuthModalOpen(true);
@@ -288,24 +510,63 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
     }
 
     const idempotencyKey = `req-${crypto.randomUUID()}`;
+    const attachmentsToSend: AttachmentItem[] = [
+      ...selectedImages.map((img) => ({
+        type: 'image' as const,
+        url: img.dataUrl,
+        name: img.name,
+        size: img.size,
+      })),
+      ...(recordedAudioBase64
+        ? [
+            {
+              type: 'audio' as const,
+              url: recordedAudioBase64,
+              duration: recordingDuration,
+            },
+          ]
+        : []),
+    ];
+
+    const messageText =
+      trimmed ||
+      (recordedAudioBase64 ? 'Voice message note' : 'Please analyze the attached image.');
+
     setInputValue('');
+    setSelectedImages([]);
+    setRecordedAudioUrl(null);
+    setRecordedAudioBase64(null);
+    setRecordingDuration(0);
 
     const tempUserMessage: ChatMessage = {
       id: `temp-${Date.now()}`,
       conversation_id: activeConversationId || '',
       role: 'user',
-      content: trimmed,
+      content: trimmed || (recordedAudioBase64 ? '🎤 Voice message' : '🖼️ Attached image'),
       idempotency_key: idempotencyKey,
+      metadata: attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : undefined,
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempUserMessage]);
 
-    await executeChatStream(trimmed, activeConversationId || undefined, idempotencyKey);
+    await executeChatStream(
+      messageText,
+      activeConversationId || undefined,
+      idempotencyKey,
+      0,
+      attachmentsToSend,
+    );
   };
 
   const handleRetry = async () => {
     if (!pendingRetry || isStreaming) return;
-    await executeChatStream(pendingRetry.message, pendingRetry.conversationId, pendingRetry.idempotencyKey);
+    await executeChatStream(
+      pendingRetry.message,
+      pendingRetry.conversationId,
+      pendingRetry.idempotencyKey,
+      0,
+      pendingRetry.attachments,
+    );
   };
 
   const handleStopStreaming = () => {
@@ -546,25 +807,90 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                           : 'bg-slate-50 text-slate-900 border border-slate-200 shadow-sm rounded-tl-sm'
                       }`}
                     >
-                      <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
-                      {!isUser && (
-                        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-200 text-[11px] text-slate-500">
-                          <button
-                            type="button"
-                            onClick={() => setContextInspectorMessageId(msg.id)}
-                            className="inline-flex items-center space-x-1.5 text-slate-500 hover:text-emerald-700 transition-colors touch-target py-1 font-semibold"
-                            title="Inspect memory context used for this response"
-                            aria-label="Inspect context provenance"
-                          >
-                            <Brain className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Context Inspector</span>
-                          </button>
-                          {Boolean(msg.metadata?.interrupted) && (
-                            <span className="text-[10px] text-amber-600 italic font-mono">
-                              (Stream interrupted)
-                            </span>
-                          )}
+                      {/* Attachments rendering (Images & Voice Notes) */}
+                      {msg.metadata?.attachments && Array.isArray(msg.metadata.attachments) && msg.metadata.attachments.length > 0 && (
+                        <div className="space-y-2 mb-2.5">
+                          {msg.metadata.attachments.map((att: any, attIdx: number) => (
+                            <div key={attIdx}>
+                              {att.type === 'image' && (
+                                <div className="rounded-xl overflow-hidden border border-slate-200/80 bg-white/50 inline-block max-w-full">
+                                  <img
+                                    src={att.url}
+                                    alt={att.name || 'Attached image'}
+                                    className="max-h-64 max-w-full rounded-xl object-contain cursor-pointer hover:opacity-95 transition"
+                                    onClick={() => window.open(att.url, '_blank')}
+                                  />
+                                  {att.name && (
+                                    <div className="px-2 py-1 text-[10px] text-slate-500 truncate max-w-xs">
+                                      {att.name}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {att.type === 'audio' && (
+                                <div className="p-2 rounded-xl bg-white/90 border border-slate-200 shadow-xs flex items-center space-x-2 max-w-xs">
+                                  <Volume2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                                  <audio controls src={att.url} className="w-full h-8" />
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
+                      )}
+
+                      {/* Content rendering */}
+                      {isUser ? (
+                        <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
+                      ) : (
+                        (() => {
+                          const hasContent = Boolean(msg.content && msg.content.trim());
+                          if (!hasContent) {
+                            return (
+                              <div className="flex flex-col space-y-2 py-0.5">
+                                <div className="flex items-center justify-between text-xs text-amber-800 bg-amber-50/90 border border-amber-200/80 rounded-xl p-3">
+                                  <div className="flex items-center space-x-2">
+                                    <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                                    <span className="font-medium">Response could not be retrieved.</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const prevUser = messages.slice(0, index).reverse().find((m) => m.role === 'user');
+                                      if (prevUser?.content) {
+                                        setInputValue(prevUser.content);
+                                      }
+                                    }}
+                                    className="ml-3 text-emerald-700 hover:text-emerald-800 font-semibold underline text-xs flex-shrink-0 cursor-pointer"
+                                  >
+                                    Retry
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <>
+                              <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
+                              <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-200 text-[11px] text-slate-500">
+                                <button
+                                  type="button"
+                                  onClick={() => setContextInspectorMessageId(msg.id)}
+                                  className="inline-flex items-center space-x-1.5 text-slate-500 hover:text-emerald-700 transition-colors touch-target py-1 font-semibold cursor-pointer"
+                                  title="Inspect memory context used for this response"
+                                  aria-label="Inspect context provenance"
+                                >
+                                  <Brain className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Context Inspector</span>
+                                </button>
+                                {Boolean(msg.metadata?.interrupted) && (
+                                  <span className="text-[10px] text-amber-600 italic font-mono">
+                                    (Stream interrupted)
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()
                       )}
                     </div>
                     {isUser && (
@@ -641,53 +967,184 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
 
         {/* Input Composer Bar */}
         <div className="p-2.5 sm:p-4 border-t border-slate-200 bg-white/95 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-xs">
-          <form
-            onSubmit={handleSendMessage}
-            className="flex items-center gap-2 p-1.5 sm:p-2 bg-slate-50 border border-slate-200 rounded-2xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all shadow-inner"
-          >
-            <textarea
-              rows={1}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-              placeholder="Ask AUREN anything..."
-              disabled={isStreaming}
-              className="flex-1 bg-transparent border-0 outline-none px-3 py-1.5 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:ring-0 resize-none min-h-[36px] max-h-[130px] leading-relaxed"
-            />
+          {/* Image Previews Strip */}
+          {selectedImages.length > 0 && (
+            <div className="flex items-center gap-2 mb-2.5 overflow-x-auto pb-1 scrollbar-thin">
+              {selectedImages.map((img, idx) => (
+                <div
+                  key={idx}
+                  className="relative group flex items-center gap-2 p-1.5 bg-slate-100 border border-slate-200 rounded-xl flex-shrink-0 shadow-xs"
+                >
+                  <img
+                    src={img.previewUrl}
+                    alt={img.name}
+                    className="h-10 w-10 object-cover rounded-lg border border-slate-200"
+                  />
+                  <div className="text-[11px] max-w-[130px] truncate">
+                    <p className="font-semibold text-slate-800 truncate">{img.name}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      {(img.size / 1024).toFixed(0)} KB
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(idx)}
+                    className="p-1 rounded-full text-slate-400 hover:text-rose-600 hover:bg-white transition cursor-pointer"
+                    title="Remove image"
+                    aria-label="Remove image"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
-            <div className="flex items-center flex-shrink-0 pr-1">
-              {isStreaming ? (
+          {/* Recorded Audio Preview Strip */}
+          {recordedAudioUrl && !isRecording && (
+            <div className="flex items-center justify-between gap-3 mb-2.5 p-2.5 bg-emerald-50/90 border border-emerald-200 rounded-2xl shadow-xs">
+              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                <div className="h-8 w-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+                  <Mic className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-emerald-900">Voice Note Preview</p>
+                  <p className="text-[10px] text-emerald-700 font-mono">Duration: {formatDuration(recordingDuration)}</p>
+                </div>
+                <audio src={recordedAudioUrl} controls className="h-8 max-w-[200px] xs:max-w-[260px]" />
+              </div>
+              <button
+                type="button"
+                onClick={discardVoiceRecording}
+                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition touch-target flex-shrink-0 cursor-pointer"
+                title="Discard recording"
+                aria-label="Discard recording"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Active Voice Recording Bar */}
+          {isRecording ? (
+            <div className="flex items-center justify-between gap-3 p-2.5 bg-rose-50 border border-rose-200 rounded-2xl animate-pulse shadow-sm">
+              <div className="flex items-center space-x-2.5">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
+                </span>
+                <span className="text-xs font-bold text-rose-900">Recording voice note...</span>
+                <span className="text-xs font-mono font-bold text-rose-950 bg-white/90 px-2 py-0.5 rounded-lg border border-rose-200 shadow-2xs">
+                  {formatDuration(recordingDuration)}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
                 <button
                   type="button"
-                  onClick={handleStopStreaming}
-                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition touch-target flex items-center justify-center shadow-md shadow-rose-600/30 cursor-pointer"
-                  title="Stop generating"
-                  aria-label="Stop generating"
+                  onClick={discardVoiceRecording}
+                  className="p-2 text-slate-600 hover:text-rose-600 hover:bg-white rounded-xl transition touch-target cursor-pointer"
+                  title="Cancel recording"
+                  aria-label="Cancel recording"
                 >
-                  <Square className="h-3.5 w-3.5 fill-white" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
-              ) : (
                 <button
-                  type="submit"
-                  disabled={!inputValue.trim()}
-                  className={`h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer ${
-                    inputValue.trim()
-                      ? 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md shadow-emerald-500/30'
-                      : 'bg-slate-200 text-slate-400 border border-slate-200'
-                  }`}
-                  title="Send message"
-                  aria-label="Send message"
+                  type="button"
+                  onClick={stopVoiceRecording}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition touch-target shadow-sm cursor-pointer"
+                  title="Done recording"
+                  aria-label="Finish recording"
                 >
-                  <Send className="h-3.5 w-3.5 ml-0.5" />
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Done</span>
                 </button>
-              )}
+              </div>
             </div>
-          </form>
+          ) : (
+            <form
+              onSubmit={handleSendMessage}
+              className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-slate-50 border border-slate-200 rounded-2xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all shadow-inner"
+            >
+              {/* Hidden File Input for Image Attachments */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+
+              {/* Attach Image Button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isStreaming}
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-emerald-700 hover:bg-slate-200/60 transition touch-target flex-shrink-0 cursor-pointer disabled:opacity-50"
+                title="Attach photo or image"
+                aria-label="Attach image"
+              >
+                <Plus className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+              </button>
+
+              {/* Voice Note Button */}
+              <button
+                type="button"
+                onClick={startVoiceRecording}
+                disabled={isStreaming}
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-emerald-700 hover:bg-slate-200/60 transition touch-target flex-shrink-0 cursor-pointer disabled:opacity-50"
+                title="Record voice note"
+                aria-label="Record voice note"
+              >
+                <Mic className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+              </button>
+
+              {/* Text Area */}
+              <textarea
+                rows={1}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder={selectedImages.length > 0 ? "Add a message about this image..." : "Ask AUREN anything..."}
+                disabled={isStreaming}
+                className="flex-1 bg-transparent border-0 outline-none px-2 sm:px-3 py-1.5 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:ring-0 resize-none min-h-[36px] max-h-[130px] leading-relaxed"
+              />
+
+              {/* Send / Stop Generation Button */}
+              <div className="flex items-center flex-shrink-0 pr-1">
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={handleStopStreaming}
+                    className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition touch-target flex items-center justify-center shadow-md shadow-rose-600/30 cursor-pointer"
+                    title="Stop generating"
+                    aria-label="Stop generating"
+                  >
+                    <Square className="h-3.5 w-3.5 fill-white" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!inputValue.trim() && selectedImages.length === 0 && !recordedAudioBase64}
+                    className={`h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer ${
+                      inputValue.trim() || selectedImages.length > 0 || recordedAudioBase64
+                        ? 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md shadow-emerald-500/30'
+                        : 'bg-slate-200 text-slate-400 border border-slate-200'
+                    }`}
+                    title="Send message"
+                    aria-label="Send message"
+                  >
+                    <Send className="h-3.5 w-3.5 ml-0.5" />
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
 
           <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400 px-1 font-mono">
             <span className="hidden sm:inline">Enter to send &bull; Shift+Enter for newline</span>

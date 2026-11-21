@@ -130,6 +130,16 @@ class ChatService:
         repo = self.get_repository(user)
         user_token = user.token if user else None
 
+        # Normalize empty message if attachments or images are present
+        if not request.message.strip():
+            if request.attachments or request.images:
+                request.message = "Please analyze the attached image / voice note."
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Message cannot be empty when no attachments are provided.",
+                )
+
         # Check if an existing request was already submitted with this idempotency key
         if request.idempotency_key:
             existing_req = await repo.get_chat_request(user.id, request.idempotency_key)
@@ -307,11 +317,15 @@ class ChatService:
         # -------------------------------------------------------------------
         # 2. Persist User Message (reusing existing on duplicate / retry)
         # -------------------------------------------------------------------
+        user_meta = {}
+        if request.attachments:
+            user_meta["attachments"] = request.attachments
         user_message = await repo.persist_user_message(
             user_id=user.id,
             conversation_id=conversation.id,
             content=request.message,
             idempotency_key=request.idempotency_key,
+            metadata=user_meta,
         )
 
         # -------------------------------------------------------------------
@@ -602,7 +616,13 @@ class ChatService:
                 logger.warning("Omnisearch context injection failed (safe continue): %s", _search_err)
 
         for msg in history:
-            llm_messages.append(ChatMessage(role=msg.role, content=msg.content))
+            msg_images = None
+            if msg.role == "user" and msg.metadata and isinstance(msg.metadata, dict):
+                atts = msg.metadata.get("attachments") or []
+                msg_images = [a["url"] for a in atts if isinstance(a, dict) and a.get("type") == "image" and a.get("url")]
+            if msg.id == user_message.id and request.images:
+                msg_images = (msg_images or []) + request.images
+            llm_messages.append(ChatMessage(role=msg.role, content=msg.content, images=msg_images))
 
         # -------------------------------------------------------------------
         # 5. Stream Response with Decoupled Heartbeat & Timeout Enforcement
@@ -666,6 +686,8 @@ class ChatService:
                 logger.info("Stream interrupted due to client disconnect. Skipping completion persistence.")
             else:
                 full_response = "".join(accumulated_chunks)
+                if not full_response.strip():
+                    full_response = "I encountered an issue generating a response. Please try asking again."
                 assistant_metadata = {
                     "model": provider.get_model_id(),
                     "user_message_id": str(user_message.id),
