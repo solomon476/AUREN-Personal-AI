@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -45,50 +47,50 @@
 /* White Theme Engine (Default & Explicit Light Theme)                       */
 /* ========================================================================= */
 
+/* Root, Body, Main Backgrounds */
 html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) body,
 html[data-theme="light"] body,
 html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) #root,
 html[data-theme="light"] #root,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-slate-950,
-html[data-theme="light"] .bg-slate-950,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#07080c\],
-html[data-theme="light"] .bg-\[\#07080c\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#08090c\],
-html[data-theme="light"] .bg-\[\#08090c\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#030406\],
-html[data-theme="light"] .bg-\[\#030406\] {
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-slate-950"],
+html[data-theme="light"] [class*="bg-slate-950"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#08090c]"],
+html[data-theme="light"] [class*="bg-[#08090c]"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#030406]"],
+html[data-theme="light"] [class*="bg-[#030406]"] {
   background-color: #ffffff !important;
   color: #0f172a !important;
 }
 
-/* Surface & Card Elevation */
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#0e111a\],
-html[data-theme="light"] .bg-\[\#0e111a\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#10131d\],
-html[data-theme="light"] .bg-\[\#10131d\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#121622\],
-html[data-theme="light"] .bg-\[\#121622\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#141722\],
-html[data-theme="light"] .bg-\[\#141722\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#0e1017\],
-html[data-theme="light"] .bg-\[\#0e1017\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-slate-900,
-html[data-theme="light"] .bg-slate-900,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-slate-900\/80,
-html[data-theme="light"] .bg-slate-900\/80,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-slate-900\/70,
-html[data-theme="light"] .bg-slate-900\/70,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-slate-900\/60,
-html[data-theme="light"] .bg-slate-900\/60,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-slate-900\/50,
-html[data-theme="light"] .bg-slate-900\/50,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-slate-900\/40,
-html[data-theme="light"] .bg-slate-900\/40,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-slate-900\/30,
-html[data-theme="light"] .bg-slate-900\/30 {
+/* Surfaces, Cards, and Containers (matches any hex dark class with or without opacity slashes) */
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#0e111a]"],
+html[data-theme="light"] [class*="bg-[#0e111a]"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#0e1017]"],
+html[data-theme="light"] [class*="bg-[#0e1017]"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#0c0e14]"],
+html[data-theme="light"] [class*="bg-[#0c0e14]"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#0a0d14]"],
+html[data-theme="light"] [class*="bg-[#0a0d14]"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#10131d]"],
+html[data-theme="light"] [class*="bg-[#10131d]"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#121622]"],
+html[data-theme="light"] [class*="bg-[#121622]"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#141722]"],
+html[data-theme="light"] [class*="bg-[#141722]"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-slate-900"],
+html[data-theme="light"] [class*="bg-slate-900"] {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03) !important;
+  color: #0f172a !important;
+}
+
+/* Inner secondary cards, forms, and empty states */
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-[#07080c]"],
+html[data-theme="light"] [class*="bg-[#07080c]"] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
 }
 
 /* Headers, Sidebars, and Fixed Nav Bars */
@@ -97,15 +99,7 @@ html[data-theme="light"] header,
 html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) aside,
 html[data-theme="light"] aside,
 html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) nav,
-html[data-theme="light"] nav,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#07080c\]\/95,
-html[data-theme="light"] .bg-\[\#07080c\]\/95,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#07080c\]\/90,
-html[data-theme="light"] .bg-\[\#07080c\]\/90,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#07080c\]\/98,
-html[data-theme="light"] .bg-\[\#07080c\]\/98,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-\[\#08090c\]\/90,
-html[data-theme="light"] .bg-\[\#08090c\]\/90 {
+html[data-theme="light"] nav {
   background-color: rgba(255, 255, 255, 0.97) !important;
   border-color: #e2e8f0 !important;
   color: #0f172a !important;
@@ -118,18 +112,8 @@ html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsi
 html[data-theme="light"] textarea,
 html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) select,
 html[data-theme="light"] select,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-white\/\[0\.035\],
-html[data-theme="light"] .bg-white\/\[0\.035\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-white\/\[0\.04\],
-html[data-theme="light"] .bg-white\/\[0\.04\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-white\/\[0\.03\],
-html[data-theme="light"] .bg-white\/\[0\.03\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-white\/\[0\.05\],
-html[data-theme="light"] .bg-white\/\[0\.05\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-white\/\[0\.06\],
-html[data-theme="light"] .bg-white\/\[0\.06\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-white\/\[0\.08\],
-html[data-theme="light"] .bg-white\/\[0\.08\] {
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-white/["],
+html[data-theme="light"] [class*="bg-white/["] {
   background-color: #f8fafc !important;
   color: #0f172a !important;
   border-color: #cbd5e1 !important;
@@ -164,13 +148,14 @@ html[data-theme="light"] .text-slate-500 {
   color: #64748b !important;
 }
 
-/* Colored Button & Indicator Exceptions */
+/* Emerald Primary & Status Buttons (Always Crisp White Text & Icons) */
 html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-emerald-500,
 html[data-theme="light"] .bg-emerald-500,
 html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-rose-600,
 html[data-theme="light"] .bg-rose-600,
 html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-indigo-600,
 html[data-theme="light"] .bg-indigo-600 {
+  background-color: #10b981 !important;
   color: #ffffff !important;
 }
 
@@ -196,46 +181,18 @@ html[data-theme="light"] .bg-\[\#151926\] * {
 }
 
 /* Borders in White Theme */
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-white\/\[0\.05\],
-html[data-theme="light"] .border-white\/\[0\.05\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-white\/\[0\.06\],
-html[data-theme="light"] .border-white\/\[0\.06\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-white\/\[0\.07\],
-html[data-theme="light"] .border-white\/\[0\.07\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-white\/\[0\.08\],
-html[data-theme="light"] .border-white\/\[0\.08\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-white\/\[0\.09\],
-html[data-theme="light"] .border-white\/\[0\.09\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-white\/\[0\.1\],
-html[data-theme="light"] .border-white\/\[0\.1\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-white\/\[0\.12\],
-html[data-theme="light"] .border-white\/\[0\.12\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-white\/\[0\.14\],
-html[data-theme="light"] .border-white\/\[0\.14\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-white\/\[0\.16\],
-html[data-theme="light"] .border-white\/\[0\.16\],
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-slate-800,
-html[data-theme="light"] .border-slate-800,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-slate-800\/80,
-html[data-theme="light"] .border-slate-800\/80,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-slate-800\/60,
-html[data-theme="light"] .border-slate-800\/60,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .border-slate-700,
-html[data-theme="light"] .border-slate-700 {
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="border-white/["],
+html[data-theme="light"] [class*="border-white/["],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="border-slate-800"],
+html[data-theme="light"] [class*="border-slate-800"],
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="border-slate-700"],
+html[data-theme="light"] [class*="border-slate-700"] {
   border-color: #e2e8f0 !important;
 }
 
 /* Accent Badges Tinted for White Background */
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-emerald-950\/30,
-html[data-theme="light"] .bg-emerald-950\/30,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-emerald-950\/40,
-html[data-theme="light"] .bg-emerald-950\/40,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-emerald-950\/60,
-html[data-theme="light"] .bg-emerald-950\/60,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-emerald-950\/70,
-html[data-theme="light"] .bg-emerald-950\/70,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-emerald-950\/80,
-html[data-theme="light"] .bg-emerald-950\/80 {
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-emerald-950"],
+html[data-theme="light"] [class*="bg-emerald-950"] {
   background-color: #ecfdf5 !important;
   border-color: #a7f3d0 !important;
   color: #047857 !important;
@@ -248,14 +205,8 @@ html[data-theme="light"] .text-emerald-300 {
   color: #059669 !important;
 }
 
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-rose-950\/30,
-html[data-theme="light"] .bg-rose-950\/30,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-rose-950\/35,
-html[data-theme="light"] .bg-rose-950\/35,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-rose-950\/40,
-html[data-theme="light"] .bg-rose-950\/40,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-rose-950\/80,
-html[data-theme="light"] .bg-rose-950\/80 {
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-rose-950"],
+html[data-theme="light"] [class*="bg-rose-950"] {
   background-color: #fff1f2 !important;
   border-color: #fecdd3 !important;
   color: #9f1239 !important;
@@ -270,10 +221,8 @@ html[data-theme="light"] .text-rose-400 {
   color: #be123c !important;
 }
 
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-amber-950\/30,
-html[data-theme="light"] .bg-amber-950\/30,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-amber-950\/80,
-html[data-theme="light"] .bg-amber-950\/80 {
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-amber-950"],
+html[data-theme="light"] [class*="bg-amber-950"] {
   background-color: #fffbeb !important;
   border-color: #fde68a !important;
   color: #b45309 !important;
@@ -294,10 +243,8 @@ html[data-theme="light"] .text-champagne-400 {
   color: #b45309 !important;
 }
 
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-indigo-950\/60,
-html[data-theme="light"] .bg-indigo-950\/60,
-html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) .bg-indigo-950\/70,
-html[data-theme="light"] .bg-indigo-950\/70 {
+html:not([data-theme="dark"]):not([data-theme="midnight"]):not([data-theme="obsidian"]) [class*="bg-indigo-950"],
+html[data-theme="light"] [class*="bg-indigo-950"] {
   background-color: #eef2ff !important;
   border-color: #c7d2fe !important;
   color: #4338ca !important;
@@ -365,19 +312,6 @@ html[data-theme="dark"] .bg-slate-950 {
   background-color: #07080c !important;
 }
 
-/* Ambient Glow & Micro-Texture Utilities */
-.ambient-glow-indigo {
-  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.09) 0%, transparent 70%);
-}
-
-.ambient-glow-champagne {
-  background: radial-gradient(circle at 50% 0%, rgba(215, 186, 131, 0.08) 0%, transparent 65%);
-}
-
-.ambient-glow-emerald {
-  background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 65%);
-}
-
 /* Card & Surface Elevation Classes */
 .auren-card {
   background: rgba(255, 255, 255, 0.95);
@@ -397,18 +331,6 @@ html[data-theme="dark"] .bg-slate-950 {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(226, 232, 240, 0.8);
-}
-
-.auren-badge-champagne {
-  background: rgba(217, 119, 6, 0.1);
-  color: #b45309;
-  border: 1px solid rgba(217, 119, 6, 0.25);
-}
-
-.auren-badge-indigo {
-  background: rgba(79, 70, 229, 0.1);
-  color: #4338ca;
-  border: 1px solid rgba(79, 70, 229, 0.25);
 }
 
 /* Mobile Safe Area & Touch Target Utilities */

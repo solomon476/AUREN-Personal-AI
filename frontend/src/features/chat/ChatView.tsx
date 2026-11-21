@@ -2,7 +2,7 @@
  * Persistent Chat & Streaming Conversational View.
  * Enhanced with Rich Markdown & Code Rendering, Conversation Rename/Delete Lifecycle,
  * Resilient SSE Reconnection with Exponential Backoff, and Mobile-First Responsive Architecture.
- * Elevated with AUREN Obsidian, Graphite & Champagne Design System.
+ * Elevated with High-Contrast White, Obsidian, Emerald, and Gold Design System.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -321,7 +321,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   // Common Thread List Renderer (shared between Desktop Sidebar and Mobile Drawer)
   const renderThreadList = () => (
     <>
-      <div className="p-3.5 border-b border-white/[0.08]">
+      <div className="p-3.5 border-b border-slate-200">
         <button
           onClick={handleNewConversation}
           disabled={isStreaming || createConversationMutation.isPending}
@@ -335,7 +335,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
       <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin">
         {isLoadingConversations ? (
           <div className="p-6 text-center text-xs text-slate-500 flex items-center justify-center space-x-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
             <span>Loading threads...</span>
           </div>
         ) : !user ? (
@@ -343,7 +343,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
             <p>Sign in to view your conversations.</p>
             <button
               onClick={() => setIsAuthModalOpen(true)}
-              className="text-xs text-champagne-400 hover:text-champagne-300 font-medium underline"
+              className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold underline"
             >
               Sign In
             </button>
@@ -359,15 +359,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               <button
                 key={c.id}
                 onClick={() => handleSelectConversation(c.id)}
-                className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-left text-xs transition-all duration-150 truncate touch-target ${isActive
-                    ? 'bg-white/[0.06] border border-white/[0.1] text-white font-medium shadow-sm'
-                    : 'text-slate-400 hover:bg-white/[0.03] hover:text-slate-200 border border-transparent'
-                  }`}
+                className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-left text-xs transition-all duration-150 truncate touch-target ${
+                  isActive
+                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent font-medium'
+                }`}
               >
-                <MessageSquare className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
-                <span className="truncate flex-1 font-medium">{c.title}</span>
+                <MessageSquare className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+                <span className="truncate flex-1">{c.title}</span>
                 {typeof c.message_count === 'number' && c.message_count > 0 && (
-                  <span className="text-[10px] text-slate-500 font-mono px-1.5 py-0.5 rounded bg-slate-950/80 border border-white/[0.06]">
+                  <span className="text-[10px] text-slate-500 font-mono px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 font-semibold">
                     {c.message_count}
                   </span>
                 )}
@@ -380,9 +381,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   );
 
   return (
-    <div className="flex flex-1 h-full min-h-0 bg-slate-950/80 border border-white/[0.08] rounded-2xl overflow-hidden shadow-subtle-elevation backdrop-blur-md transition-all duration-300">
+    <div className="flex flex-1 h-full min-h-0 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm transition-all duration-300">
       {/* Desktop Sidebar: Threads History */}
-      <aside className="hidden md:flex flex-col w-64 sm:w-72 bg-slate-950/90 border-r border-white/[0.08] flex-shrink-0">
+      <aside className="hidden md:flex flex-col w-64 sm:w-72 bg-slate-50/80 border-r border-slate-200 flex-shrink-0">
         {renderThreadList()}
       </aside>
 
@@ -390,15 +391,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
       {isMobileThreadDrawerOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden animate-in fade-in duration-200">
           <div
-            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md"
+            className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm"
             onClick={() => setIsMobileThreadDrawerOpen(false)}
           />
-          <div className="relative flex flex-col w-72 max-w-[85vw] bg-slate-950 shadow-2xl z-10 border-r border-white/[0.08]">
-            <div className="p-3.5 border-b border-white/[0.08] flex items-center justify-between bg-slate-900/40">
-              <span className="text-xs font-semibold text-white">Conversation History</span>
+          <div className="relative flex flex-col w-72 max-w-[85vw] bg-white shadow-2xl z-10 border-r border-slate-200">
+            <div className="p-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <span className="text-xs font-bold text-slate-900">Conversation History</span>
               <button
                 onClick={() => setIsMobileThreadDrawerOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg touch-target flex items-center justify-center"
+                className="p-1.5 text-slate-500 hover:text-slate-900 rounded-lg touch-target flex items-center justify-center"
                 aria-label="Close thread drawer"
               >
                 <X className="w-4 h-4" />
@@ -410,39 +411,39 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
       )}
 
       {/* Main Chat Workspace */}
-      <section className="flex-1 flex flex-col bg-slate-900/25 min-w-0">
+      <section className="flex-1 flex flex-col bg-white min-w-0">
         {/* Active Thread Header */}
-        <div className="h-14 border-b border-white/[0.08] px-3 sm:px-5 flex items-center justify-between bg-[#08090c]/90 backdrop-blur">
+        <div className="h-14 border-b border-slate-200 px-3 sm:px-5 flex items-center justify-between bg-white/95 backdrop-blur">
           <div className="flex items-center space-x-2 min-w-0">
             {/* Mobile Threads Drawer Trigger Button */}
             <button
               onClick={() => setIsMobileThreadDrawerOpen(true)}
-              className="md:hidden flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs text-slate-300 hover:text-white transition touch-target flex-shrink-0"
+              className="md:hidden flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs text-slate-700 hover:text-slate-900 transition touch-target flex-shrink-0 font-medium"
               aria-label="Open conversation threads"
             >
-              <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-[11px] font-medium">Threads</span>
+              <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-[11px]">Threads</span>
             </button>
 
             {/* Direct New Chat Action Button (Always Accessible on Mobile & Desktop) */}
             <button
               onClick={handleNewConversation}
               disabled={isStreaming || createConversationMutation.isPending}
-              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition touch-target flex-shrink-0 active:scale-95"
+              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition touch-target flex-shrink-0 active:scale-95"
               title="Start a new dialogue"
               aria-label="Start new chat"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-3.5 w-3.5 text-emerald-600" />
               <span>New Chat</span>
             </button>
 
-            <div className="h-4 w-[1px] bg-white/[0.1] hidden sm:block" />
+            <div className="h-4 w-[1px] bg-slate-200 hidden sm:block" />
 
             <div className="flex items-center space-x-1.5 min-w-0">
               <h3
                 onClick={!activeConv ? handleNewConversation : undefined}
-                className={`text-xs sm:text-sm font-semibold text-white tracking-tight truncate max-w-[110px] xs:max-w-[160px] sm:max-w-md ${
-                  !activeConv ? 'cursor-pointer hover:text-emerald-400 transition' : ''
+                className={`text-xs sm:text-sm font-bold text-slate-900 tracking-tight truncate max-w-[110px] xs:max-w-[160px] sm:max-w-md ${
+                  !activeConv ? 'cursor-pointer hover:text-emerald-600 transition' : ''
                 }`}
                 title={activeConv ? activeConv.title : 'Click to start new conversation'}
               >
@@ -452,7 +453,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 <div className="flex items-center space-x-0.5 pl-0.5">
                   <button
                     onClick={() => setIsRenameModalOpen(true)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition touch-target flex items-center justify-center"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition touch-target flex items-center justify-center"
                     title="Rename conversation"
                     aria-label="Rename conversation"
                   >
@@ -460,7 +461,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                   </button>
                   <button
                     onClick={() => setIsDeleteModalOpen(true)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition touch-target flex items-center justify-center"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition touch-target flex items-center justify-center"
                     title="Delete conversation"
                     aria-label="Delete conversation"
                   >
@@ -471,8 +472,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-white/[0.04] text-slate-300 border border-white/[0.08] hidden sm:inline-flex items-center space-x-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] animate-pulse"></span>
+            <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 hidden sm:inline-flex items-center space-x-1.5 font-semibold">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"></span>
               <span>Gemini Flash &bull; Sub-Second Stream</span>
             </span>
           </div>
@@ -482,17 +483,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         <div
           ref={messageContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-3.5 sm:p-7 space-y-4 sm:space-y-6 scrollbar-thin"
+          className="flex-1 overflow-y-auto p-3.5 sm:p-7 space-y-4 sm:space-y-6 scrollbar-thin bg-white"
         >
           {!user && (
-            <div className="p-4 rounded-xl bg-champagne-950/20 border border-champagne-400/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
               <div className="flex items-center space-x-3">
-                <div className="h-8 w-8 rounded-lg bg-champagne-400/10 border border-champagne-400/20 flex items-center justify-center text-champagne-300 flex-shrink-0">
+                <div className="h-8 w-8 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 flex-shrink-0">
                   <Sparkles className="h-4 w-4" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-white">Private Authenticated Assistant</h4>
-                  <p className="text-slate-400 text-[11px] leading-relaxed">
+                  <h4 className="font-bold text-slate-900">Private Authenticated Assistant</h4>
+                  <p className="text-slate-600 text-[11px] leading-relaxed">
                     Sign in to chat with AUREN, access persistent dialogues, and leverage memory context.
                   </p>
                 </div>
@@ -500,7 +501,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               <button
                 type="button"
                 onClick={() => setIsAuthModalOpen(true)}
-                className="px-3.5 py-1.5 bg-champagne-400 hover:bg-champagne-300 text-slate-950 font-semibold rounded-lg text-xs transition flex-shrink-0 touch-target self-start sm:self-center"
+                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs transition flex-shrink-0 touch-target self-start sm:self-center shadow-sm"
               >
                 Sign In / Register
               </button>
@@ -508,18 +509,18 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           )}
 
           {isLoadingMessages ? (
-            <div className="h-full flex items-center justify-center text-slate-400 text-xs space-x-2">
-              <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+            <div className="h-full flex items-center justify-center text-slate-500 text-xs space-x-2">
+              <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
               <span>Loading messages...</span>
             </div>
           ) : messages.length === 0 && !streamingContent ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-4 sm:p-6 space-y-4 sm:space-y-5">
-              <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-tr from-indigo-950 via-slate-900 to-champagne-950/40 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-card-elevation">
-                <Bot className="h-7 w-7 sm:h-8 sm:w-8 text-champagne-300" />
+              <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-sm">
+                <Bot className="h-7 w-7 sm:h-8 sm:w-8 text-emerald-600" />
               </div>
               <div className="space-y-1.5">
-                <h4 className="text-base sm:text-lg font-bold text-white tracking-tight">AUREN Personal AI Assistant</h4>
-                <p className="text-xs sm:text-sm text-slate-400 max-w-sm leading-relaxed">
+                <h4 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">AUREN Personal AI Assistant</h4>
+                <p className="text-xs sm:text-sm text-slate-600 max-w-sm leading-relaxed">
                   Ready to assist. Your dialogues are saved privately to your account with strict ownership enforcement.
                 </p>
               </div>
@@ -534,31 +535,32 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                     className={`flex items-start space-x-2.5 sm:space-x-3.5 ${isUser ? 'justify-end' : 'justify-start'}`}
                   >
                     {!isUser && (
-                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-[#121622] border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 flex-shrink-0 text-xs mt-0.5 shadow-sm">
                         <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
                     )}
                     <div
-                      className={`max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed ${isUser
-                          ? 'bg-[#151926] text-slate-100 border border-white/[0.08] shadow-subtle-elevation rounded-tr-sm'
-                          : 'bg-[#0e111a]/90 text-slate-200 border border-white/[0.06] shadow-card-elevation rounded-tl-sm backdrop-blur-sm'
-                        }`}
+                      className={`max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed ${
+                        isUser
+                          ? 'bg-slate-900 text-white shadow-sm rounded-tr-sm'
+                          : 'bg-slate-50 text-slate-900 border border-slate-200 shadow-sm rounded-tl-sm'
+                      }`}
                     >
                       <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
                       {!isUser && (
-                        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-white/[0.06] text-[11px] text-slate-400">
+                        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-200 text-[11px] text-slate-500">
                           <button
                             type="button"
                             onClick={() => setContextInspectorMessageId(msg.id)}
-                            className="inline-flex items-center space-x-1.5 text-slate-400 hover:text-emerald-300 transition-colors touch-target py-1"
+                            className="inline-flex items-center space-x-1.5 text-slate-500 hover:text-emerald-700 transition-colors touch-target py-1 font-semibold"
                             title="Inspect memory context used for this response"
                             aria-label="Inspect context provenance"
                           >
-                            <Brain className="w-3.5 h-3.5 text-emerald-400" />
-                            <span className="font-medium">Context Inspector</span>
+                            <Brain className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Context Inspector</span>
                           </button>
                           {Boolean(msg.metadata?.interrupted) && (
-                            <span className="text-[10px] text-amber-400/90 italic font-mono">
+                            <span className="text-[10px] text-amber-600 italic font-mono">
                               (Stream interrupted)
                             </span>
                           )}
@@ -566,7 +568,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                       )}
                     </div>
                     {isUser && (
-                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-white/[0.05] border border-white/[0.1] flex items-center justify-center text-slate-300 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 flex-shrink-0 text-xs mt-0.5 shadow-sm">
                         <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
                     )}
@@ -577,16 +579,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               {/* In-Flight Streaming Assistant Bubble */}
               {isStreaming && (
                 <div className="flex items-start space-x-2.5 sm:space-x-3.5 justify-start animate-in fade-in duration-150">
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-[#121622] border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0 text-xs mt-0.5 shadow-sm">
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 flex-shrink-0 text-xs mt-0.5 shadow-sm">
                     <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
-                  <div className="max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed bg-[#0e111a]/90 text-slate-200 border border-white/[0.06] shadow-card-elevation rounded-tl-sm backdrop-blur-sm">
+                  <div className="max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed bg-slate-50 text-slate-900 border border-slate-200 shadow-sm rounded-tl-sm">
                     {streamingContent ? (
                       <MessageContent content={streamingContent} role="assistant" conversationId={activeConversationId || undefined} />
                     ) : (
-                      <span className="inline-flex items-center space-x-2 text-slate-400 text-xs animate-pulse">
-                        <span className="font-medium text-emerald-400">AUREN is thinking</span>
-                        <span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce"></span>
+                      <span className="inline-flex items-center space-x-2 text-slate-500 text-xs animate-pulse">
+                        <span className="font-semibold text-emerald-700">AUREN is thinking</span>
+                        <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce"></span>
                       </span>
                     )}
                   </div>
@@ -596,18 +598,18 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
           )}
 
           {reconnectStatus && (
-            <div className="p-3 sm:p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/50 flex items-center space-x-2.5 text-xs text-amber-300 animate-pulse">
-              <Loader2 className="h-4 w-4 animate-spin text-amber-400 flex-shrink-0" />
+            <div className="p-3 sm:p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center space-x-2.5 text-xs text-amber-800 animate-pulse font-medium">
+              <Loader2 className="h-4 w-4 animate-spin text-amber-600 flex-shrink-0" />
               <span>{reconnectStatus}</span>
             </div>
           )}
 
           {errorMessage && (
-            <div className="p-3 sm:p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/50 flex items-center justify-between text-xs text-rose-300">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between text-xs text-rose-800">
               <div className="flex items-start space-x-2.5">
-                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-rose-400" />
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-rose-600" />
                 <div>
-                  <span className="font-semibold">Error: </span>
+                  <span className="font-bold">Error: </span>
                   <span>{errorMessage}</span>
                 </div>
               </div>
@@ -616,7 +618,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                   type="button"
                   onClick={handleRetry}
                   disabled={isStreaming}
-                  className="ml-2.5 px-3 py-1.5 bg-rose-900/60 hover:bg-rose-800/80 border border-rose-700/60 rounded-lg text-rose-200 text-xs font-semibold flex items-center space-x-1.5 transition flex-shrink-0 disabled:opacity-50 touch-target"
+                  className="ml-2.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition flex-shrink-0 disabled:opacity-50 touch-target shadow-sm"
                   title="Retry failed message with identical idempotency key"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -626,7 +628,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                 <button
                   type="button"
                   onClick={() => navigate({ to: '/chat' })}
-                  className="ml-2.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200 text-xs font-medium touch-target"
+                  className="ml-2.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-800 text-xs font-semibold touch-target"
                 >
                   Return to Chat
                 </button>
@@ -638,10 +640,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         </div>
 
         {/* Input Composer Bar */}
-        <div className="p-2.5 sm:p-4 border-t border-white/[0.08] bg-[#07080c]/98 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="p-2.5 sm:p-4 border-t border-slate-200 bg-white/95 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-xs">
           <form
             onSubmit={handleSendMessage}
-            className="flex items-center gap-2 p-1.5 sm:p-2 bg-[#0e111a] border border-white/[0.12] rounded-2xl focus-within:border-emerald-500/70 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all shadow-lg"
+            className="flex items-center gap-2 p-1.5 sm:p-2 bg-slate-50 border border-slate-200 rounded-2xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all shadow-inner"
           >
             <textarea
               rows={1}
@@ -655,7 +657,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               }}
               placeholder="Ask AUREN anything..."
               disabled={isStreaming}
-              className="flex-1 bg-transparent border-0 outline-none px-3 py-1.5 text-xs sm:text-sm text-white placeholder-slate-400 focus:ring-0 resize-none min-h-[36px] max-h-[130px] leading-relaxed"
+              className="flex-1 bg-transparent border-0 outline-none px-3 py-1.5 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:ring-0 resize-none min-h-[36px] max-h-[130px] leading-relaxed"
             />
 
             <div className="flex items-center flex-shrink-0 pr-1">
@@ -676,7 +678,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                   className={`h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer ${
                     inputValue.trim()
                       ? 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md shadow-emerald-500/30'
-                      : 'bg-white/[0.05] text-slate-500 hover:text-slate-400 border border-white/[0.06]'
+                      : 'bg-slate-200 text-slate-400 border border-slate-200'
                   }`}
                   title="Send message"
                   aria-label="Send message"
@@ -687,7 +689,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
             </div>
           </form>
 
-          <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-500 px-1 font-mono">
+          <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400 px-1 font-mono">
             <span className="hidden sm:inline">Enter to send &bull; Shift+Enter for newline</span>
             {inputValue.length > 500 && (
               <span className="ml-auto">{inputValue.length}/10000 characters</span>

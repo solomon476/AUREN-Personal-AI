@@ -35,10 +35,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     if (typeof window !== 'undefined') {
       try {
-        // Migration check: ensure White is immediate default for users
-        const whiteMigrated = localStorage.getItem('auren_white_bg_default_v1');
+        // Migration check: ensure White is immediate default for all users
+        const whiteMigrated = localStorage.getItem('auren_white_bg_force_v3');
         if (!whiteMigrated) {
-          localStorage.setItem('auren_white_bg_default_v1', 'true');
+          localStorage.setItem('auren_white_bg_force_v3', 'true');
           localStorage.setItem('auren_theme', 'light');
           return 'light';
         }

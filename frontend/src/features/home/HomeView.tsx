@@ -2,7 +2,7 @@
  * Home — AUREN Personal AI Command Center.
  * Unified operating environment integrating daily planning, high-priority tasks,
  * active projects, strategic goals, recent conversations, and central AI entry point.
- * Elevated with AUREN Obsidian, Graphite & Champagne Design System.
+ * Elevated with High-Contrast Executive White, Obsidian, Emerald, and Gold Design System.
  */
 
 import React, { useState } from 'react';
@@ -129,42 +129,42 @@ export const HomeView: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-y-auto text-slate-100 p-3.5 sm:p-7 space-y-5 sm:space-y-7 max-w-7xl mx-auto scrollbar-thin">
+    <div className="flex-1 flex flex-col h-full bg-white overflow-y-auto text-slate-900 p-3.5 sm:p-7 space-y-5 sm:space-y-7 max-w-7xl mx-auto scrollbar-thin">
       {/* Top Briefing Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 sm:pb-6 border-b border-white/[0.08] gap-4 sm:gap-6 relative">
+      <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 sm:pb-6 border-b border-slate-200 gap-4 sm:gap-6 relative">
         <div className="space-y-1">
-          <div className="flex items-center space-x-2 text-xs font-medium text-emerald-400 mb-1">
-            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="tracking-tight">{todayFormatted}</span>
-            <span className="text-slate-600">•</span>
-            <span className="text-slate-400 font-normal">Personal Command Center</span>
+          <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-600 mb-1">
+            <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="tracking-tight text-emerald-700">{todayFormatted}</span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-500 font-normal">Personal Command Center</span>
           </div>
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
             {getGreeting()}{displayName ? `, ${displayName}` : ''}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 max-w-xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 max-w-xl leading-relaxed">
             Overview of your daily commitments, strategic milestones, and intelligence streams.
           </p>
         </div>
 
-        {/* Quick KPI Snapshot - Minimal Obsidian & Emerald Design */}
+        {/* Quick KPI Snapshot - Crisp White & Emerald Design */}
         {dashboard && (
           <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto w-full md:w-auto scrollbar-none py-1">
-            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-emerald-500/30 transition-all group">
-              <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-medium">Tasks</span>
-              <span className="text-lg sm:text-xl font-bold text-white tracking-tight font-mono inline-block">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-white border border-slate-200 shadow-sm text-center min-w-[76px] hover:border-emerald-500/40 transition-all group">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Tasks</span>
+              <span className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight font-mono inline-block">
                 {dashboard.active_tasks_count ?? 0}
               </span>
             </div>
-            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-emerald-500/30 transition-all group">
-              <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-medium">Projects</span>
-              <span className="text-lg sm:text-xl font-bold text-white tracking-tight font-mono inline-block">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-white border border-slate-200 shadow-sm text-center min-w-[76px] hover:border-emerald-500/40 transition-all group">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Projects</span>
+              <span className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight font-mono inline-block">
                 {dashboard.active_projects_count ?? 0}
               </span>
             </div>
-            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#0c0e14] border border-white/[0.06] shadow-sm text-center min-w-[72px] hover:border-emerald-500/30 transition-all group">
-              <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-medium">Goals</span>
-              <span className="text-lg sm:text-xl font-bold text-emerald-400 tracking-tight font-mono inline-block">
+            <div className="flex-1 md:flex-none px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-white border border-slate-200 shadow-sm text-center min-w-[76px] hover:border-emerald-500/40 transition-all group">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Goals</span>
+              <span className="text-lg sm:text-xl font-bold text-emerald-600 tracking-tight font-mono inline-block">
                 {dashboard.active_goals_count ?? 0}
               </span>
             </div>
@@ -172,40 +172,42 @@ export const HomeView: React.FC = () => {
         )}
       </div>
 
-      {/* 7-Day Quick Planner Calendar Strip */}
-      <div className="flex items-center gap-2 overflow-x-auto py-2 scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        {weekDays.map((d, idx) => (
-          <div
-            key={idx}
-            className={`flex-shrink-0 w-[46px] xs:w-[50px] sm:w-[56px] h-[64px] sm:h-[70px] rounded-2xl flex flex-col items-center justify-center border transition-all select-none ${
-              d.isToday
-                ? 'bg-emerald-500/15 border-emerald-400 text-white shadow-[0_0_12px_rgba(16,185,129,0.25)]'
-                : 'bg-[#10131d] border-white/[0.08] text-slate-300 hover:border-white/[0.18]'
-            }`}
-          >
-            <span className={`text-[10px] uppercase tracking-wider font-semibold ${d.isToday ? 'text-emerald-400' : 'text-slate-400'}`}>
-              {d.name}
-            </span>
-            <span className="text-sm sm:text-base font-bold font-mono mt-0.5 text-white">
-              {d.dayNum}
-            </span>
-            {d.isToday && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] mt-0.5" />
-            )}
-          </div>
-        ))}
+      {/* 7-Day Quick Planner Calendar Strip - Unclipped, Generous Touch Target */}
+      <div className="w-full flex-shrink-0 min-h-[86px] overflow-x-auto py-2 scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex items-center gap-2.5 min-w-max pb-1">
+          {weekDays.map((d, idx) => (
+            <div
+              key={idx}
+              className={`flex-shrink-0 w-[52px] sm:w-[60px] h-[72px] sm:h-[76px] rounded-2xl flex flex-col items-center justify-center p-2 border transition-all select-none shadow-sm ${
+                d.isToday
+                  ? 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 shadow-emerald-500/10'
+                  : 'bg-white border border-slate-200 text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <span className={`text-[10px] uppercase tracking-wider font-bold ${d.isToday ? 'text-emerald-700' : 'text-slate-500'}`}>
+                {d.name}
+              </span>
+              <span className="text-base sm:text-lg font-bold font-mono mt-0.5 text-slate-900 leading-none">
+                {d.dayNum}
+              </span>
+              {d.isToday && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)] mt-1 flex-shrink-0" />
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Guest Mode Banner */}
       {!isAuthLoading && !user && (
-        <div className="rounded-2xl bg-[#0e111a]/90 border border-white/[0.08] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-subtle-elevation backdrop-blur-md">
+        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center space-x-3.5">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 flex-shrink-0 border border-emerald-500/20">
+            <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 flex-shrink-0 border border-emerald-200">
               <Bot className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-xs font-semibold text-slate-100 tracking-tight">Guest Preview Mode</h2>
-              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 leading-relaxed">
+              <h2 className="text-xs font-semibold text-slate-900 tracking-tight">Guest Preview Mode</h2>
+              <p className="text-[11px] sm:text-xs text-slate-600 mt-0.5 leading-relaxed">
                 You are exploring AUREN without an active session. Sign in to sync your tasks, projects, strategic goals, reflections, and persistent knowledge.
               </p>
             </div>
@@ -220,25 +222,25 @@ export const HomeView: React.FC = () => {
       )}
 
       {/* Central AI Assistant Entry Point (Raycast/Linear Style Command Bar) */}
-      <div className="relative rounded-2xl bg-[#0e111a]/90 border border-white/[0.08] p-5 sm:p-6 shadow-card-elevation space-y-4">
+      <div className="relative rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4">
         {/* Subtle Ambient Ray */}
         <div className="absolute top-0 right-1/4 w-72 h-32 bg-emerald-500/5 blur-3xl pointer-events-none rounded-full" />
 
         <div className="flex items-center justify-between relative z-10">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-[#d7ba83]">
-            <Sparkles className="w-4 h-4 text-[#d7ba83] animate-pulse" />
-            <span className="tracking-tight text-white font-bold">AUREN Intelligence Composer</span>
+          <div className="flex items-center space-x-2 text-xs font-semibold text-amber-600">
+            <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+            <span className="tracking-tight text-slate-900 font-bold">AUREN Intelligence Composer</span>
           </div>
           <Link
             to="/chat"
-            className="text-[11px] text-slate-400 hover:text-[#d7ba83] font-medium flex items-center space-x-1 transition-colors"
+            className="text-[11px] text-slate-500 hover:text-emerald-600 font-medium flex items-center space-x-1 transition-colors"
           >
             <span>Open Dedicated Assistant</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
-        <form onSubmit={handleQuickAsk} className="flex items-center gap-2 p-1.5 sm:p-2 bg-[#07080c] border border-white/[0.12] rounded-2xl focus-within:border-emerald-500/70 focus-within:ring-1 focus-within:ring-emerald-500/40 transition-all shadow-inner relative z-10">
+        <form onSubmit={handleQuickAsk} className="flex items-center gap-2 p-1.5 sm:p-2 bg-slate-50 border border-slate-200 rounded-2xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all shadow-inner relative z-10">
           <div className="pl-3 text-slate-400 pointer-events-none flex-shrink-0">
             <Command className="w-4 h-4" />
           </div>
@@ -247,14 +249,14 @@ export const HomeView: React.FC = () => {
             value={promptInput}
             onChange={(e) => setPromptInput(e.target.value)}
             placeholder="Ask AUREN anything, plan today's priorities, or break down a project..."
-            className="flex-1 bg-transparent border-0 outline-none px-2 py-2 text-xs sm:text-sm text-white placeholder-slate-400 focus:ring-0"
+            className="flex-1 bg-transparent border-0 outline-none px-2 py-2 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:ring-0"
           />
           <button
             type="submit"
             className={`h-8 w-8 sm:h-9 sm:w-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${
               promptInput.trim()
-                ? 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md shadow-emerald-500/30'
-                : 'bg-white/[0.06] hover:bg-white/[0.1] text-slate-400 hover:text-white border border-white/[0.08]'
+                ? 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md shadow-emerald-500/25'
+                : 'bg-slate-200 text-slate-400 hover:bg-slate-300 border border-slate-200'
             }`}
             title="Ask AUREN"
             aria-label="Ask AUREN"
@@ -264,14 +266,14 @@ export const HomeView: React.FC = () => {
         </form>
 
         {/* Suggestion Chips */}
-        <div className="flex items-center gap-2 overflow-x-auto pt-1 text-[11px] scrollbar-none text-slate-400 relative z-10">
+        <div className="flex items-center gap-2 overflow-x-auto pt-1 text-[11px] scrollbar-none text-slate-500 relative z-10">
           <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Suggested:</span>
           <button
             type="button"
             onClick={() => {
               setPromptInput('What are my highest priority tasks and commitments today?');
             }}
-            className="px-3 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] text-slate-300 hover:text-white transition whitespace-nowrap shadow-sm"
+            className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 transition whitespace-nowrap shadow-sm text-xs"
           >
             Today's priorities
           </button>
@@ -280,7 +282,7 @@ export const HomeView: React.FC = () => {
             onClick={() => {
               setPromptInput('Break down my active goals into concrete next steps.');
             }}
-            className="px-3 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] text-slate-300 hover:text-white transition whitespace-nowrap shadow-sm"
+            className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 transition whitespace-nowrap shadow-sm text-xs"
           >
             Break down goals
           </button>
@@ -289,7 +291,7 @@ export const HomeView: React.FC = () => {
             onClick={() => {
               setPromptInput('Help me review my active projects and identify next actions.');
             }}
-            className="px-3 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] text-slate-300 hover:text-white transition whitespace-nowrap shadow-sm"
+            className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 transition whitespace-nowrap shadow-sm text-xs"
           >
             Review active projects
           </button>
@@ -300,44 +302,44 @@ export const HomeView: React.FC = () => {
       <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
         <Link
           to="/tasks"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/40 text-xs font-medium text-emerald-300 hover:text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold text-emerald-800 transition shadow-sm"
         >
-          <Plus className="w-3.5 h-3.5 text-emerald-400" />
+          <Plus className="w-3.5 h-3.5 text-emerald-600" />
           <span>New Task</span>
         </Link>
         <Link
           to="/projects"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] hover:border-white/[0.16] text-xs font-semibold text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-800 transition shadow-sm"
         >
-          <Plus className="w-3.5 h-3.5 text-white" />
+          <Plus className="w-3.5 h-3.5 text-slate-700" />
           <span>New Project</span>
         </Link>
         <Link
           to="/goals"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-amber-950/30 hover:bg-amber-900/40 border border-amber-800/40 text-xs font-medium text-amber-200 hover:text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-xs font-semibold text-amber-800 transition shadow-sm"
         >
-          <Plus className="w-3.5 h-3.5 text-amber-400" />
+          <Plus className="w-3.5 h-3.5 text-amber-600" />
           <span>New Goal</span>
         </Link>
         <Link
           to="/journal"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-rose-950/35 hover:bg-rose-900/45 border border-rose-800/45 text-xs font-medium text-rose-200 hover:text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-semibold text-rose-800 transition shadow-sm"
         >
-          <BookOpen className="w-3.5 h-3.5 text-rose-300" />
+          <BookOpen className="w-3.5 h-3.5 text-rose-600" />
           <span>Write Reflection</span>
         </Link>
         <Link
           to="/operations"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-700/50 text-xs font-semibold text-emerald-300 hover:text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold text-emerald-800 transition shadow-sm"
         >
-          <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+          <MapPin className="w-3.5 h-3.5 text-emerald-600" />
           <span>Operations & GPS</span>
         </Link>
         <Link
           to="/search"
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/[0.14] text-xs font-medium text-slate-300 hover:text-white transition shadow-sm"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-700 transition shadow-sm"
         >
-          <Search className="w-3.5 h-3.5 text-slate-400" />
+          <Search className="w-3.5 h-3.5 text-slate-500" />
           <span>Search Everything</span>
         </Link>
       </div>
@@ -347,15 +349,15 @@ export const HomeView: React.FC = () => {
         {/* Left Column (2 spans): Tasks and Active Projects */}
         <div className="lg:col-span-2 space-y-6">
           {/* Priority Tasks Radar */}
-          <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
+          <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <CheckSquare className="w-4 h-4 text-champagne-400" />
-                <h2 className="text-sm font-semibold text-slate-100 tracking-tight">Priority Next Actions</h2>
+                <CheckSquare className="w-4 h-4 text-emerald-600" />
+                <h2 className="text-sm font-bold text-slate-900 tracking-tight">Priority Next Actions</h2>
               </div>
               <Link
                 to="/tasks"
-                className="text-[11px] text-slate-400 hover:text-champagne-300 flex items-center space-x-1 transition"
+                className="text-[11px] text-slate-500 hover:text-emerald-600 flex items-center space-x-1 transition font-medium"
               >
                 <span>View All Tasks</span>
                 <ArrowRight className="w-3 h-3" />
@@ -365,27 +367,27 @@ export const HomeView: React.FC = () => {
             {isAuthLoading || isLoadingTasks ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading priority tasks...</div>
             ) : !user ? (
-              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
-                <CheckSquare className="w-6 h-6 text-champagne-400 mx-auto opacity-80" />
-                <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
+              <div className="p-6 text-center rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <CheckSquare className="w-6 h-6 text-emerald-600 mx-auto opacity-80" />
+                <p className="text-xs text-slate-900 font-semibold">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
                   Sign in to view, prioritize, and check off your personal tasks.
                 </p>
               </div>
             ) : tasksError ? (
-              <div className="p-5 text-center rounded-2xl bg-slate-900/40 border border-white/[0.06] text-xs text-slate-400">
+              <div className="p-5 text-center rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
                 Tasks temporarily unavailable.
               </div>
             ) : !tasksData?.items.length ? (
-              <div className="p-7 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2.5">
-                <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
-                <p className="text-xs text-slate-300 font-medium">All tasks cleared</p>
+              <div className="p-7 text-center rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto" />
+                <p className="text-xs text-slate-900 font-semibold">All tasks cleared</p>
                 <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
                   You have no pending tasks. Click below to add an actionable item.
                 </p>
                 <Link
                   to="/tasks"
-                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs text-slate-300 hover:text-white transition shadow-sm"
+                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-800 transition shadow-sm"
                 >
                   Create Task
                 </Link>
@@ -395,7 +397,7 @@ export const HomeView: React.FC = () => {
                 {tasksData.items.map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] hover:border-white/[0.09] transition-all shadow-sm"
+                    className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200 transition-all shadow-sm"
                   >
                     <div className="flex items-center space-x-2.5 min-w-0">
                       <button
@@ -409,23 +411,23 @@ export const HomeView: React.FC = () => {
                           className={`w-4 h-4 rounded border flex items-center justify-center transition ${
                             task.status === 'completed'
                               ? 'bg-emerald-600 border-emerald-500 text-white'
-                              : 'border-slate-600 hover:border-slate-400'
+                              : 'border-slate-400 bg-white hover:border-slate-600'
                           }`}
                         >
-                          {task.status === 'completed' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                          {task.status === 'completed' && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
                         </span>
                       </button>
                       <div className="min-w-0">
                         <span
                           className={`text-xs block truncate font-medium ${
-                            task.status === 'completed' ? 'line-through text-slate-500' : 'text-slate-200'
+                            task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-900'
                           }`}
                         >
                           {task.title}
                         </span>
                         {task.due_date && (
                           <span className="text-[10px] text-slate-500 flex items-center space-x-1 mt-0.5 font-mono">
-                            <Clock className="w-3 h-3" />
+                            <Clock className="w-3 h-3 text-slate-400" />
                             <span>{task.due_date}</span>
                           </span>
                         )}
@@ -437,12 +439,12 @@ export const HomeView: React.FC = () => {
                         <span
                           className={`text-[9px] font-semibold uppercase px-2 py-0.5 rounded border tracking-wider ${
                             task.priority === 'urgent'
-                              ? 'bg-rose-950/60 text-rose-300 border-rose-800/50'
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
                               : task.priority === 'high'
-                              ? 'bg-amber-950/60 text-amber-300 border-amber-800/50'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
                               : task.priority === 'medium'
-                              ? 'bg-champagne-950/40 text-champagne-300 border-champagne-700/40'
-                              : 'bg-slate-800/80 text-slate-400 border-slate-700/80'
+                              ? 'bg-slate-100 text-slate-700 border-slate-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
                           }`}
                         >
                           {task.priority}
@@ -456,15 +458,15 @@ export const HomeView: React.FC = () => {
           </div>
 
           {/* Active Projects Radar */}
-          <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
+          <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <FolderKanban className="w-4 h-4 text-emerald-400" />
-                <h2 className="text-sm font-semibold text-slate-100 tracking-tight">Active Project Workspaces</h2>
+                <FolderKanban className="w-4 h-4 text-emerald-600" />
+                <h2 className="text-sm font-bold text-slate-900 tracking-tight">Active Project Workspaces</h2>
               </div>
               <Link
                 to="/projects"
-                className="text-[11px] text-slate-400 hover:text-champagne-300 flex items-center space-x-1 transition"
+                className="text-[11px] text-slate-500 hover:text-emerald-600 flex items-center space-x-1 transition font-medium"
               >
                 <span>View All Projects</span>
                 <ArrowRight className="w-3 h-3" />
@@ -474,25 +476,25 @@ export const HomeView: React.FC = () => {
             {isAuthLoading || isLoadingProjects ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading projects...</div>
             ) : !user ? (
-              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
-                <FolderKanban className="w-6 h-6 text-emerald-400 mx-auto opacity-80" />
-                <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
+              <div className="p-6 text-center rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <FolderKanban className="w-6 h-6 text-emerald-600 mx-auto opacity-80" />
+                <p className="text-xs text-slate-900 font-semibold">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
                   Sign in to view your multi-step project workspaces and completion progress.
                 </p>
               </div>
             ) : projectsError ? (
-              <div className="p-5 text-center rounded-2xl bg-slate-900/40 border border-white/[0.06] text-xs text-slate-400">
+              <div className="p-5 text-center rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
                 Projects temporarily unavailable.
               </div>
             ) : !projectsData?.items.length ? (
-              <div className="p-7 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2.5">
-                <FolderKanban className="w-6 h-6 text-slate-600 mx-auto" />
-                <p className="text-xs text-slate-300 font-medium">No active projects</p>
+              <div className="p-7 text-center rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <FolderKanban className="w-6 h-6 text-slate-400 mx-auto" />
+                <p className="text-xs text-slate-900 font-semibold">No active projects</p>
                 <p className="text-[11px] text-slate-500">Create a project workspace to coordinate complex goals.</p>
                 <Link
                   to="/projects"
-                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs text-slate-300 hover:text-white transition shadow-sm"
+                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-800 transition shadow-sm"
                 >
                   Create Project
                 </Link>
@@ -503,24 +505,24 @@ export const HomeView: React.FC = () => {
                   <Link
                     key={project.id}
                     to="/projects"
-                    className="p-4 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] hover:border-white/[0.09] transition-all space-y-3 block shadow-sm group"
+                    className="p-4 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200 transition-all space-y-3 block shadow-sm group"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-200 group-hover:text-white truncate pr-2 tracking-tight">
+                      <span className="text-xs font-semibold text-slate-900 group-hover:text-emerald-700 truncate pr-2 tracking-tight">
                         {project.name}
                       </span>
-                      <span className="text-[10px] font-mono text-emerald-400 font-semibold">
+                      <span className="text-[10px] font-mono text-emerald-600 font-bold">
                         {project.progress_percentage ?? 0}%
                       </span>
                     </div>
-                    <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                       <div
                         className="h-full bg-emerald-500 rounded-full transition-all duration-300 shadow-sm"
                         style={{ width: `${project.progress_percentage ?? 0}%` }}
                       />
                     </div>
                     {project.description && (
-                      <p className="text-[11px] text-slate-400 line-clamp-1 leading-relaxed">{project.description}</p>
+                      <p className="text-[11px] text-slate-600 line-clamp-1 leading-relaxed">{project.description}</p>
                     )}
                   </Link>
                 ))}
@@ -532,15 +534,15 @@ export const HomeView: React.FC = () => {
         {/* Right Column: Strategic Goals & Recent Dialogue */}
         <div className="space-y-6">
           {/* Strategic Goals Radar */}
-          <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
+          <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Target className="w-4 h-4 text-emerald-400" />
-                <h2 className="text-sm font-semibold text-slate-100 tracking-tight">Strategic Goals</h2>
+                <Target className="w-4 h-4 text-emerald-600" />
+                <h2 className="text-sm font-bold text-slate-900 tracking-tight">Strategic Goals</h2>
               </div>
               <Link
                 to="/goals"
-                className="text-[11px] text-slate-400 hover:text-emerald-300 flex items-center space-x-1 transition"
+                className="text-[11px] text-slate-500 hover:text-emerald-600 flex items-center space-x-1 transition font-medium"
               >
                 <span>View Goals</span>
                 <ArrowRight className="w-3 h-3" />
@@ -550,25 +552,25 @@ export const HomeView: React.FC = () => {
             {isAuthLoading || isLoadingGoals ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading goals...</div>
             ) : !user ? (
-              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
-                <Target className="w-5 h-5 text-emerald-400 mx-auto opacity-80" />
-                <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
+              <div className="p-6 text-center rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <Target className="w-5 h-5 text-emerald-600 mx-auto opacity-80" />
+                <p className="text-xs text-slate-900 font-semibold">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Sign in to track strategic objectives, measurable milestones, and deadlines.
                 </p>
               </div>
             ) : goalsError ? (
-              <div className="p-5 text-center rounded-2xl bg-slate-900/40 border border-white/[0.06] text-xs text-slate-400">
+              <div className="p-5 text-center rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
                 Goals temporarily unavailable.
               </div>
             ) : !goalsData?.items.length ? (
-              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
-                <Target className="w-5 h-5 text-slate-600 mx-auto" />
-                <p className="text-xs text-slate-300 font-medium">No active goals</p>
+              <div className="p-6 text-center rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <Target className="w-5 h-5 text-slate-400 mx-auto" />
+                <p className="text-xs text-slate-900 font-semibold">No active goals</p>
                 <p className="text-[11px] text-slate-500">Set strategic horizons to orient your day-to-day work.</p>
                 <Link
                   to="/goals"
-                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs text-slate-300 hover:text-white transition shadow-sm"
+                  className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-800 transition shadow-sm"
                 >
                   Create Goal
                 </Link>
@@ -576,14 +578,14 @@ export const HomeView: React.FC = () => {
             ) : (
               <div className="space-y-3">
                 {goalsData.items.map((goal) => (
-                  <div key={goal.id} className="p-3.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] space-y-2.5 shadow-sm transition-all">
+                  <div key={goal.id} className="p-3.5 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200 space-y-2.5 shadow-sm transition-all">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-200 truncate pr-2 tracking-tight">{goal.title}</span>
-                      <span className="font-mono text-emerald-400 text-[11px] font-semibold flex-shrink-0">
+                      <span className="font-semibold text-slate-900 truncate pr-2 tracking-tight">{goal.title}</span>
+                      <span className="font-mono text-emerald-600 text-[11px] font-bold flex-shrink-0">
                         {goal.progress_percentage ?? 0}%
                       </span>
                     </div>
-                    <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                       <div
                         className="h-full bg-emerald-500 rounded-full transition-all duration-300"
                         style={{ width: `${goal.progress_percentage ?? 0}%` }}
@@ -599,15 +601,15 @@ export const HomeView: React.FC = () => {
           </div>
 
           {/* Recent Conversations */}
-          <div className="rounded-2xl bg-[#0e111a]/70 border border-white/[0.06] p-5 space-y-4 shadow-subtle-elevation">
+          <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <MessageSquare className="w-4 h-4 text-emerald-400" />
-                <h2 className="text-sm font-semibold text-slate-100 tracking-tight">Recent Conversations</h2>
+                <MessageSquare className="w-4 h-4 text-emerald-600" />
+                <h2 className="text-sm font-bold text-slate-900 tracking-tight">Recent Conversations</h2>
               </div>
               <Link
                 to="/chat"
-                className="text-[11px] text-slate-400 hover:text-emerald-300 flex items-center space-x-1 transition"
+                className="text-[11px] text-slate-500 hover:text-emerald-600 flex items-center space-x-1 transition font-medium"
               >
                 <span>New Dialogue</span>
                 <ArrowRight className="w-3 h-3" />
@@ -617,9 +619,9 @@ export const HomeView: React.FC = () => {
             {isAuthLoading || isLoadingConversations ? (
               <div className="p-6 text-center text-xs text-slate-500">Loading dialogue...</div>
             ) : !user ? (
-              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
-                <MessageSquare className="w-5 h-5 text-emerald-400 mx-auto opacity-80" />
-                <p className="text-xs text-slate-300 font-medium">Guest Mode</p>
+              <div className="p-6 text-center rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <MessageSquare className="w-5 h-5 text-emerald-600 mx-auto opacity-80" />
+                <p className="text-xs text-slate-900 font-semibold">Guest Mode</p>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Sign in to access your persistent conversations across devices.
                 </p>
@@ -631,13 +633,13 @@ export const HomeView: React.FC = () => {
                 </Link>
               </div>
             ) : conversationsError ? (
-              <div className="p-5 text-center rounded-2xl bg-slate-900/40 border border-white/[0.06] text-xs text-slate-400">
+              <div className="p-5 text-center rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
                 Dialogue history temporarily unavailable.
               </div>
             ) : !conversations.length ? (
-              <div className="p-6 text-center rounded-2xl bg-[#07080c]/60 border border-white/[0.06] space-y-2">
-                <MessageSquare className="w-5 h-5 text-slate-600 mx-auto" />
-                <p className="text-xs text-slate-400">No active conversations</p>
+              <div className="p-6 text-center rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <MessageSquare className="w-5 h-5 text-slate-400 mx-auto" />
+                <p className="text-xs text-slate-600">No active conversations</p>
                 <Link
                   to="/chat"
                   className="inline-block mt-2 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-xs font-semibold text-white transition shadow-sm"
@@ -652,17 +654,17 @@ export const HomeView: React.FC = () => {
                     key={conv.id}
                     to="/chat/$conversationId"
                     params={{ conversationId: conv.id }}
-                    className="p-3 rounded-xl hover:bg-white/[0.04] transition flex items-center justify-between group border border-transparent hover:border-white/[0.08]"
+                    className="p-3 rounded-xl hover:bg-slate-50 transition flex items-center justify-between group border border-transparent hover:border-slate-200"
                   >
                     <div className="min-w-0 pr-2">
-                      <span className="text-xs text-slate-300 group-hover:text-white block truncate font-medium tracking-tight">
+                      <span className="text-xs text-slate-800 group-hover:text-emerald-700 block truncate font-medium tracking-tight">
                         {conv.title || 'Untitled Dialogue'}
                       </span>
                       <span className="text-[10px] text-slate-500 font-mono">
                         {new Date(conv.updated_at).toLocaleDateString()}
                       </span>
                     </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-300 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
                   </Link>
                 ))}
               </div>
