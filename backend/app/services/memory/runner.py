@@ -72,7 +72,8 @@ class WorkerRunner:
         """Initializes database pool and provider dependencies."""
         if self.db_pool is None:
             if not self.database_url:
-                raise ValueError("WORKER_DATABASE_URL or db_pool must be provided to run MemoryExtractionWorker")
+                logger.warning("No database_url provided to MemoryExtractionWorker; worker in standby mode.")
+                return
 
             # Verify that connection does not attempt to authenticate directly as the NOLOGIN role 'auren_worker'
             try:
@@ -322,11 +323,21 @@ def setup_signal_handlers(runner: WorkerRunner):
 
 async def main_async():
     """Asynchronous entry point for running the extraction worker process."""
-    if not default_settings.MEMORY_WORKER_ENABLED:
+    if not getattr(default_settings, "MEMORY_WORKER_ENABLED", True):
         logger.info("MEMORY_WORKER_ENABLED is false; memory extraction worker will not start.")
         return
 
-    runner = WorkerRunner()
+    worker_db_url = getattr(default_settings, "WORKER_DATABASE_URL", None) or getattr(default_settings, "DATABASE_URL", None)
+    if not worker_db_url:
+        logger.info("Background memory extraction worker is in standby mode: no WORKER_DATABASE_URL configured.")
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            logger.info("Worker process stopped.")
+            return
+
+    runner = WorkerRunner(database_url=worker_db_url, settings=default_settings)
     setup_signal_handlers(runner)
     await runner.run()
 
