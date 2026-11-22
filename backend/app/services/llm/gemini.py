@@ -62,7 +62,7 @@ class GeminiProvider(BaseLLMProvider):
     def _get_candidate_models(self) -> List[str]:
         """Return prioritized list of verified fast models for minimum latency and resilience."""
         candidates = [self._api_model]
-        for fallback in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"):
+        for fallback in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"):
             if fallback not in candidates:
                 candidates.append(fallback)
         return candidates
@@ -133,7 +133,7 @@ class GeminiProvider(BaseLLMProvider):
         candidates = self._get_candidate_models()
         for idx, candidate in enumerate(candidates):
             has_fallback = idx < len(candidates) - 1
-            candidate_timeout = min(self.timeout_seconds, 4.0) if has_fallback else self.timeout_seconds
+            candidate_timeout = min(self.timeout_seconds, 15.0) if has_fallback else self.timeout_seconds
             try:
                 response = await asyncio.wait_for(
                     self._client.aio.models.generate_content(
@@ -198,7 +198,7 @@ class GeminiProvider(BaseLLMProvider):
         candidates = self._get_candidate_models()
         for idx, candidate in enumerate(candidates):
             has_fallback = idx < len(candidates) - 1
-            first_token_timeout = 8.0 if has_fallback else min(self.timeout_seconds, 15.0)
+            first_token_timeout = 20.0 if has_fallback else min(self.timeout_seconds, 30.0)
             try:
                 stream = await self._client.aio.models.generate_content_stream(
                     model=candidate,

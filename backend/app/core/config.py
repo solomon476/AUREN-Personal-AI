@@ -144,7 +144,7 @@ class Settings(BaseSettings):
 
     # Application settings
     APP_NAME: str = "AUREN Personal AI API"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = "0.1.1"
     ENVIRONMENT: str = Field(default="development", description="development, staging, or production")
     HOST: str = "0.0.0.0"
     PORT: int = 8000
