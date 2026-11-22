@@ -6,6 +6,7 @@ from app.core.config import Settings, settings as default_settings
 from app.services.llm.base import BaseLLMProvider, ChatMessage, LLMProviderError, LLMResponse
 from app.services.llm.gemini import GeminiProvider
 from app.services.llm.groq import GroqProvider
+from app.services.llm.openai import OpenAIProvider
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,14 @@ SUPPORTED_GROQ_MODELS = {
 }
 
 
+SUPPORTED_OPENAI_MODELS = {
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4-turbo",
+    "gpt-3.5-turbo",
+}
+
+
 def get_llm_provider(
     settings: Settings = default_settings,
     model_id: Optional[str] = None,
@@ -78,7 +87,22 @@ def get_llm_provider(
     if active_model == "mock" or provider_name == "mock":
         return MockLLMProvider(model_id=active_model)
 
-    if provider_name == "gemini":
+    # Smart auto-detection based on model prefix if provider not explicitly overridden
+    if active_model.startswith("gpt-") or provider_name == "openai":
+        return OpenAIProvider(
+            api_key=settings.LLM_API_KEY,
+            model_id=active_model if active_model in SUPPORTED_OPENAI_MODELS else "gpt-4o-mini",
+            timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
+        )
+
+    if active_model.startswith("llama-") or active_model.startswith("mixtral-") or provider_name == "groq":
+        return GroqProvider(
+            api_key=settings.LLM_API_KEY,
+            model_id=active_model if active_model in SUPPORTED_GROQ_MODELS else "llama-3.3-70b-versatile",
+            timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
+        )
+
+    if provider_name == "gemini" or active_model.startswith("gemini-"):
         if active_model not in SUPPORTED_GEMINI_MODELS:
             raise LLMProviderError(
                 f"Model '{active_model}' is not supported by the Gemini provider. "
@@ -95,10 +119,16 @@ def get_llm_provider(
             model_id=active_model if active_model in SUPPORTED_GROQ_MODELS else "llama-3.3-70b-versatile",
             timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
         )
+    elif provider_name == "openai":
+        return OpenAIProvider(
+            api_key=settings.LLM_API_KEY,
+            model_id=active_model if active_model in SUPPORTED_OPENAI_MODELS else "gpt-4o-mini",
+            timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
+        )
     elif provider_name == "mock":
         return MockLLMProvider(model_id=active_model)
     else:
         raise LLMProviderError(
-            f"Unsupported LLM provider '{provider_name}'. Supported providers: 'gemini', 'groq', 'mock'."
+            f"Unsupported LLM provider '{provider_name}'. Supported providers: 'gemini', 'groq', 'openai', 'mock'."
         )
 

@@ -152,14 +152,16 @@ describe('SettingsView Integration', () => {
     const aiTabButton = screen.getByRole('button', { name: /ai model/i });
     await userEvent.click(aiTabButton);
 
-    // Verify operational Gemini options exist
+    // Verify operational Gemini, Groq, and OpenAI options exist
     expect(screen.getByRole('option', { name: /google gemini 2.5 flash/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /google gemini 2.5 pro/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /google gemini 2.0 flash/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /groq llama 3.3 70b/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /openai gpt-4o-mini/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /^openai gpt-4o \(/i })).toBeInTheDocument();
 
-    // Verify removed/false claim models do NOT exist
+    // Verify unintegrated models do NOT exist
     expect(screen.queryByRole('option', { name: /anthropic claude/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /openai gpt-4o/i })).not.toBeInTheDocument();
   });
 
   it('configures memory extraction policies and displays honest cryptographic isolation claims', async () => {
