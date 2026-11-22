@@ -163,3 +163,4 @@ class OpenAIProvider(BaseLLMProvider):
                     if not has_fallback:
                         raise LLMProviderError(f"OpenAI streaming failed: {exc}")
                     continue
+

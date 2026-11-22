@@ -164,6 +164,8 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "gemini"
     LLM_API_KEY: Optional[str] = None
     LLM_MODEL: str = "gemini-2.0-flash"
+    GROQ_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
 
     # Replaceable Embedding Provider Configuration
     EMBEDDING_PROVIDER: str = "gemini"
@@ -186,6 +188,7 @@ class Settings(BaseSettings):
 
     # Memory Extraction Background Worker Configuration
     WORKER_DATABASE_URL: Optional[str] = None
+    DATABASE_URL: Optional[str] = None
     MEMORY_WORKER_ENABLED: bool = True
     MEMORY_WORKER_POLL_INTERVAL_SECONDS: float = 2.0
     MEMORY_WORKER_BATCH_SIZE: int = 5

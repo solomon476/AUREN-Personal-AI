@@ -4,6 +4,7 @@ import logging
 from typing import AsyncIterator, List, Optional
 from app.core.config import Settings, settings as default_settings
 from app.services.llm.base import BaseLLMProvider, ChatMessage, LLMProviderError, LLMResponse
+from app.services.llm.fallback import FallbackLLMProvider
 from app.services.llm.gemini import GeminiProvider
 from app.services.llm.groq import GroqProvider
 from app.services.llm.openai import OpenAIProvider
@@ -80,55 +81,67 @@ def get_llm_provider(
     """Return an initialized LLM provider instance matching the active configuration.
 
     If model_id is specified, validates model compatibility with the configured provider.
+    Automatically wraps with FallbackLLMProvider if secondary provider API keys are present,
+    providing seamless high-availability failover across providers.
     """
     provider_name = settings.LLM_PROVIDER.lower().strip()
     active_model = model_id.strip() if model_id and str(model_id).strip() else settings.LLM_MODEL
+    timeout_sec = float(settings.CHAT_STREAM_TIMEOUT_SECONDS)
 
     if active_model == "mock" or provider_name == "mock":
         return MockLLMProvider(model_id=active_model)
 
-    # Smart auto-detection based on model prefix if provider not explicitly overridden
+    primary: BaseLLMProvider
+    fallbacks: List[BaseLLMProvider] = []
+
+    # Determine primary provider based on model prefix or explicit setting
     if active_model.startswith("gpt-") or provider_name == "openai":
-        return OpenAIProvider(
-            api_key=settings.LLM_API_KEY,
+        primary = OpenAIProvider(
+            api_key=settings.OPENAI_API_KEY or settings.LLM_API_KEY,
             model_id=active_model if active_model in SUPPORTED_OPENAI_MODELS else "gpt-4o-mini",
-            timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
+            timeout_seconds=timeout_sec,
         )
+        if settings.GROQ_API_KEY:
+            fallbacks.append(GroqProvider(api_key=settings.GROQ_API_KEY, model_id="llama-3.3-70b-versatile", timeout_seconds=timeout_sec))
+        if settings.LLM_API_KEY and not settings.LLM_API_KEY.startswith("sk-") and not settings.LLM_API_KEY.startswith("gsk_"):
+            fallbacks.append(GeminiProvider(api_key=settings.LLM_API_KEY, model_id="gemini-2.5-flash", timeout_seconds=timeout_sec))
 
-    if active_model.startswith("llama-") or active_model.startswith("mixtral-") or provider_name == "groq":
-        return GroqProvider(
-            api_key=settings.LLM_API_KEY,
+    elif active_model.startswith("llama-") or active_model.startswith("mixtral-") or provider_name == "groq":
+        primary = GroqProvider(
+            api_key=settings.GROQ_API_KEY or settings.LLM_API_KEY,
             model_id=active_model if active_model in SUPPORTED_GROQ_MODELS else "llama-3.3-70b-versatile",
-            timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
+            timeout_seconds=timeout_sec,
         )
+        if settings.LLM_API_KEY and not settings.LLM_API_KEY.startswith("gsk_") and not settings.LLM_API_KEY.startswith("sk-"):
+            fallbacks.append(GeminiProvider(api_key=settings.LLM_API_KEY, model_id="gemini-2.5-flash", timeout_seconds=timeout_sec))
+        if settings.OPENAI_API_KEY:
+            fallbacks.append(OpenAIProvider(api_key=settings.OPENAI_API_KEY, model_id="gpt-4o-mini", timeout_seconds=timeout_sec))
 
-    if provider_name == "gemini" or active_model.startswith("gemini-"):
+    elif provider_name == "gemini" or active_model.startswith("gemini-"):
         if active_model not in SUPPORTED_GEMINI_MODELS:
             raise LLMProviderError(
                 f"Model '{active_model}' is not supported by the Gemini provider. "
                 f"Supported operational models: {', '.join(sorted(SUPPORTED_GEMINI_MODELS))}."
             )
-        return GeminiProvider(
+        primary = GeminiProvider(
             api_key=settings.LLM_API_KEY,
             model_id=active_model,
-            timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
+            timeout_seconds=timeout_sec,
         )
-    elif provider_name == "groq":
-        return GroqProvider(
-            api_key=settings.LLM_API_KEY,
-            model_id=active_model if active_model in SUPPORTED_GROQ_MODELS else "llama-3.3-70b-versatile",
-            timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
-        )
-    elif provider_name == "openai":
-        return OpenAIProvider(
-            api_key=settings.LLM_API_KEY,
-            model_id=active_model if active_model in SUPPORTED_OPENAI_MODELS else "gpt-4o-mini",
-            timeout_seconds=float(settings.CHAT_STREAM_TIMEOUT_SECONDS),
-        )
-    elif provider_name == "mock":
-        return MockLLMProvider(model_id=active_model)
+        # Automatic cross-provider fallback to Groq and/or OpenAI when available
+        if settings.GROQ_API_KEY or (settings.LLM_API_KEY and settings.LLM_API_KEY.startswith("gsk_")):
+            groq_key = settings.GROQ_API_KEY or settings.LLM_API_KEY
+            fallbacks.append(GroqProvider(api_key=groq_key, model_id="llama-3.3-70b-versatile", timeout_seconds=timeout_sec))
+        if settings.OPENAI_API_KEY or (settings.LLM_API_KEY and settings.LLM_API_KEY.startswith("sk-")):
+            openai_key = settings.OPENAI_API_KEY or settings.LLM_API_KEY
+            fallbacks.append(OpenAIProvider(api_key=openai_key, model_id="gpt-4o-mini", timeout_seconds=timeout_sec))
+
     else:
         raise LLMProviderError(
             f"Unsupported LLM provider '{provider_name}'. Supported providers: 'gemini', 'groq', 'openai', 'mock'."
         )
+
+    if fallbacks:
+        return FallbackLLMProvider(primary=primary, fallbacks=fallbacks)
+    return primary
 

@@ -33,3 +33,4 @@ async def test_openai_provider_missing_key_raises_auth_error():
     with pytest.raises(LLMAuthenticationError):
         async for _ in provider.stream_response([]):
             pass
+

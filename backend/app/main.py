@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
     # In-process background memory extraction worker
     worker_runner = None
     worker_task = None
-    worker_db_url = settings.WORKER_DATABASE_URL or settings.DATABASE_URL
+    worker_db_url = getattr(settings, "WORKER_DATABASE_URL", None) or getattr(settings, "DATABASE_URL", None)
     if settings.MEMORY_WORKER_ENABLED and worker_db_url:
         try:
             from app.services.memory.runner import WorkerRunner
