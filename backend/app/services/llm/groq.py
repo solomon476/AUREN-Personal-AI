@@ -171,3 +171,4 @@ class GroqProvider(BaseLLMProvider):
                 if not has_fallback:
                     raise LLMProviderError(f"Groq streaming failed: {exc}")
                 continue
+

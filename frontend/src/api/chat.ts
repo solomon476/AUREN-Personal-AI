@@ -91,6 +91,20 @@ export async function streamChat(
     }
   }
 
+  // Enforce an 18s initial connection and token timeout to prevent indefinite hangs
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    timeoutController.abort();
+  }, 18000);
+
+  if (signal) {
+    if (signal.aborted) {
+      timeoutController.abort();
+    } else {
+      signal.addEventListener('abort', () => timeoutController.abort(), { once: true });
+    }
+  }
+
   let response: Response;
   try {
     response = await fetch(url, {
@@ -105,11 +119,17 @@ export async function streamChat(
           ? attachments.filter((a) => a.type === 'image' && a.url).map((a) => a.url)
           : undefined,
       }),
-      signal,
+      signal: timeoutController.signal,
     });
   } catch (err: any) {
+    clearTimeout(timeoutId);
     if (signal?.aborted) {
       throw err;
+    }
+    if (timeoutController.signal.aborted) {
+      const timeoutMsg = 'AI connection timed out after 18s waiting for model response. Please try again.';
+      callbacks?.onError?.(timeoutMsg);
+      throw new Error(timeoutMsg);
     }
     const isNetworkError =
       err instanceof TypeError &&
@@ -144,6 +164,7 @@ export async function streamChat(
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
 
+  clearTimeout(timeoutId);
   try {
     while (true) {
       const { done, value } = await reader.read();

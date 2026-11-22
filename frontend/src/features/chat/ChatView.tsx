@@ -474,9 +474,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   };
 
   /**
-   * Resilient SSE streaming with bounded exponential backoff reconnection.
+   * Resilient SSE streaming with fast failover and single bounded reconnect.
    */
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES = 1;
   const executeChatStream = async (
     messageText: string,
     targetConversationId: string | undefined,
@@ -552,7 +552,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
         errMsg.includes('Failed to reach backend API') ||
         errMsg.includes('Unable to connect') ||
         errMsg.includes('AI service is unavailable') ||
-        errMsg.includes('unsupported_model_configuration');
+        errMsg.includes('unsupported_model_configuration') ||
+        errMsg.toLowerCase().includes('timeout') ||
+        errMsg.toLowerCase().includes('timed out') ||
+        errMsg.toLowerCase().includes('deadline') ||
+        errMsg.toLowerCase().includes('exceeded') ||
+        errMsg.toLowerCase().includes('longer than');
 
       if (!isNonRetryable && attempt < MAX_RETRIES) {
         const nextAttempt = attempt + 1;
