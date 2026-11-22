@@ -13,6 +13,7 @@ interface TaskModalProps {
   onSubmit: (data: TaskCreateInput | TaskUpdateInput) => Promise<void>;
   initialTask?: Task | null;
   defaultProjectId?: string | null;
+  initialDueDate?: string | null;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -21,6 +22,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   onSubmit,
   initialTask,
   defaultProjectId,
+  initialDueDate,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -53,11 +55,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setPriority('medium');
       setProjectId(defaultProjectId || '');
       setGoalId('');
-      setDueDate('');
+      setDueDate(initialDueDate ? initialDueDate.slice(0, 16) : '');
       setTagsInput('');
     }
     setError(null);
-  }, [initialTask, defaultProjectId, isOpen]);
+  }, [initialTask, defaultProjectId, initialDueDate, isOpen]);
 
   if (!isOpen) return null;
 

@@ -247,6 +247,35 @@ describe('Productivity Core: Tasks View', () => {
 
     expect(productivityApi.changeTaskStatus).toHaveBeenCalledWith('task-1', 'completed');
   });
+
+  it('switches between List View and Timetable View and displays schedule slots', async () => {
+    const user = userEvent.setup();
+    const qc = createTestQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <TasksView />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByRole('button', { name: /timetable/i })).toBeInTheDocument();
+    const timetableBtn = screen.getByRole('button', { name: /timetable/i });
+    await user.click(timetableBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/academic & daily schedule/i)).toBeInTheDocument();
+      expect(screen.getByText('Morning')).toBeInTheDocument();
+      expect(screen.getByText('Afternoon')).toBeInTheDocument();
+      expect(screen.getByText(/evening & night/i)).toBeInTheDocument();
+    });
+
+    const listBtn = screen.getByRole('button', { name: /list view/i });
+    await user.click(listBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('All Tasks')).toBeInTheDocument();
+      expect(screen.getByText('Review pull request #42')).toBeInTheDocument();
+    });
+  });
 });
 
 describe('Productivity Core: Projects View', () => {
