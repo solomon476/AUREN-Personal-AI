@@ -26,7 +26,7 @@ class GroqProvider(BaseLLMProvider):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_id: str = "llama-3.3-70b-versatile",
+        model_id: str = "openai/gpt-oss-120b",
         timeout_seconds: float = 30.0,
     ):
         self.api_key = api_key
@@ -38,7 +38,7 @@ class GroqProvider(BaseLLMProvider):
 
     def _get_candidate_models(self) -> List[str]:
         candidates = [self.model_id]
-        for fallback in ("llama-3.3-70b-versatile", "llama-3.1-8b-instant"):
+        for fallback in ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b", "llama-3.3-70b-versatile"):
             if fallback not in candidates:
                 candidates.append(fallback)
         return candidates

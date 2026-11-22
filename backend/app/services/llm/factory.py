@@ -105,18 +105,18 @@ def get_llm_provider(
             timeout_seconds=timeout_sec,
         )
         if settings.GROQ_API_KEY:
-            fallbacks.append(GroqProvider(api_key=settings.GROQ_API_KEY, model_id="llama-3.3-70b-versatile", timeout_seconds=timeout_sec))
+            fallbacks.append(GroqProvider(api_key=settings.GROQ_API_KEY, model_id="openai/gpt-oss-120b", timeout_seconds=timeout_sec))
         if settings.LLM_API_KEY and not settings.LLM_API_KEY.startswith("sk-") and not settings.LLM_API_KEY.startswith("gsk_"):
-            fallbacks.append(GeminiProvider(api_key=settings.LLM_API_KEY, model_id="gemini-2.5-flash", timeout_seconds=timeout_sec))
+            fallbacks.append(GeminiProvider(api_key=settings.LLM_API_KEY, model_id="gemini-3.5-flash", timeout_seconds=timeout_sec))
 
-    elif active_model.startswith("llama-") or active_model.startswith("mixtral-") or provider_name == "groq":
+    elif active_model.startswith("openai/gpt-oss") or active_model.startswith("qwen/") or active_model.startswith("llama-") or active_model.startswith("mixtral-") or provider_name == "groq":
         primary = GroqProvider(
             api_key=settings.GROQ_API_KEY or settings.LLM_API_KEY,
-            model_id=active_model if active_model in SUPPORTED_GROQ_MODELS else "llama-3.3-70b-versatile",
+            model_id=active_model if active_model in SUPPORTED_GROQ_MODELS else "openai/gpt-oss-120b",
             timeout_seconds=timeout_sec,
         )
         if settings.LLM_API_KEY and not settings.LLM_API_KEY.startswith("gsk_") and not settings.LLM_API_KEY.startswith("sk-"):
-            fallbacks.append(GeminiProvider(api_key=settings.LLM_API_KEY, model_id="gemini-2.5-flash", timeout_seconds=timeout_sec))
+            fallbacks.append(GeminiProvider(api_key=settings.LLM_API_KEY, model_id="gemini-3.5-flash", timeout_seconds=timeout_sec))
         if settings.OPENAI_API_KEY:
             fallbacks.append(OpenAIProvider(api_key=settings.OPENAI_API_KEY, model_id="gpt-4o-mini", timeout_seconds=timeout_sec))
 
@@ -134,7 +134,7 @@ def get_llm_provider(
         # Automatic cross-provider fallback to Groq and/or OpenAI when available
         if settings.GROQ_API_KEY or (settings.LLM_API_KEY and settings.LLM_API_KEY.startswith("gsk_")):
             groq_key = settings.GROQ_API_KEY or settings.LLM_API_KEY
-            fallbacks.append(GroqProvider(api_key=groq_key, model_id="llama-3.3-70b-versatile", timeout_seconds=timeout_sec))
+            fallbacks.append(GroqProvider(api_key=groq_key, model_id="openai/gpt-oss-120b", timeout_seconds=timeout_sec))
         if settings.OPENAI_API_KEY or (settings.LLM_API_KEY and settings.LLM_API_KEY.startswith("sk-")):
             openai_key = settings.OPENAI_API_KEY or settings.LLM_API_KEY
             fallbacks.append(OpenAIProvider(api_key=openai_key, model_id="gpt-4o-mini", timeout_seconds=timeout_sec))

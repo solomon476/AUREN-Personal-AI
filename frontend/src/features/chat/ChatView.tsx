@@ -86,7 +86,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   }, [initialPrompt]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
-  const [thinkingSeconds, setThinkingSeconds] = useState(0);
   const [reconnectStatus, setReconnectStatus] = useState<string | null>(null);
 
   // Keep-warm ping to eliminate Railway cold starts while app is open
@@ -98,21 +97,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
     const pingInterval = setInterval(pingBackend, 4 * 60 * 1000);
     return () => clearInterval(pingInterval);
   }, []);
-
-  // Track elapsed thinking time to inform user of pipeline progress
-  useEffect(() => {
-    let timer: any = null;
-    if (isStreaming && !streamingContent) {
-      timer = setInterval(() => {
-        setThinkingSeconds((prev) => prev + 1);
-      }, 1000);
-    } else {
-      setThinkingSeconds(0);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [isStreaming, streamingContent]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingRetry, setPendingRetry] = useState<{
     message: string;
@@ -1030,7 +1014,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                         <span className="inline-flex items-center space-x-2 text-slate-600 text-xs font-medium">
                           <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
                           <span className="font-semibold text-emerald-700">AUREN is thinking...</span>
-                          <span className="text-[10px] text-slate-400 font-mono">({thinkingSeconds}s)</span>
                         </span>
                       </div>
                     )}
