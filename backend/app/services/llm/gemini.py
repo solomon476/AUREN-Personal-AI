@@ -17,21 +17,6 @@ from app.services.llm.base import (
 
 logger = logging.getLogger(__name__)
 
-# Connection-pooled singleton client cache across requests to eliminate TLS handshake latency
-_genai_client_cache: dict[str, Any] = {}
-
-
-def _get_or_create_genai_client(api_key: str):
-    """Retrieve existing cached genai.Client or initialize new one with connection pooling."""
-    if api_key not in _genai_client_cache:
-        try:
-            from google import genai
-            _genai_client_cache[api_key] = genai.Client(api_key=api_key)
-        except Exception as exc:
-            logger.warning("Could not initialize google-genai Client: %s", exc)
-            return None
-    return _genai_client_cache[api_key]
-
 
 class GeminiProvider(BaseLLMProvider):
     """Adapter for Google Gemini models via google-genai SDK."""
@@ -62,7 +47,14 @@ class GeminiProvider(BaseLLMProvider):
         self._api_model = api_model
 
         self.timeout_seconds = timeout_seconds
-        self._client = _get_or_create_genai_client(self.api_key) if self.api_key else None
+        self._client = None
+        if self.api_key:
+            try:
+                from google import genai
+                self._client = genai.Client(api_key=self.api_key)
+            except Exception as exc:
+                logger.warning("Could not initialize google-genai Client: %s", exc)
+                self._client = None
 
     def get_model_id(self) -> str:
         return self.model_id

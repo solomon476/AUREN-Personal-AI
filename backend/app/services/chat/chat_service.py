@@ -773,6 +773,14 @@ class ChatService:
             safe_error = {"detail": f"Request timed out after {settings.CHAT_STREAM_TIMEOUT_SECONDS} seconds."}
             yield f"event: error\ndata: {json.dumps(safe_error)}\n\n"
 
+        except (LLMProviderError, LLMException) as err:
+            logger.warning("LLM Provider Error: %s", err)
+            terminal_state = "failed"
+            if request.idempotency_key:
+                await repo.update_chat_request_status(user.id, request.idempotency_key, status="failed")
+            safe_error = {"detail": "The AI service encountered a temporary error. Please try again."}
+            yield f"event: error\ndata: {json.dumps(safe_error)}\n\n"
+
         except Exception as exc:
             logger.exception("Internal error during chat stream: %s", exc)
             terminal_state = "failed"
