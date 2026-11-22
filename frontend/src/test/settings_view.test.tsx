@@ -155,7 +155,7 @@ describe('SettingsView Integration', () => {
     // Verify operational Gemini, Groq, and OpenAI options exist
     expect(screen.getByRole('option', { name: /google gemini 2.5 flash/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /google gemini 2.5 pro/i })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /google gemini 2.0 flash/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /google gemini 3.1 flash lite/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /groq llama 3.3 70b/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /openai gpt-4o-mini/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /^openai gpt-4o \(/i })).toBeInTheDocument();
