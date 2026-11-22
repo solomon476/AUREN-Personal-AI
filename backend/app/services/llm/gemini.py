@@ -30,20 +30,26 @@ class GeminiProvider(BaseLLMProvider):
         self.api_key = api_key
         self.model_id = model_id
 
-        # Gracefully remap deprecated, experimental, or alias models when invoking Google API
+        # Gracefully remap simulated or deprecated alias models to real production Google endpoints
         api_model = model_id
-        FLASH_ALIASES = {
-            "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
-            "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-2.5-flash",
-            "gemini-2.0-flash", "models/gemini-2.5-flash", "models/gemini-2.0-flash",
+        FLASH_REMAPS = {
+            "gemini-3.8-flash": "gemini-2.5-flash",
+            "gemini-3.5-flash": "gemini-2.5-flash",
+            "gemini-3.5-flash-lite": "gemini-2.5-flash",
+            "gemini-3.1-flash-lite": "gemini-2.5-flash",
+            "gemini-flash-latest": "gemini-2.5-flash",
+            "models/gemini-2.5-flash": "gemini-2.5-flash",
+            "models/gemini-2.0-flash": "gemini-2.0-flash",
+            "models/gemini-1.5-flash": "gemini-1.5-flash",
         }
-        PRO_ALIASES = {
-            "gemini-3.8-pro", "gemini-2.5-pro", "models/gemini-2.5-pro",
+        PRO_REMAPS = {
+            "gemini-3.8-pro": "gemini-2.5-pro",
+            "models/gemini-2.5-pro": "gemini-2.5-pro",
         }
-        if api_model in FLASH_ALIASES:
-            api_model = "gemini-2.0-flash"
-        elif api_model in PRO_ALIASES:
-            api_model = "gemini-2.5-pro"
+        if api_model in FLASH_REMAPS:
+            api_model = FLASH_REMAPS[api_model]
+        elif api_model in PRO_REMAPS:
+            api_model = PRO_REMAPS[api_model]
         self._api_model = api_model
 
         self.timeout_seconds = timeout_seconds
@@ -158,6 +164,10 @@ class GeminiProvider(BaseLLMProvider):
                 error_str = str(exc)
                 if "API_KEY_INVALID" in error_str or "401" in error_str or "403" in error_str:
                     raise LLMAuthenticationError(f"Gemini authentication failed: {error_str}")
+                if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
+                    logger.warning("Gemini 429 rate limit on %s; pausing 2s before fallback...", candidate)
+                    if has_fallback:
+                        await asyncio.sleep(2.0)
                 logger.warning("Gemini generation error on model %s: %s (trying fallback)", candidate, error_str)
                 last_error = exc
                 continue
@@ -230,6 +240,10 @@ class GeminiProvider(BaseLLMProvider):
                 error_str = str(exc)
                 if "API_KEY_INVALID" in error_str or "401" in error_str or "403" in error_str:
                     raise LLMAuthenticationError(f"Gemini authentication failed: {error_str}")
+                if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
+                    logger.warning("Gemini 429 rate limit on %s; pausing 2s before fallback...", candidate)
+                    if has_fallback:
+                        await asyncio.sleep(2.0)
                 logger.warning("Gemini streaming failed on model %s: %s (trying fallback)", candidate, error_str)
                 last_error = exc
                 continue
