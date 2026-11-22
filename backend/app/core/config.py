@@ -173,8 +173,8 @@ class Settings(BaseSettings):
     # Chat & Stream Configuration
     CHAT_REPOSITORY_TYPE: str = Field(default="auto", description="'auto', 'supabase', or 'sqlite'")
     CHAT_MAX_MESSAGE_LENGTH: int = 10000
-    CHAT_STREAM_TIMEOUT_SECONDS: int = 25
-    CHAT_STREAM_HEARTBEAT_SECONDS: float = 10.0
+    CHAT_STREAM_TIMEOUT_SECONDS: int = 60
+    CHAT_STREAM_HEARTBEAT_SECONDS: float = 15.0
     CHAT_HISTORY_LIMIT: int = 40
 
     # Persistent Memory Pipeline & Hybrid Retrieval Configuration

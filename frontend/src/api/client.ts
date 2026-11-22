@@ -44,22 +44,13 @@ async function request<T>(
     }
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
-  const signal = options.signal || controller.signal;
-
   let response: Response;
   try {
     response = await fetch(url, {
       ...options,
       headers,
-      signal,
     });
   } catch (err: any) {
-    clearTimeout(timeoutId);
-    if (signal.aborted) {
-      throw new ApiError(408, `Request timed out after 12s connecting to ${endpoint}`);
-    }
     const isNetworkError =
       err instanceof TypeError &&
       (err.message.includes('fetch') || err.message.includes('NetworkError'));
@@ -67,8 +58,6 @@ async function request<T>(
       ? `Unable to connect to AUREN backend API at ${API_BASE_URL}. Ensure the service is active and reachable.`
       : err?.message || 'Network request failed';
     throw new ApiError(0, friendlyMsg);
-  } finally {
-    clearTimeout(timeoutId);
   }
 
   if (!response.ok) {

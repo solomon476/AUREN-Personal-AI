@@ -40,7 +40,7 @@ class GeminiProvider(BaseLLMProvider):
         self,
         api_key: Optional[str] = None,
         model_id: str = "gemini-2.0-flash",
-        timeout_seconds: float = 25.0,
+        timeout_seconds: float = 60.0,
     ):
         self.api_key = api_key
         self.model_id = model_id
@@ -206,7 +206,7 @@ class GeminiProvider(BaseLLMProvider):
         candidates = self._get_candidate_models()
         for idx, candidate in enumerate(candidates):
             has_fallback = idx < len(candidates) - 1
-            first_token_timeout = 2.5 if has_fallback else min(self.timeout_seconds, 6.0)
+            first_token_timeout = 8.0 if has_fallback else min(self.timeout_seconds, 15.0)
             try:
                 stream = await self._client.aio.models.generate_content_stream(
                     model=candidate,
