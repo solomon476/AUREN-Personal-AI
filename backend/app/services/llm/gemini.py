@@ -54,7 +54,7 @@ class GeminiProvider(BaseLLMProvider):
     def _get_candidate_models(self) -> List[str]:
         """Return prioritized list of verified fast models for minimum latency and resilience."""
         candidates = [self._api_model]
-        for fallback in ("gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-3.8-flash"):
+        for fallback in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"):
             if fallback not in candidates:
                 candidates.append(fallback)
         return candidates

@@ -314,9 +314,9 @@ export const SettingsView: React.FC = () => {
                       onChange={(e) => setAiModel(e.target.value)}
                       className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-champagne-500/50 transition"
                     >
-                      <option value="openai/gpt-oss-120b">Groq GPT-OSS 120B (&lt;300ms Sub-Second — Recommended)</option>
+                      <option value="gemini-3.1-flash-lite">Google Gemini 3.1 Flash Lite (Academic Research &amp; Schoolwork — Recommended)</option>
+                      <option value="openai/gpt-oss-120b">Groq GPT-OSS 120B (&lt;300ms Sub-Second Inference)</option>
                       <option value="gemini-2.5-flash">Google Gemini 2.5 Flash (Fast High Throughput)</option>
-                      <option value="gemini-3.1-flash-lite">Google Gemini 3.1 Flash Lite (Ultra Lightweight)</option>
                       <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B (Versatile Fast Inference)</option>
                       <option value="gpt-4o-mini">OpenAI GPT-4o-mini (High Precision &amp; Generous Rate Limits)</option>
                       <option value="gpt-4o">OpenAI GPT-4o (Frontier Multimodal Reasoning)</option>

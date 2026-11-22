@@ -11,7 +11,7 @@
  * - OFFLINE RESILIENT: Delivers app shell for navigation requests when offline.
  */
 
-const CACHE_NAME = 'auren-shell-v11';
+const CACHE_NAME = 'auren-shell-v12';
 
 const STATIC_PRECACHE = [
   '/',
