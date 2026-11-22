@@ -32,24 +32,10 @@ class GeminiProvider(BaseLLMProvider):
 
         # Gracefully remap simulated or deprecated alias models to real production Google endpoints
         api_model = model_id
-        FLASH_REMAPS = {
-            "gemini-3.8-flash": "gemini-2.5-flash",
-            "gemini-3.5-flash": "gemini-2.5-flash",
-            "gemini-3.5-flash-lite": "gemini-2.5-flash",
-            "gemini-3.1-flash-lite": "gemini-2.5-flash",
-            "gemini-flash-latest": "gemini-2.5-flash",
-            "models/gemini-2.5-flash": "gemini-2.5-flash",
-            "models/gemini-2.0-flash": "gemini-2.0-flash",
-            "models/gemini-1.5-flash": "gemini-1.5-flash",
-        }
-        PRO_REMAPS = {
-            "gemini-3.8-pro": "gemini-2.5-pro",
-            "models/gemini-2.5-pro": "gemini-2.5-pro",
-        }
-        if api_model in FLASH_REMAPS:
-            api_model = FLASH_REMAPS[api_model]
-        elif api_model in PRO_REMAPS:
-            api_model = PRO_REMAPS[api_model]
+        # Normalize model string; preserve modern 3.x models recommended by Google
+        api_model = model_id.strip()
+        if api_model.startswith("models/"):
+            api_model = api_model[len("models/"):]
         self._api_model = api_model
 
         self.timeout_seconds = timeout_seconds
@@ -68,7 +54,7 @@ class GeminiProvider(BaseLLMProvider):
     def _get_candidate_models(self) -> List[str]:
         """Return prioritized list of verified fast models for minimum latency and resilience."""
         candidates = [self._api_model]
-        for fallback in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"):
+        for fallback in ("gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"):
             if fallback not in candidates:
                 candidates.append(fallback)
         return candidates
