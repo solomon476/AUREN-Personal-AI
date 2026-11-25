@@ -339,7 +339,26 @@ async def main_async():
 
     runner = WorkerRunner(database_url=worker_db_url, settings=default_settings)
     setup_signal_handlers(runner)
-    await runner.run()
+
+    tasks_to_run = [runner.run()]
+    rem_scheduler = None
+    rem_pool = None
+    if getattr(default_settings, "REMINDER_SCHEDULER_ENABLED", True):
+        try:
+            from app.services.reminders.scheduler import ReminderScheduler
+            rem_pool = await asyncpg.create_pool(dsn=worker_db_url, min_size=1, max_size=3)
+            rem_scheduler = ReminderScheduler(db_pool=rem_pool, settings=default_settings)
+            tasks_to_run.append(rem_scheduler.run())
+        except Exception as exc:
+            logger.warning("ReminderScheduler startup skipped in worker process: %s", exc)
+
+    try:
+        await asyncio.gather(*tasks_to_run)
+    finally:
+        if rem_scheduler:
+            rem_scheduler.stop()
+        if rem_pool is not None:
+            await rem_pool.close()
 
 
 def main():

@@ -39,6 +39,7 @@ export interface ChatMessage {
 export interface ChatStreamCallbacks {
   onMetadata?: (meta: { conversation_id: string; user_message_id: string; title: string }) => void;
   onToken?: (token: string) => void;
+  onReminderAction?: (ev: { action: string; reminder: any; summary?: string }) => void;
   onDone?: (done: { message_id: string; finish_reason?: string; model?: string }) => void;
   onError?: (error: string) => void;
 }
@@ -92,6 +93,13 @@ export async function streamChat(
   }
 
   let response: Response;
+  let clientTimezone: string | undefined;
+  try {
+    clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    clientTimezone = undefined;
+  }
+
   try {
     response = await fetch(url, {
       method: 'POST',
@@ -100,6 +108,7 @@ export async function streamChat(
         message: message || '',
         conversation_id: conversationId || null,
         idempotency_key: resolvedIdempotencyKey,
+        timezone: clientTimezone,
         attachments: attachments && attachments.length > 0 ? attachments : undefined,
         images: attachments
           ? attachments.filter((a) => a.type === 'image' && a.url).map((a) => a.url)
@@ -179,6 +188,8 @@ export async function streamChat(
           callbacks?.onMetadata?.(parsed);
         } else if (currentEvent === 'token') {
           callbacks?.onToken?.(parsed?.text ?? currentData);
+        } else if (currentEvent === 'reminder_action' && parsed) {
+          callbacks?.onReminderAction?.(parsed);
         } else if (currentEvent === 'done' && parsed) {
           callbacks?.onDone?.(parsed);
         } else if (currentEvent === 'error') {

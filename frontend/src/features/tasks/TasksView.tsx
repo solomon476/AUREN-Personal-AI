@@ -28,10 +28,12 @@ import {
   Sparkles,
   CalendarDays,
   ListFilter,
+  BellPlus,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeSearch } from '../../hooks/useSafeSearch';
 import { Task, TaskCreateInput, TaskPriority, TaskStatus, TaskUpdateInput } from '../../api/productivity';
+import { ReminderCreateInput } from '../../api/reminders';
 import {
   PRODUCTIVITY_KEYS,
   useChangeTaskStatus,
@@ -41,7 +43,9 @@ import {
   useTasks,
   useUpdateTask,
 } from '../../hooks/useProductivity';
+import { REMINDER_KEYS, useCreateReminder } from '../../hooks/useReminders';
 import { TaskModal } from '../../components/productivity/TaskModal';
+import { ReminderModal } from '../reminders/ReminderModal';
 import { useAuth } from '../../context/AuthContext';
 
 const PRIORITY_BADGES: Record<TaskPriority, { label: string; color: string }> = {
@@ -77,6 +81,8 @@ export const TasksView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [modalInitialDueDate, setModalInitialDueDate] = useState<string | null>(null);
+  const [reminderTaskTarget, setReminderTaskTarget] = useState<Task | null>(null);
+  const createReminderMutation = useCreateReminder(user?.id);
 
   useEffect(() => {
     if (searchParams?.project_id && searchParams.project_id !== selectedProjectId) {
@@ -144,14 +150,16 @@ export const TasksView: React.FC = () => {
     } else {
       await createTaskMutation.mutateAsync(data as TaskCreateInput);
     }
-    // Invalidate dashboard and tasks to ensure full sync
+    // Invalidate dashboard, tasks, and reminders to ensure full sync
     await queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.dashboard(user?.id) });
+    await queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
   };
 
   const handleToggleComplete = async (task: Task) => {
     const nextStatus: TaskStatus = task.status === 'completed' ? 'todo' : 'completed';
     await changeStatusMutation.mutateAsync({ taskId: task.id, newStatus: nextStatus });
     await queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.dashboard(user?.id) });
+    await queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
   };
 
   const handleDelete = async (task: Task) => {
@@ -162,6 +170,7 @@ export const TasksView: React.FC = () => {
     if (window.confirm(message)) {
       await deleteTaskMutation.mutateAsync(task.id);
       await queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.dashboard(user?.id) });
+      await queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
     }
   };
 
@@ -861,6 +870,15 @@ export const TasksView: React.FC = () => {
                       {/* Actions */}
                       <div className="flex items-center space-x-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity ml-2 sm:ml-3 flex-shrink-0">
                         <button
+                          type="button"
+                          onClick={() => setReminderTaskTarget(task)}
+                          className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors touch-target flex items-center justify-center cursor-pointer"
+                          title="Set reminder"
+                          aria-label="Set reminder"
+                        >
+                          <BellPlus className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleOpenEdit(task)}
                           className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors touch-target flex items-center justify-center cursor-pointer"
                           title="Edit task"
@@ -891,6 +909,18 @@ export const TasksView: React.FC = () => {
         onSubmit={handleModalSubmit}
         initialTask={editingTask}
         initialDueDate={modalInitialDueDate}
+      />
+
+      {/* Quick Reminder Creation Modal for a Task */}
+      <ReminderModal
+        isOpen={Boolean(reminderTaskTarget)}
+        onClose={() => setReminderTaskTarget(null)}
+        defaultTaskId={reminderTaskTarget?.id ?? null}
+        onSubmit={async (data) => {
+          await createReminderMutation.mutateAsync(data as ReminderCreateInput);
+          await queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
+          await queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.all });
+        }}
       />
     </div>
   );

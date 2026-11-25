@@ -21,6 +21,7 @@ import {
   MapPin,
   Route,
   Users,
+  Bell,
 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
@@ -45,6 +46,13 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
   if (!isOpen) return null;
 
   const secondaryNavItems = [
+    {
+      to: '/reminders',
+      label: 'Reminders & Alarms',
+      desc: 'Scheduled alerts, alarms & push',
+      icon: Bell,
+      color: 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40',
+    },
     {
       to: '/memories',
       label: 'Long-term Memory',

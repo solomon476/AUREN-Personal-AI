@@ -67,6 +67,14 @@ class TaskBase(BaseModel):
     due_date: Optional[datetime] = None
     start_date: Optional[datetime] = None
     tags: List[str] = Field(default_factory=list)
+    reminder_mode: Optional[str] = Field(
+        default=None,
+        description="Optional reminder policy when creating task: none | at_due | before_due | custom",
+    )
+    reminder_offset_minutes: Optional[int] = Field(default=None, ge=0, le=43200)
+    reminder_at: Optional[datetime] = None
+    reminder_is_alarm: Optional[bool] = False
+    reminder_timezone: Optional[str] = None
 
     @field_validator("title")
     @classmethod
@@ -92,6 +100,11 @@ class TaskUpdate(BaseModel):
     due_date: Optional[datetime] = None
     start_date: Optional[datetime] = None
     tags: Optional[List[str]] = None
+    reminder_mode: Optional[str] = None
+    reminder_offset_minutes: Optional[int] = Field(default=None, ge=0, le=43200)
+    reminder_at: Optional[datetime] = None
+    reminder_is_alarm: Optional[bool] = None
+    reminder_timezone: Optional[str] = None
 
     @field_validator("title")
     @classmethod

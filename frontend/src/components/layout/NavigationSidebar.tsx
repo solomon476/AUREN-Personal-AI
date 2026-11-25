@@ -29,10 +29,12 @@ import {
   MapPin,
   Route,
   ShieldCheck,
+  Bell,
 } from 'lucide-react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
 import { UserProfileMenu } from '../auth/UserProfileMenu';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 interface NavigationSidebarProps {
   onNavigate?: () => void;
@@ -80,6 +82,13 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       to: '/tasks',
       label: 'Tasks & Timetable',
       icon: CheckSquare,
+      badge: null,
+      badgeColor: '',
+    },
+    {
+      to: '/reminders',
+      label: 'Reminders & Alarms',
+      icon: Bell,
       badge: null,
       badgeColor: '',
     },
@@ -228,6 +237,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             <span className="text-[9px] text-slate-500 tracking-wider uppercase font-semibold">Command Center</span>
           </div>
         </Link>
+        <NotificationBell />
       </div>
 
       {/* Navigation Links Scroll Container */}

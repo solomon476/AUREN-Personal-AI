@@ -12,6 +12,29 @@ export interface UserPreferences {
   memory_auto_extraction?: boolean;
   memory_min_confidence?: number;
   notifications_enabled?: boolean;
+  in_app_notifications_enabled?: boolean;
+  browser_push_enabled?: boolean;
+  audible_alerts_enabled?: boolean;
+  reminder_sound?: string;
+  default_reminder_behavior?: string;
+  default_snooze_minutes?: number;
+  quiet_hours_enabled?: boolean;
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
+  quiet_hours_allow_alarms?: boolean;
+  timezone?: string;
+  daily_briefing_enabled?: boolean;
+  daily_briefing_time?: string;
+  evening_review_enabled?: boolean;
+  evening_review_time?: string;
+  notification_priority_default?: string;
+  recurring_auto_advance?: boolean;
+  recurring_missed_policy?: string;
+  task_default_lead_minutes?: number;
+  overdue_task_reminders_enabled?: boolean;
+  auto_reschedule_task_reminders?: boolean;
+  suppress_reminders_on_task_complete?: boolean;
+  hide_sensitive_lockscreen?: boolean;
   [key: string]: unknown;
 }
 

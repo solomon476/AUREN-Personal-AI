@@ -57,6 +57,14 @@ Supported action schemas:
 - `create_project`: {"type": "create_project", "name": string, "description"?: string}
 - `create_goal`: {"type": "create_goal", "title": string, "description"?: string, "target_date"?: string}
 
+When the user asks to create, edit, reschedule, snooze, cancel, or complete a reminder or alarm:
+- Check the `[VERIFIED REMINDER DATABASE RESULT]` or `[REMINDER AMBIGUITY DETECTED]` system note carefully!
+- If `[REMINDER AMBIGUITY DETECTED]` is present, DO NOT claim a reminder was set. Politely ask the user to clarify the ambiguous time/date before scheduling.
+- If `[VERIFIED REMINDER DATABASE RESULT: SUCCEEDED]` is present, confirm accurately using ONLY the exact saved title, scheduled local time, timezone, and recurrence reported there.
+- If `[VERIFIED REMINDER DATABASE RESULT: FAILED]` is present, DO NOT claim the reminder was created or updated. Report the failure honestly.
+- Only if no `[VERIFIED REMINDER DATABASE RESULT]` was already processed by the server AND the time/date is completely unambiguous, you may emit an `auren-action` block with `create_reminder`, which the backend will execute and verify immediately:
+  {"type": "create_reminder", "title": string, "trigger_at": "ISO-8601 UTC or offset", "timezone"?: string, "is_alarm"?: boolean}
+
 When the user states they have completed, finished, or want to mark off a task (e.g. "I'm done with...", "mark X as done/completed"), acknowledge their accomplishment warmly and output an `auren-action` block with type `complete_task` and the task title or task_id so it is marked off in their task tracker.
 Present new task/project creation actions as proposals ready for user confirmation."""
 
@@ -420,6 +428,7 @@ class ChatService:
         # -------------------------------------------------------------------
         user_model = None
         user_instructions = []
+        raw_user_prefs: Dict[str, Any] = {}
 
         # Concurrent retrieval of user profile and conversation message history
         async def _fetch_profile():
@@ -448,6 +457,7 @@ class ChatService:
         else:
             profile = profile_res
             prefs = profile.preferences or {}
+            raw_user_prefs = prefs
             user_model = prefs.get("ai_model")
             tone = prefs.get("ai_tone")
             if tone:
@@ -462,6 +472,11 @@ class ChatService:
             custom_inst = prefs.get("ai_custom_instructions")
             if custom_inst and str(custom_inst).strip():
                 user_instructions.append(f"User custom instructions: {str(custom_inst).strip()}")
+
+        # Resolve user timezone (saved preference takes priority, then client fallback, then UTC)
+        resolved_tz = raw_user_prefs.get("timezone") or getattr(request, "timezone", None) or "UTC"
+        if not raw_user_prefs.get("timezone") and getattr(request, "timezone", None):
+            raw_user_prefs = {**raw_user_prefs, "timezone": resolved_tz}
 
         history = history_res if isinstance(history_res, list) else []
 
@@ -481,13 +496,50 @@ class ChatService:
             yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
             return
 
-        system_content = SYSTEM_PROMPT
+        from app.services.reminders.time_utils import format_local_datetime, resolve_zoneinfo
+        user_tz_obj = resolve_zoneinfo(resolved_tz)
+        now_utc = datetime.now(timezone.utc)
+        local_time_str = format_local_datetime(now_utc, user_tz_obj.key)
+
+        system_content = (
+            f"{SYSTEM_PROMPT}\n\n"
+            f"Current User Local Date/Time: {local_time_str} (Timezone: {user_tz_obj.key}, UTC: {now_utc.isoformat()})"
+        )
         if user_instructions:
             system_content += "\n\nUser Preferences:\n" + "\n".join(f"- {inst}" for inst in user_instructions)
 
         llm_messages: list[ChatMessage] = [
             ChatMessage(role="system", content=system_content)
         ]
+
+        # Execute Conversational Reminder Engine if reminder intent detected
+        from app.models.reminders import NotificationPreferences
+        from app.services.reminders.conversational import ConversationalReminderOutcome, ConversationalReminderService
+        from app.services.reminders.repository import get_reminder_repository
+
+        reminder_outcome = ConversationalReminderOutcome(handled=False)
+        notif_prefs = NotificationPreferences.from_user_prefs(raw_user_prefs)
+        rem_repo = get_reminder_repository(user_token=user_token)
+        try:
+            conv_rem_svc = ConversationalReminderService()
+            reminder_outcome = await conv_rem_svc.handle_user_message(
+                user_id=user.id,
+                message=request.message,
+                repo=rem_repo,
+                prefs=notif_prefs,
+                now_utc=now_utc,
+            )
+            if reminder_outcome.handled and reminder_outcome.system_instruction:
+                llm_messages.append(ChatMessage(role="system", content=reminder_outcome.system_instruction))
+            if reminder_outcome.handled and reminder_outcome.reminder is not None:
+                rem_event = {
+                    "action": reminder_outcome.status,
+                    "reminder": reminder_outcome.reminder.model_dump(mode="json"),
+                    "summary": reminder_outcome.summary_text,
+                }
+                yield f"event: reminder_action\ndata: {json.dumps(rem_event)}\n\n"
+        except Exception as rem_turn_err:
+            logger.warning("Conversational reminder pre-turn error (non-blocking): %s", rem_turn_err)
 
         # Concurrent retrieval of Memory Context and Productivity Context
         is_chitchat = is_trivial_chitchat(request.message)
@@ -709,12 +761,67 @@ class ChatService:
                 full_response = "".join(accumulated_chunks)
                 if not full_response.strip():
                     full_response = "I encountered an issue generating a response. Please try asking again."
+
+                # Post-stream verification: if LLM emitted an unexecuted `create_reminder` action block
+                # (e.g. complex phrasing not matched pre-stream), execute it on backend and verify save.
+                if not reminder_outcome.handled and "create_reminder" in full_response:
+                    try:
+                        import re as _re
+                        from app.models.reminders import ReminderCreate, ReminderPriority, ReminderSource, ReminderType
+                        matches = _re.findall(r"```auren-action\s*(.*?)```", full_response, flags=_re.DOTALL | _re.IGNORECASE)
+                        for raw_block in matches:
+                            try:
+                                act_data = json.loads(raw_block.strip())
+                            except Exception:
+                                continue
+                            act_list = act_data if isinstance(act_data, list) else [act_data]
+                            for act in act_list:
+                                if isinstance(act, dict) and act.get("type") == "create_reminder" and act.get("trigger_at"):
+                                    saved_rem = await rem_repo.create_reminder(
+                                        user_id=user.id,
+                                        reminder=ReminderCreate(
+                                            title=str(act.get("title") or "Personal Reminder")[:255],
+                                            description=act.get("description"),
+                                            reminder_type=ReminderType.alarm if act.get("is_alarm") else ReminderType.general,
+                                            trigger_at=datetime.fromisoformat(str(act["trigger_at"]).replace("Z", "+00:00")),
+                                            timezone=str(act.get("timezone") or notif_prefs.timezone or "UTC"),
+                                            is_alarm=bool(act.get("is_alarm", False)),
+                                            priority=ReminderPriority.alarm if act.get("is_alarm") else ReminderPriority.normal,
+                                            source=ReminderSource.chat,
+                                        ),
+                                    )
+                                    reminder_outcome = ConversationalReminderOutcome(
+                                        handled=True,
+                                        status="created",
+                                        reminder=saved_rem,
+                                        summary_text=f"Saved reminder '{saved_rem.title}'",
+                                    )
+                                    rem_event = {
+                                        "action": "created",
+                                        "reminder": saved_rem.model_dump(mode="json"),
+                                        "summary": reminder_outcome.summary_text,
+                                    }
+                                    yield f"event: reminder_action\ndata: {json.dumps(rem_event)}\n\n"
+                    except Exception as post_rem_err:
+                        logger.warning("Post-stream reminder action save failed: %s", post_rem_err)
+                        fail_note = f"\n\n> ⚠️ Could not save reminder to database ({post_rem_err})."
+                        full_response += fail_note
+                        yield f"event: token\ndata: {json.dumps({'text': fail_note})}\n\n"
+
                 assistant_metadata = {
                     "model": provider.get_model_id(),
                     "user_message_id": str(user_message.id),
                     "idempotency_key": request.idempotency_key,
                     "retrieved_memories": retrieved_memories_data,
                     "productivity_context": productivity_context_data,
+                    "reminder_action": (
+                        {
+                            "status": reminder_outcome.status,
+                            "reminder_id": str(reminder_outcome.reminder.id) if reminder_outcome.reminder else None,
+                        }
+                        if reminder_outcome.handled
+                        else None
+                    ),
                 }
                 if retry_assistant_msg_id:
                     assistant_msg = await repo.update_assistant_message(

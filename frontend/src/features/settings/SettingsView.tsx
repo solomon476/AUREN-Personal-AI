@@ -22,21 +22,40 @@ import {
   Monitor,
   ShieldCheck,
   Layers,
+  Bell,
+  Volume2,
+  AlarmClock,
+  Moon,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, ThemeMode } from '../../context/ThemeContext';
 import { useExportUserData, useUpdateUserProfile, useUserProfile } from '../../hooks/useSettings';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { useCreateReminder, usePushSubscriptions } from '../../hooks/useReminders';
+import { sendTestNotification } from '../../api/reminders';
+import { playAlertSound } from '../../lib/soundAlert';
+import {
+  disableDeviceWebPush,
+  enableDeviceWebPush,
+  getBrowserNotificationPermission,
+  isWebPushSupported,
+} from '../../lib/pushNotifications';
+import { useQueryClient } from '@tanstack/react-query';
+import { REMINDER_KEYS } from '../../hooks/useReminders';
 
 export const SettingsView: React.FC = () => {
   const { user, signOut } = useAuth();
+  const queryClient = useQueryClient();
   const { data: profile } = useUserProfile(user?.id);
   const updateProfileMutation = useUpdateUserProfile(user?.id);
   const exportDataMutation = useExportUserData();
+  const { data: pushSubsData } = usePushSubscriptions(user?.id);
+  useCreateReminder(user?.id);
   const { isInstalled, hasDeferredPrompt, promptInstall } = usePWAInstall();
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'memory' | 'data' | 'app'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'ai' | 'memory' | 'data' | 'app'>('profile');
 
   // Form State
   const [fullName, setFullName] = useState('');
@@ -47,6 +66,38 @@ export const SettingsView: React.FC = () => {
   const [aiCustomInstructions, setAiCustomInstructions] = useState('');
   const [memoryAutoExtraction, setMemoryAutoExtraction] = useState(true);
   const [memoryMinConfidence, setMemoryMinConfidence] = useState(0.7);
+
+  // Notification & Reminder Preferences State
+  const [inAppEnabled, setInAppEnabled] = useState(true);
+  const [browserPushEnabled, setBrowserPushEnabled] = useState(false);
+  const [audibleAlertsEnabled, setAudibleAlertsEnabled] = useState(true);
+  const [reminderSound, setReminderSound] = useState('chime');
+  const [defaultReminderBehavior, setDefaultReminderBehavior] = useState('notification');
+  const [defaultSnoozeMinutes, setDefaultSnoozeMinutes] = useState(10);
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
+  const [quietHoursStart, setQuietHoursStart] = useState('22:00');
+  const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
+  const [quietHoursAllowAlarms, setQuietHoursAllowAlarms] = useState(false);
+  const [timezonePref, setTimezonePref] = useState(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+      return 'UTC';
+    }
+  });
+  const [dailyBriefingEnabled, setDailyBriefingEnabled] = useState(false);
+  const [dailyBriefingTime, setDailyBriefingTime] = useState('08:00');
+  const [eveningReviewEnabled, setEveningReviewEnabled] = useState(false);
+  const [eveningReviewTime, setEveningReviewTime] = useState('19:00');
+  const [notifPriorityDefault, setNotifPriorityDefault] = useState('normal');
+  const [recurringMissedPolicy, setRecurringMissedPolicy] = useState('trigger_once_then_advance');
+  const [taskLeadMinutes, setTaskLeadMinutes] = useState(30);
+  const [overdueTaskReminders, setOverdueTaskReminders] = useState(false);
+  const [autoRescheduleTaskReminders, setAutoRescheduleTaskReminders] = useState(true);
+  const [suppressOnTaskComplete, setSuppressOnTaskComplete] = useState(true);
+  const [hideSensitiveLockscreen, setHideSensitiveLockscreen] = useState(true);
+  const [pushActionStatus, setPushActionStatus] = useState<string | null>(null);
+
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const hasSyncedRef = useRef(false);
@@ -66,6 +117,29 @@ export const SettingsView: React.FC = () => {
       if (prefs.ai_custom_instructions) setAiCustomInstructions(String(prefs.ai_custom_instructions));
       if (prefs.memory_auto_extraction !== undefined) setMemoryAutoExtraction(Boolean(prefs.memory_auto_extraction));
       if (prefs.memory_min_confidence !== undefined) setMemoryMinConfidence(Number(prefs.memory_min_confidence));
+
+      if (prefs.in_app_notifications_enabled !== undefined) setInAppEnabled(Boolean(prefs.in_app_notifications_enabled));
+      if (prefs.browser_push_enabled !== undefined) setBrowserPushEnabled(Boolean(prefs.browser_push_enabled));
+      if (prefs.audible_alerts_enabled !== undefined) setAudibleAlertsEnabled(Boolean(prefs.audible_alerts_enabled));
+      if (prefs.reminder_sound) setReminderSound(String(prefs.reminder_sound));
+      if (prefs.default_reminder_behavior) setDefaultReminderBehavior(String(prefs.default_reminder_behavior));
+      if (prefs.default_snooze_minutes !== undefined) setDefaultSnoozeMinutes(Number(prefs.default_snooze_minutes));
+      if (prefs.quiet_hours_enabled !== undefined) setQuietHoursEnabled(Boolean(prefs.quiet_hours_enabled));
+      if (prefs.quiet_hours_start) setQuietHoursStart(String(prefs.quiet_hours_start));
+      if (prefs.quiet_hours_end) setQuietHoursEnd(String(prefs.quiet_hours_end));
+      if (prefs.quiet_hours_allow_alarms !== undefined) setQuietHoursAllowAlarms(Boolean(prefs.quiet_hours_allow_alarms));
+      if (prefs.timezone) setTimezonePref(String(prefs.timezone));
+      if (prefs.daily_briefing_enabled !== undefined) setDailyBriefingEnabled(Boolean(prefs.daily_briefing_enabled));
+      if (prefs.daily_briefing_time) setDailyBriefingTime(String(prefs.daily_briefing_time));
+      if (prefs.evening_review_enabled !== undefined) setEveningReviewEnabled(Boolean(prefs.evening_review_enabled));
+      if (prefs.evening_review_time) setEveningReviewTime(String(prefs.evening_review_time));
+      if (prefs.notification_priority_default) setNotifPriorityDefault(String(prefs.notification_priority_default));
+      if (prefs.recurring_missed_policy) setRecurringMissedPolicy(String(prefs.recurring_missed_policy));
+      if (prefs.task_default_lead_minutes !== undefined) setTaskLeadMinutes(Number(prefs.task_default_lead_minutes));
+      if (prefs.overdue_task_reminders_enabled !== undefined) setOverdueTaskReminders(Boolean(prefs.overdue_task_reminders_enabled));
+      if (prefs.auto_reschedule_task_reminders !== undefined) setAutoRescheduleTaskReminders(Boolean(prefs.auto_reschedule_task_reminders));
+      if (prefs.suppress_reminders_on_task_complete !== undefined) setSuppressOnTaskComplete(Boolean(prefs.suppress_reminders_on_task_complete));
+      if (prefs.hide_sensitive_lockscreen !== undefined) setHideSensitiveLockscreen(Boolean(prefs.hide_sensitive_lockscreen));
     }
   }, [profile, setTheme]);
 
@@ -83,12 +157,72 @@ export const SettingsView: React.FC = () => {
           ai_custom_instructions: aiCustomInstructions.trim() || undefined,
           memory_auto_extraction: memoryAutoExtraction,
           memory_min_confidence: memoryMinConfidence,
+          in_app_notifications_enabled: inAppEnabled,
+          browser_push_enabled: browserPushEnabled,
+          audible_alerts_enabled: audibleAlertsEnabled,
+          reminder_sound: reminderSound,
+          default_reminder_behavior: defaultReminderBehavior,
+          default_snooze_minutes: defaultSnoozeMinutes,
+          quiet_hours_enabled: quietHoursEnabled,
+          quiet_hours_start: quietHoursStart,
+          quiet_hours_end: quietHoursEnd,
+          quiet_hours_allow_alarms: quietHoursAllowAlarms,
+          timezone: timezonePref,
+          daily_briefing_enabled: dailyBriefingEnabled,
+          daily_briefing_time: dailyBriefingTime,
+          evening_review_enabled: eveningReviewEnabled,
+          evening_review_time: eveningReviewTime,
+          notification_priority_default: notifPriorityDefault,
+          recurring_missed_policy: recurringMissedPolicy,
+          task_default_lead_minutes: taskLeadMinutes,
+          overdue_task_reminders_enabled: overdueTaskReminders,
+          auto_reschedule_task_reminders: autoRescheduleTaskReminders,
+          suppress_reminders_on_task_complete: suppressOnTaskComplete,
+          hide_sensitive_lockscreen: hideSensitiveLockscreen,
         },
       });
       setSaveStatus('Settings saved successfully.');
       setTimeout(() => setSaveStatus(null), 3000);
     } catch (err: any) {
       setSaveStatus(`Failed to save: ${err.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleActivatePush = async () => {
+    setPushActionStatus('Requesting notification permission & registering device...');
+    try {
+      const res = await enableDeviceWebPush();
+      if (res.success) {
+        setBrowserPushEnabled(true);
+        setPushActionStatus('Device registered for background Web Push alerts.');
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user?.id) });
+        await updateProfileMutation.mutateAsync({ preferences: { browser_push_enabled: true } });
+      } else {
+        setPushActionStatus(res.error || 'Could not enable Web Push.');
+      }
+    } catch (err: any) {
+      setPushActionStatus(err?.message || 'Push registration failed.');
+    }
+  };
+
+  const handleRemoveSubscription = async (subId: string) => {
+    setPushActionStatus(null);
+    await disableDeviceWebPush(subId);
+    queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user?.id) });
+    setPushActionStatus('Push device removed.');
+  };
+
+  const handleSendTestAlert = async () => {
+    setPushActionStatus('Sending test alert...');
+    try {
+      if (audibleAlertsEnabled) {
+        playAlertSound(reminderSound, defaultReminderBehavior === 'alarm');
+      }
+      await sendTestNotification();
+      queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.notifications(user?.id) });
+      setPushActionStatus('Test notification dispatched to Notification Center and registered devices.');
+    } catch (err: any) {
+      setPushActionStatus(err?.message || 'Failed sending test notification.');
     }
   };
 
@@ -148,6 +282,19 @@ export const SettingsView: React.FC = () => {
           >
             <User className="w-4 h-4 text-champagne-400" />
             <span>Profile &amp; Account</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('notifications')}
+            className={`whitespace-nowrap flex-shrink-0 md:w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 touch-target cursor-pointer ${
+              activeTab === 'notifications'
+                ? 'bg-white/[0.08] text-white border border-white/[0.12] shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+            }`}
+          >
+            <Bell className="w-4 h-4 text-champagne-400" />
+            <span>Notifications &amp; Alarms</span>
           </button>
 
           <button
@@ -295,6 +442,383 @@ export const SettingsView: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* NOTIFICATIONS & REMINDERS TAB */}
+            {activeTab === 'notifications' && (
+              <div className="space-y-6">
+                <div className="border-b border-white/[0.06] pb-3">
+                  <h2 className="text-sm font-semibold text-white">Smart Reminders, Alarms &amp; Push Notifications</h2>
+                  <p className="text-xs text-slate-400">
+                    Configure background Web Push delivery, alarm sounds, quiet hours, timezone, and task reminder policies.
+                  </p>
+                </div>
+
+                {/* Delivery Channels & Browser Push Registration */}
+                <div className="space-y-3">
+                  <div className="p-4 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-200 block">In-App Popups &amp; Notification Center</span>
+                      <span className="text-[11px] text-slate-400">Show immediate popups and alarm overlays while AUREN is open.</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={inAppEnabled}
+                      onChange={(e) => setInAppEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-500"
+                    />
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-semibold text-slate-200 block">Browser / PWA Push Notifications</span>
+                        <span className="text-[11px] text-slate-400">
+                          Deliver background push alerts when AUREN tabs are closed (subject to OS &amp; browser permissions).
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={browserPushEnabled}
+                        onChange={(e) => setBrowserPushEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-emerald-500"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleActivatePush}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition cursor-pointer"
+                      >
+                        Enable Push on This Device
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSendTestAlert}
+                        className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-slate-200 text-xs font-medium transition cursor-pointer"
+                      >
+                        Send Test Alert
+                      </button>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        Permission: {getBrowserNotificationPermission()} · Support: {isWebPushSupported() ? 'Ready' : 'Browser Restricted'}
+                      </span>
+                    </div>
+
+                    {pushActionStatus && (
+                      <p className="text-[11px] text-champagne-300 font-mono">{pushActionStatus}</p>
+                    )}
+
+                    {/* Registered Devices */}
+                    {pushSubsData && pushSubsData.items.length > 0 && (
+                      <div className="space-y-1.5 pt-2 border-t border-white/[0.06]">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Registered Devices ({pushSubsData.items.length})
+                        </span>
+                        {pushSubsData.items.map((sub) => (
+                          <div key={sub.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#07080c] border border-white/[0.06] text-xs">
+                            <div className="min-w-0">
+                              <span className="text-slate-200 font-medium block truncate">
+                                {sub.device_label || 'Browser Device'}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                {sub.is_active ? 'Active' : 'Inactive / Expired'}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSubscription(sub.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer"
+                              title="Remove push device"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      Platform note: Web Browsers and PWAs cannot ring an OS-level native phone alarm when an application is force-closed or muted by OS Do Not Disturb. On iOS, install AUREN to the Home Screen (iOS 16.4+) to receive Web Push alerts.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Sound, Alarm Behavior & Snooze */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="p-4 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] flex items-center justify-between sm:col-span-2">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-200 block">Audible Alerts</span>
+                      <span className="text-[11px] text-slate-400">Play sound chime or alarm tone when reminders trigger in AUREN.</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={audibleAlertsEnabled}
+                      onChange={(e) => setAudibleAlertsEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      <Volume2 className="w-3.5 h-3.5 inline mr-1" />
+                      Reminder Sound
+                    </label>
+                    <div className="flex space-x-2">
+                      <select
+                        value={reminderSound}
+                        onChange={(e) => setReminderSound(e.target.value)}
+                        className="flex-1 bg-[#0e1017] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200"
+                      >
+                        <option value="chime">Executive Chime</option>
+                        <option value="bell">Crystal Bell</option>
+                        <option value="pulse">Alarm Pulse</option>
+                        <option value="gentle">Gentle Tone</option>
+                        <option value="silent">Silent</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => playAlertSound(reminderSound, defaultReminderBehavior === 'alarm')}
+                        className="px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-xs text-slate-200 cursor-pointer"
+                      >
+                        Preview
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      <AlarmClock className="w-3.5 h-3.5 inline mr-1" />
+                      Default Reminder Behavior
+                    </label>
+                    <select
+                      value={defaultReminderBehavior}
+                      onChange={(e) => setDefaultReminderBehavior(e.target.value)}
+                      className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200"
+                    >
+                      <option value="notification">Standard Popup + Push</option>
+                      <option value="alarm">Alarm-Style Modal + Repeating Tone</option>
+                      <option value="silent">Silent (Notification Center only)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Default Snooze Duration</label>
+                    <select
+                      value={defaultSnoozeMinutes}
+                      onChange={(e) => setDefaultSnoozeMinutes(Number(e.target.value))}
+                      className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200"
+                    >
+                      <option value={5}>5 minutes</option>
+                      <option value={10}>10 minutes</option>
+                      <option value={15}>15 minutes</option>
+                      <option value={30}>30 minutes</option>
+                      <option value={60}>1 hour</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Default Priority</label>
+                    <select
+                      value={notifPriorityDefault}
+                      onChange={(e) => setNotifPriorityDefault(e.target.value)}
+                      className="w-full bg-[#0e1017] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200"
+                    >
+                      <option value="low">Low</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">High</option>
+                      <option value="alarm">Urgent Alarm</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Quiet Hours & Timezone */}
+                <div className="p-4 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Moon className="w-4 h-4 text-indigo-400" />
+                      <div>
+                        <span className="text-xs font-semibold text-slate-200 block">Quiet Hours</span>
+                        <span className="text-[11px] text-slate-400">
+                          Suppresses noncritical audible &amp; push interruptions while preserving items in Notification Center.
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={quietHoursEnabled}
+                      onChange={(e) => setQuietHoursEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-500"
+                    />
+                  </div>
+
+                  {quietHoursEnabled && (
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Start Time</label>
+                        <input
+                          type="time"
+                          value={quietHoursStart}
+                          onChange={(e) => setQuietHoursStart(e.target.value)}
+                          className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">End Time</label>
+                        <input
+                          type="time"
+                          value={quietHoursEnd}
+                          onChange={(e) => setQuietHoursEnd(e.target.value)}
+                          className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200"
+                        />
+                      </div>
+                      <label className="col-span-2 flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={quietHoursAllowAlarms}
+                          onChange={(e) => setQuietHoursAllowAlarms(e.target.checked)}
+                          className="accent-amber-500"
+                        />
+                        <span>Allow urgent alarm-style reminders to bypass quiet hours</span>
+                      </label>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-white/[0.06]">
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Configured Timezone (IANA)</label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="text"
+                        value={timezonePref}
+                        onChange={(e) => setTimezonePref(e.target.value)}
+                        placeholder="Africa/Nairobi"
+                        className="flex-1 bg-[#07080c] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            setTimezonePref(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+                          } catch {}
+                        }}
+                        className="px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-xs text-slate-200 cursor-pointer"
+                      >
+                        Auto-Detect
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Daily Briefing, Evening Review, Recurring & Task Sync Policies */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="p-3.5 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-200">Daily Briefing</span>
+                      <input
+                        type="checkbox"
+                        checked={dailyBriefingEnabled}
+                        onChange={(e) => setDailyBriefingEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-emerald-500"
+                      />
+                    </div>
+                    <input
+                      type="time"
+                      value={dailyBriefingTime}
+                      onChange={(e) => setDailyBriefingTime(e.target.value)}
+                      className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl px-3 py-1.5 text-xs text-slate-200"
+                    />
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-200">Evening Review</span>
+                      <input
+                        type="checkbox"
+                        checked={eveningReviewEnabled}
+                        onChange={(e) => setEveningReviewEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-emerald-500"
+                      />
+                    </div>
+                    <input
+                      type="time"
+                      value={eveningReviewTime}
+                      onChange={(e) => setEveningReviewTime(e.target.value)}
+                      className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl px-3 py-1.5 text-xs text-slate-200"
+                    />
+                  </div>
+                </div>
+
+                {/* Task & Privacy Policies */}
+                <div className="p-4 rounded-xl bg-[#0e1017]/70 border border-white/[0.06] space-y-3">
+                  <h3 className="text-xs font-semibold text-slate-200">Task &amp; Recurring Reminder Policies</h3>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Default Task Lead Reminder</label>
+                    <select
+                      value={taskLeadMinutes}
+                      onChange={(e) => setTaskLeadMinutes(Number(e.target.value))}
+                      className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200"
+                    >
+                      <option value={15}>15 minutes before due</option>
+                      <option value={30}>30 minutes before due</option>
+                      <option value={60}>1 hour before due</option>
+                      <option value={1440}>1 day before due</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Missed Recurring Reminder Handling</label>
+                    <select
+                      value={recurringMissedPolicy}
+                      onChange={(e) => setRecurringMissedPolicy(e.target.value)}
+                      className="w-full bg-[#07080c] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200"
+                    >
+                      <option value="trigger_once_then_advance">Trigger missed once, then advance to next schedule</option>
+                      <option value="skip_missed">Skip directly to next future occurrence</option>
+                    </select>
+                  </div>
+
+                  <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer pt-1">
+                    <span>Auto-reschedule reminders when task due date changes</span>
+                    <input
+                      type="checkbox"
+                      checked={autoRescheduleTaskReminders}
+                      onChange={(e) => setAutoRescheduleTaskReminders(e.target.checked)}
+                      className="accent-emerald-500"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
+                    <span>Suppress future reminders when task is completed</span>
+                    <input
+                      type="checkbox"
+                      checked={suppressOnTaskComplete}
+                      onChange={(e) => setSuppressOnTaskComplete(e.target.checked)}
+                      className="accent-emerald-500"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
+                    <span>Optional overdue task alerts</span>
+                    <input
+                      type="checkbox"
+                      checked={overdueTaskReminders}
+                      onChange={(e) => setOverdueTaskReminders(e.target.checked)}
+                      className="accent-emerald-500"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer border-t border-white/[0.06] pt-2">
+                    <span>Mask sensitive task/reminder titles on lock-screen push alerts</span>
+                    <input
+                      type="checkbox"
+                      checked={hideSensitiveLockscreen}
+                      onChange={(e) => setHideSensitiveLockscreen(e.target.checked)}
+                      className="accent-emerald-500"
+                    />
+                  </label>
+                </div>
               </div>
             )}
 

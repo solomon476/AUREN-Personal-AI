@@ -22,6 +22,7 @@ import { OmnisearchView } from './features/search/OmnisearchView';
 import { ReflectionView } from './features/reflection/ReflectionView';
 import { JournalView } from './features/journal/JournalView';
 import { SettingsView } from './features/settings/SettingsView';
+import { RemindersView } from './features/reminders/RemindersView';
 import { OperationsView } from './features/operations/OperationsView';
 import { JourneysView } from './features/journeys/JourneysView';
 import { ConnectionsView } from './features/connections/ConnectionsView';
@@ -105,6 +106,12 @@ export const productivityRoute = createRoute({
   component: ProductivityDashboardView,
 });
 
+export const remindersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reminders',
+  component: RemindersView,
+});
+
 // Area 5: Reflection & Journal — Private Journal and Reflective Intelligence
 export const journalRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -174,6 +181,7 @@ export const routeTree = rootRoute.addChildren([
   projectsRoute,
   goalsRoute,
   productivityRoute,
+  remindersRoute,
   journalRoute,
   reflectionRoute,
   settingsRoute,

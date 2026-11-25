@@ -82,6 +82,11 @@ class ChatCompletionRequest(BaseModel):
         default=None,
         description="Optional list of base64 image data strings or data URLs",
     )
+    timezone: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Client IANA timezone fallback if user preference is unset",
+    )
 
 
 class ConversationCreateRequest(BaseModel):

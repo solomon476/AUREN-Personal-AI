@@ -100,14 +100,15 @@ class SecretMaskingSource(PydanticBaseSettingsSource):
 
     def get_field_value(self, field: Any, field_name: str) -> Tuple[Any, str, bool]:
         val, key, is_complex = self.target.get_field_value(field, field_name)
-        if key == "JOURNAL_HMAC_SECRET" and isinstance(val, str):
+        if key in ("JOURNAL_HMAC_SECRET", "VAPID_PRIVATE_KEY") and isinstance(val, str):
             val = SecretStr(val)
         return val, key, is_complex
 
     def __call__(self) -> dict[str, Any]:
         data = self.target()
-        if "JOURNAL_HMAC_SECRET" in data and isinstance(data["JOURNAL_HMAC_SECRET"], str):
-            data["JOURNAL_HMAC_SECRET"] = SecretStr(data["JOURNAL_HMAC_SECRET"])
+        for secret_key in ("JOURNAL_HMAC_SECRET", "VAPID_PRIVATE_KEY"):
+            if secret_key in data and isinstance(data[secret_key], str):
+                data[secret_key] = SecretStr(data[secret_key])
         return data
 
     def __getattr__(self, item: str) -> Any:
@@ -195,6 +196,18 @@ class Settings(BaseSettings):
     MEMORY_WORKER_LEASE_SECONDS: int = 300
     MEMORY_WORKER_CONCURRENCY: int = 2
 
+    # Reminder Scheduler & Web Push Configuration
+    REMINDER_SCHEDULER_ENABLED: bool = True
+    REMINDER_SCHEDULER_POLL_INTERVAL_SECONDS: float = 5.0
+    REMINDER_SCHEDULER_BATCH_SIZE: int = 20
+    REMINDER_SCHEDULER_LEASE_SECONDS: int = 120
+    VAPID_PUBLIC_KEY: Optional[str] = None
+    VAPID_PRIVATE_KEY: Optional[SecretStr] = Field(
+        default=None,
+        description="VAPID ECDSA P-256 private key (PEM or base64url scalar). Never expose to clients.",
+    )
+    VAPID_SUBJECT: str = "mailto:notifications@auren.ai"
+
     # Journal Privacy & Consent Configuration
     JOURNAL_HMAC_SECRET: Optional[SecretStr] = Field(
         default=None,
@@ -234,6 +247,18 @@ class Settings(BaseSettings):
         if not self.JOURNAL_HMAC_SECRET:
             raise ValueError("JOURNAL_HMAC_SECRET is not configured.")
         return self.JOURNAL_HMAC_SECRET.get_secret_value()
+
+    def get_vapid_private_key(self) -> Optional[str]:
+        """Returns raw VAPID private key string for server-side JWT signing. Never expose to clients."""
+        if not self.VAPID_PRIVATE_KEY:
+            return None
+        raw = (
+            self.VAPID_PRIVATE_KEY.get_secret_value()
+            if hasattr(self.VAPID_PRIVATE_KEY, "get_secret_value")
+            else str(self.VAPID_PRIVATE_KEY)
+        )
+        val = raw.strip()
+        return val or None
 
 
 settings = Settings()

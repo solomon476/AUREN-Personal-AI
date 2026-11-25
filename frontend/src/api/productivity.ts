@@ -50,6 +50,11 @@ export interface TaskCreateInput {
   due_date?: string | null;
   start_date?: string | null;
   tags?: string[];
+  reminder_mode?: 'none' | 'at_due' | 'before_due' | 'custom';
+  reminder_offset_minutes?: number;
+  reminder_at?: string | null;
+  reminder_is_alarm?: boolean;
+  reminder_timezone?: string;
 }
 
 export interface TaskUpdateInput {
@@ -63,6 +68,11 @@ export interface TaskUpdateInput {
   due_date?: string | null;
   start_date?: string | null;
   tags?: string[];
+  reminder_mode?: 'none' | 'at_due' | 'before_due' | 'custom';
+  reminder_offset_minutes?: number;
+  reminder_at?: string | null;
+  reminder_is_alarm?: boolean;
+  reminder_timezone?: string;
 }
 
 export interface Project {

@@ -16,6 +16,9 @@ import { useAuth } from '../../context/AuthContext';
 import { UserProfileMenu } from '../auth/UserProfileMenu';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { PWAInstallBanner } from '../pwa/PWAInstallBanner';
+import { NotificationProvider } from '../../context/NotificationContext';
+import { AlarmNotificationOverlay } from '../notifications/AlarmNotificationOverlay';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 export const AppLayout: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -43,6 +46,7 @@ export const AppLayout: React.FC = () => {
   };
 
   return (
+    <NotificationProvider>
     <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-900 font-sans selection:bg-emerald-500 selection:text-white">
       {/* Desktop Sidebar (Persistent) */}
       <div className="hidden md:flex flex-shrink-0 z-20">
@@ -107,6 +111,7 @@ export const AppLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-2">
+            <NotificationBell />
             <Link
               to="/search"
               className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 touch-target flex items-center justify-center transition"
@@ -162,7 +167,11 @@ export const AppLayout: React.FC = () => {
           defaultMode={authMode}
           onClose={() => setIsAuthModalOpen(false)}
         />
+
+        {/* In-App Notification Popups & Alarm Modal */}
+        <AlarmNotificationOverlay />
       </div>
     </div>
+    </NotificationProvider>
   );
 };

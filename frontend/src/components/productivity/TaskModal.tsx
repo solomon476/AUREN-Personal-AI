@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Flag, FolderKanban, Target, Tag } from 'lucide-react';
+import { X, Calendar, Flag, FolderKanban, Target, Tag, BellRing } from 'lucide-react';
 import { Task, TaskCreateInput, TaskPriority, TaskStatus, TaskUpdateInput } from '../../api/productivity';
 import { useProjects, useGoals } from '../../hooks/useProductivity';
 
@@ -32,6 +32,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [goalId, setGoalId] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
   const [tagsInput, setTagsInput] = useState<string>('');
+  const [reminderOption, setReminderOption] = useState<'none' | 'at_due' | 'before_15' | 'before_30' | 'before_60' | 'before_1440' | 'custom'>('none');
+  const [customReminderAt, setCustomReminderAt] = useState<string>('');
+  const [reminderIsAlarm, setReminderIsAlarm] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +51,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setGoalId(initialTask.goal_id || '');
       setDueDate(initialTask.due_date ? initialTask.due_date.slice(0, 16) : '');
       setTagsInput(initialTask.tags?.join(', ') || '');
+      setReminderOption('none');
+      setCustomReminderAt('');
+      setReminderIsAlarm(false);
     } else {
       setTitle('');
       setDescription('');
@@ -57,6 +63,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setGoalId('');
       setDueDate(initialDueDate ? initialDueDate.slice(0, 16) : '');
       setTagsInput('');
+      setReminderOption('none');
+      setCustomReminderAt('');
+      setReminderIsAlarm(false);
     }
     setError(null);
   }, [initialTask, defaultProjectId, initialDueDate, isOpen]);
@@ -78,6 +87,27 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       .map((t) => t.trim())
       .filter(Boolean);
 
+    let browserTz = 'UTC';
+    try {
+      browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+      browserTz = 'UTC';
+    }
+
+    let reminder_mode: TaskCreateInput['reminder_mode'] | undefined;
+    let reminder_offset_minutes: number | undefined;
+    let reminder_at: string | null | undefined;
+
+    if (reminderOption === 'at_due') {
+      reminder_mode = 'at_due';
+    } else if (reminderOption.startsWith('before_')) {
+      reminder_mode = 'before_due';
+      reminder_offset_minutes = parseInt(reminderOption.replace('before_', ''), 10);
+    } else if (reminderOption === 'custom' && customReminderAt) {
+      reminder_mode = 'custom';
+      reminder_at = new Date(customReminderAt).toISOString();
+    }
+
     const payload: TaskCreateInput = {
       title: title.trim(),
       description: description.trim() || null,
@@ -87,6 +117,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       goal_id: goalId || null,
       due_date: dueDate ? new Date(dueDate).toISOString() : null,
       tags,
+      ...(reminder_mode ? { reminder_mode, reminder_offset_minutes, reminder_at, reminder_is_alarm: reminderIsAlarm, reminder_timezone: browserTz } : {}),
     };
 
     try {
@@ -259,6 +290,50 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               />
             </div>
+          </div>
+
+          {/* Distinct Reminder Schedule (separate from Task Deadline) */}
+          <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300 flex items-center">
+                <BellRing className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+                {initialTask ? 'Add Task Reminder (Optional)' : 'Reminder Alert (Distinct from Deadline)'}
+              </label>
+              <select
+                value={reminderOption}
+                onChange={(e) => setReminderOption(e.target.value as any)}
+                className="px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="none">{initialTask ? 'Keep existing reminders' : 'No reminder'}</option>
+                <option value="at_due" disabled={!dueDate}>At due time</option>
+                <option value="before_15" disabled={!dueDate}>15 min before due</option>
+                <option value="before_30" disabled={!dueDate}>30 min before due</option>
+                <option value="before_60" disabled={!dueDate}>1 hour before due</option>
+                <option value="before_1440" disabled={!dueDate}>1 day before due</option>
+                <option value="custom">Custom reminder time</option>
+              </select>
+            </div>
+
+            {reminderOption === 'custom' && (
+              <input
+                type="datetime-local"
+                value={customReminderAt}
+                onChange={(e) => setCustomReminderAt(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-100"
+              />
+            )}
+
+            {reminderOption !== 'none' && (
+              <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reminderIsAlarm}
+                  onChange={(e) => setReminderIsAlarm(e.target.checked)}
+                  className="accent-amber-500"
+                />
+                <span>Alarm-style prominent alert + sound</span>
+              </label>
+            )}
           </div>
 
           {/* Footer Actions */}

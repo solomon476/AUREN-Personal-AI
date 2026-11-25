@@ -42,6 +42,8 @@ import {
   useDeleteConversation
 } from '../../hooks/useConversations';
 import { useConversationMessages, useInvalidateMessages } from '../../hooks/useConversationMessages';
+import { useQueryClient } from '@tanstack/react-query';
+import { REMINDER_KEYS } from '../../hooks/useReminders';
 import { MessageContent } from '../../components/chat/MessageContent';
 import { RenameConversationModal } from '../../components/chat/RenameConversationModal';
 import { DeleteConversationModal } from '../../components/chat/DeleteConversationModal';
@@ -55,6 +57,7 @@ interface ChatViewProps {
 export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversationId }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const routeParams = useParams({ strict: false }) as { conversationId?: string };
 
   const activeConversationId = propConversationId || routeParams?.conversationId || null;
@@ -491,6 +494,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
             setReconnectStatus(null);
             accumulatedContent += token;
             setStreamingContent(accumulatedContent);
+          },
+          onReminderAction: () => {
+            queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.notifications(user?.id) });
           },
           onDone: (done) => {
             const assistantMessage: ChatMessage = {

@@ -10,9 +10,11 @@ from app.api.v1 import (
     journal,
     journeys,
     memories,
+    notifications,
     productivity,
     projects,
     reflection,
+    reminders,
     search,
     tasks,
 )
@@ -30,6 +32,8 @@ api_router.include_router(tasks.router)
 api_router.include_router(projects.router)
 api_router.include_router(goals.router)
 api_router.include_router(productivity.router)
+api_router.include_router(reminders.router)
+api_router.include_router(notifications.router)
 api_router.include_router(search.router)
 api_router.include_router(reflection.router)
 api_router.include_router(journal.router)

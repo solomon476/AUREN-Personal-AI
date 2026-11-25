@@ -1,17 +1,18 @@
 /**
  * AUREN Progressive Web App Service Worker.
  *
- * Implements strict, security-first static asset caching:
+ * Implements strict, security-first static asset caching AND Web Push notification handling:
  * - SAFE: Caches static UI assets (HTML, CSS, JS, fonts, icons).
  * - SECURE: STRICTLY BYPASSES and NEVER CACHES:
  *   - Authenticated backend API requests (/api/v1/*)
  *   - Supabase PostgREST, Auth, and Storage (*.supabase.co/*)
  *   - Real-time Server-Sent Events (SSE) AI streaming
  *   - Private journal entries, user reflections, memory context
- * - OFFLINE RESILIENT: Delivers app shell for navigation requests when offline.
+ * - WEB PUSH: Renders background reminder/alarm notifications cleanly with privacy awareness,
+ *   vibration, actions (Complete / Snooze), and click navigation into AUREN.
  */
 
-const CACHE_NAME = 'auren-shell-v13';
+const CACHE_NAME = 'auren-shell-v14';
 
 const STATIC_PRECACHE = [
   '/',
@@ -60,7 +61,7 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // 1. NON-GET: Always bypass service worker (POST, PUT, DELETE, PATCH)
+  // 1. NON-GET: Always bypass service worker
   if (request.method !== 'GET') {
     return;
   }
@@ -71,12 +72,10 @@ self.addEventListener('fetch', (event) => {
   const isStream = request.headers.get('accept')?.includes('text/event-stream');
 
   if (isApi || isSupabase || isStream) {
-    // Direct network passthrough - no caching of user data, auth, or AI tokens
     return;
   }
 
-  // 3. NAVIGATION REQUESTS (SPA routes like /chat, /tasks, /settings, /journal)
-  // Network-First: always fetch latest HTML from Vercel; fallback to offline shell if offline
+  // 3. NAVIGATION REQUESTS
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -102,8 +101,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 4. STATIC ASSET REQUESTS (JS, CSS, Fonts, Images, Icons)
-  // Stale-While-Revalidate: serve cached version immediately, fetch and update cache in background
+  // 4. STATIC ASSET REQUESTS
   if (
     url.pathname.match(/\.(js|css|woff2?|ttf|png|svg|ico|webmanifest)$/) ||
     url.pathname.startsWith('/assets/') ||
@@ -129,3 +127,98 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Web Push Notification Delivery & Interactive Click Handling
+// ---------------------------------------------------------------------------
+self.addEventListener('push', (event) => {
+  let payload = {
+    title: 'AUREN Reminder',
+    body: 'You have a scheduled item due.',
+    tag: 'auren-reminder',
+    is_alarm: false,
+    url: '/reminders',
+    reminder_id: null,
+    notification_id: null,
+    task_id: null,
+  };
+
+  if (event.data) {
+    try {
+      const parsed = event.data.json();
+      payload = { ...payload, ...parsed };
+    } catch {
+      try {
+        payload.body = event.data.text();
+      } catch {
+        // Keep safe defaults
+      }
+    }
+  }
+
+  const options = {
+    body: payload.body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: payload.tag || (payload.reminder_id ? `auren-rem-${payload.reminder_id}` : 'auren-reminder'),
+    renotify: Boolean(payload.is_alarm),
+    requireInteraction: Boolean(payload.is_alarm),
+    vibrate: payload.is_alarm ? [300, 120, 300, 120, 300] : [150, 75, 150],
+    data: {
+      url: payload.url || '/reminders',
+      reminder_id: payload.reminder_id,
+      notification_id: payload.notification_id,
+      task_id: payload.task_id,
+      is_alarm: Boolean(payload.is_alarm),
+    },
+    actions: [
+      { action: 'complete', title: 'Complete' },
+      { action: 'snooze', title: 'Snooze' },
+    ],
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title || 'AUREN Reminder', options)
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const notifData = event.notification.data || {};
+  const action = event.action || 'open';
+  const basePath = notifData.url || '/reminders';
+
+  const params = new URLSearchParams();
+  if (notifData.reminder_id) params.set('reminder_id', notifData.reminder_id);
+  if (notifData.notification_id) params.set('notification_id', notifData.notification_id);
+  if (action && action !== 'open') params.set('notif_action', action);
+
+  const query = params.toString();
+  const targetUrl = query ? `${basePath}?${query}` : basePath;
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then(async (windowClients) => {
+        for (const client of windowClients) {
+          if (client.url && client.url.startsWith(self.location.origin)) {
+            if ('focus' in client) {
+              await client.focus();
+            }
+            client.postMessage({
+              type: 'AUREN_NOTIFICATION_CLICK',
+              action,
+              url: targetUrl,
+              reminder_id: notifData.reminder_id || null,
+              notification_id: notifData.notification_id || null,
+              task_id: notifData.task_id || null,
+            });
+            return;
+          }
+        }
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(targetUrl);
+        }
+      })
+  );
+});

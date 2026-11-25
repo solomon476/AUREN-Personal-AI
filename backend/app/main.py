@@ -36,7 +36,43 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Background memory extraction worker is inactive (no WORKER_DATABASE_URL configured).")
 
+    # Persistent Reminder Scheduler (processes due reminders & Web Push even without open browser tabs)
+    rem_scheduler = None
+    rem_task = None
+    rem_pool = None
+    if getattr(settings, "REMINDER_SCHEDULER_ENABLED", True):
+        try:
+            from app.services.reminders.repository import get_sqlite_reminder_repository
+            from app.services.reminders.scheduler import ReminderScheduler
+
+            repo_type = (settings.CHAT_REPOSITORY_TYPE or "auto").lower()
+            if worker_db_url and repo_type != "sqlite":
+                import asyncpg
+                rem_pool = await asyncpg.create_pool(dsn=worker_db_url, min_size=1, max_size=3)
+                rem_scheduler = ReminderScheduler(db_pool=rem_pool, settings=settings)
+            else:
+                rem_scheduler = ReminderScheduler(
+                    sqlite_repo=get_sqlite_reminder_repository(),
+                    settings=settings,
+                )
+            rem_task = asyncio.create_task(rem_scheduler.run())
+            logger.info("Background ReminderScheduler initiated.")
+        except Exception as exc:
+            logger.warning("Could not initialize ReminderScheduler (non-blocking): %s", exc)
+
     yield
+
+    if rem_scheduler and rem_task:
+        rem_scheduler.stop()
+        try:
+            await asyncio.wait_for(rem_task, timeout=3.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            pass
+    if rem_pool is not None:
+        try:
+            await rem_pool.close()
+        except Exception:
+            pass
 
     if worker_runner and worker_task:
         logger.info("Shutting down background memory extraction worker...")

@@ -201,17 +201,24 @@ class ProfileService:
         from app.services.memory.repository import get_memory_repository
         from app.services.journal.repository import get_journal_repository
         from app.services.chat.repository import get_chat_repository
+        from app.services.reminders.repository import get_reminder_repository
 
         prod_repo = get_productivity_repository(user_token=user.token)
         mem_repo = get_memory_repository(user_token=user.token)
         journal_repo = get_journal_repository(user_token=user.token)
         chat_repo = get_chat_repository(user_token=user.token)
+        rem_repo = get_reminder_repository(user_token=user.token)
 
         tasks, _ = await prod_repo.list_tasks(user_id=user.id, page=1, page_size=1000)
         projects, _ = await prod_repo.list_projects(user_id=user.id, page=1, page_size=1000)
         goals, _ = await prod_repo.list_goals(user_id=user.id, page=1, page_size=1000)
         memories, _ = await mem_repo.list_memories(user_id=user.id, page=1, page_size=1000)
         journal_entries, _ = await journal_repo.list_entries(user_id=user.id, page=1, page_size=1000)
+        reminders_list = []
+        try:
+            reminders_list, _ = await rem_repo.list_reminders(user_id=user.id, page=1, page_size=1000)
+        except Exception as e:
+            logger.warning("Reminders export warning: %s", e)
 
         conversations_list = []
         try:
@@ -236,6 +243,7 @@ class ProfileService:
             goals=[g.model_dump(mode="json") for g in goals],
             memories=[m.model_dump(mode="json") for m in memories],
             journal_entries=[j.model_dump(mode="json") for j in journal_entries],
+            reminders=[r.model_dump(mode="json") for r in reminders_list],
             conversations=conversations_list,
         )
 
