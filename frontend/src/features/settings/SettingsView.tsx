@@ -92,6 +92,7 @@ export const SettingsView: React.FC = () => {
   const [notifPriorityDefault, setNotifPriorityDefault] = useState('normal');
   const [recurringMissedPolicy, setRecurringMissedPolicy] = useState('trigger_once_then_advance');
   const [taskLeadMinutes, setTaskLeadMinutes] = useState(30);
+  const [autoRemindNewTasks, setAutoRemindNewTasks] = useState(true);
   const [overdueTaskReminders, setOverdueTaskReminders] = useState(false);
   const [autoRescheduleTaskReminders, setAutoRescheduleTaskReminders] = useState(true);
   const [suppressOnTaskComplete, setSuppressOnTaskComplete] = useState(true);
@@ -136,6 +137,7 @@ export const SettingsView: React.FC = () => {
       if (prefs.notification_priority_default) setNotifPriorityDefault(String(prefs.notification_priority_default));
       if (prefs.recurring_missed_policy) setRecurringMissedPolicy(String(prefs.recurring_missed_policy));
       if (prefs.task_default_lead_minutes !== undefined) setTaskLeadMinutes(Number(prefs.task_default_lead_minutes));
+      if (prefs.auto_remind_new_tasks !== undefined) setAutoRemindNewTasks(Boolean(prefs.auto_remind_new_tasks));
       if (prefs.overdue_task_reminders_enabled !== undefined) setOverdueTaskReminders(Boolean(prefs.overdue_task_reminders_enabled));
       if (prefs.auto_reschedule_task_reminders !== undefined) setAutoRescheduleTaskReminders(Boolean(prefs.auto_reschedule_task_reminders));
       if (prefs.suppress_reminders_on_task_complete !== undefined) setSuppressOnTaskComplete(Boolean(prefs.suppress_reminders_on_task_complete));
@@ -175,6 +177,7 @@ export const SettingsView: React.FC = () => {
           notification_priority_default: notifPriorityDefault,
           recurring_missed_policy: recurringMissedPolicy,
           task_default_lead_minutes: taskLeadMinutes,
+          auto_remind_new_tasks: autoRemindNewTasks,
           overdue_task_reminders_enabled: overdueTaskReminders,
           auto_reschedule_task_reminders: autoRescheduleTaskReminders,
           suppress_reminders_on_task_complete: suppressOnTaskComplete,
@@ -778,6 +781,16 @@ export const SettingsView: React.FC = () => {
                       <option value="skip_missed">Skip directly to next future occurrence</option>
                     </select>
                   </div>
+
+                  <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer pt-1">
+                    <span>Auto-schedule reminder when creating a task with a deadline</span>
+                    <input
+                      type="checkbox"
+                      checked={autoRemindNewTasks}
+                      onChange={(e) => setAutoRemindNewTasks(e.target.checked)}
+                      className="accent-emerald-500"
+                    />
+                  </label>
 
                   <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer pt-1">
                     <span>Auto-reschedule reminders when task due date changes</span>

@@ -22,9 +22,12 @@ import {
   CheckCircle2,
   Loader2,
   RefreshCw,
+  BellRing,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useCreateGoal, useCreateProject, useCreateTask, useUpdateTask, useTasks } from '../../hooks/useProductivity';
+import { REMINDER_KEYS, useCreateReminder } from '../../hooks/useReminders';
 import * as productivityApi from '../../api/productivity';
 
 import 'katex/dist/katex.min.css';
@@ -150,12 +153,14 @@ interface ActionProposalItemProps {
 
 export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, conversationId: propConversationId }) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const context = useContext(MessageContext);
   const conversationId = propConversationId || context.conversationId;
   const createTaskMutation = useCreateTask(user?.id);
   const updateTaskMutation = useUpdateTask(user?.id);
   const createProjectMutation = useCreateProject(user?.id);
   const createGoalMutation = useCreateGoal(user?.id);
+  const createReminderMutation = useCreateReminder(user?.id);
   const { data: tasksData } = useTasks();
 
   const actionKey = `auren_action_${user?.id || 'guest'}_${conversationId ? conversationId + '_' : ''}${action?.type}_${action?.title || action?.name || ''}_${action?.due_date || action?.target_date || ''}_${action?.priority || ''}`;
@@ -260,12 +265,38 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
             status: 'completed',
           });
         }
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
       } else if (action.type === 'create_task') {
+        let browserTz = 'UTC';
+        try {
+          browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        } catch {
+          browserTz = 'UTC';
+        }
         const dueDate = action.due_date && String(action.due_date).trim() ? String(action.due_date).trim() : undefined;
         createdEntity = await createTaskMutation.mutateAsync({
           title: action.title || 'Untitled Task',
           priority: action.priority || 'medium',
           due_date: dueDate,
+          ...(action.reminder_mode ? { reminder_mode: action.reminder_mode } : {}),
+          ...(action.reminder_offset_minutes !== undefined ? { reminder_offset_minutes: Number(action.reminder_offset_minutes) } : {}),
+          ...(action.reminder_is_alarm !== undefined ? { reminder_is_alarm: Boolean(action.reminder_is_alarm) } : {}),
+          reminder_timezone: action.timezone || browserTz,
+        });
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
+      } else if (action.type === 'create_reminder') {
+        let browserTz = 'UTC';
+        try {
+          browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        } catch {
+          browserTz = 'UTC';
+        }
+        createdEntity = await createReminderMutation.mutateAsync({
+          title: action.title || 'Personal Reminder',
+          trigger_at: String(action.trigger_at || new Date(Date.now() + 3600 * 1000).toISOString()),
+          timezone: action.timezone || browserTz,
+          is_alarm: Boolean(action.is_alarm),
+          priority: action.is_alarm ? 'alarm' : 'normal',
         });
       } else if (action.type === 'create_project') {
         createdEntity = await createProjectMutation.mutateAsync({
@@ -353,6 +384,16 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           buttonText: 'Set Goal',
           title: action.title || action.name,
         };
+      case 'create_reminder':
+        return {
+          icon: BellRing,
+          label: action.is_alarm ? 'Alarm Proposal' : 'Reminder Proposal',
+          color: 'text-emerald-400',
+          border: 'border-emerald-800/60',
+          bg: 'bg-emerald-950/30',
+          buttonText: 'Schedule Reminder',
+          title: action.title || 'Personal Reminder',
+        };
       default:
         return null;
     }
@@ -433,7 +474,8 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
               createTaskMutation.isPending ||
               updateTaskMutation.isPending ||
               createProjectMutation.isPending ||
-              createGoalMutation.isPending
+              createGoalMutation.isPending ||
+              createReminderMutation.isPending
             }
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 disabled:opacity-50"
           >

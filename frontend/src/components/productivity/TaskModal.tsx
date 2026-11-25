@@ -6,6 +6,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Calendar, Flag, FolderKanban, Target, Tag, BellRing } from 'lucide-react';
 import { Task, TaskCreateInput, TaskPriority, TaskStatus, TaskUpdateInput } from '../../api/productivity';
 import { useProjects, useGoals } from '../../hooks/useProductivity';
+import { useAuth } from '../../context/AuthContext';
+import { useUserProfile } from '../../hooks/useSettings';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -24,6 +26,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   defaultProjectId,
   initialDueDate,
 }) => {
+  const { user } = useAuth();
+  const { data: profile } = useUserProfile(user?.id);
+  const autoRemindEnabled = profile?.preferences?.auto_remind_new_tasks !== false;
+  const defaultLeadMinutes = Number(profile?.preferences?.task_default_lead_minutes ?? 30);
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<TaskStatus>('todo');
@@ -32,7 +39,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [goalId, setGoalId] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
   const [tagsInput, setTagsInput] = useState<string>('');
-  const [reminderOption, setReminderOption] = useState<'none' | 'at_due' | 'before_15' | 'before_30' | 'before_60' | 'before_1440' | 'custom'>('none');
+  const [reminderOption, setReminderOption] = useState<'auto' | 'none' | 'at_due' | 'before_15' | 'before_30' | 'before_60' | 'before_1440' | 'custom'>('auto');
   const [customReminderAt, setCustomReminderAt] = useState<string>('');
   const [reminderIsAlarm, setReminderIsAlarm] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,12 +70,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setGoalId('');
       setDueDate(initialDueDate ? initialDueDate.slice(0, 16) : '');
       setTagsInput('');
-      setReminderOption('none');
+      setReminderOption(autoRemindEnabled ? 'auto' : 'none');
       setCustomReminderAt('');
-      setReminderIsAlarm(false);
+      setReminderIsAlarm(profile?.preferences?.default_reminder_behavior === 'alarm');
     }
     setError(null);
-  }, [initialTask, defaultProjectId, initialDueDate, isOpen]);
+  }, [initialTask, defaultProjectId, initialDueDate, isOpen, autoRemindEnabled, profile?.preferences?.default_reminder_behavior]);
 
   if (!isOpen) return null;
 
@@ -87,18 +94,22 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       .map((t) => t.trim())
       .filter(Boolean);
 
-    let browserTz = 'UTC';
-    try {
-      browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    } catch {
-      browserTz = 'UTC';
+    let browserTz = String(profile?.preferences?.timezone || '').trim();
+    if (!browserTz) {
+      try {
+        browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      } catch {
+        browserTz = 'UTC';
+      }
     }
 
     let reminder_mode: TaskCreateInput['reminder_mode'] | undefined;
     let reminder_offset_minutes: number | undefined;
     let reminder_at: string | null | undefined;
 
-    if (reminderOption === 'at_due') {
+    if (reminderOption === 'none' && !initialTask) {
+      reminder_mode = 'none';
+    } else if (reminderOption === 'at_due') {
       reminder_mode = 'at_due';
     } else if (reminderOption.startsWith('before_')) {
       reminder_mode = 'before_due';
@@ -106,6 +117,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     } else if (reminderOption === 'custom' && customReminderAt) {
       reminder_mode = 'custom';
       reminder_at = new Date(customReminderAt).toISOString();
+    } else if (reminderOption === 'auto' && dueDate) {
+      reminder_mode = defaultLeadMinutes > 0 ? 'before_due' : 'at_due';
+      if (defaultLeadMinutes > 0) {
+        reminder_offset_minutes = defaultLeadMinutes;
+      }
     }
 
     const payload: TaskCreateInput = {
@@ -117,7 +133,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       goal_id: goalId || null,
       due_date: dueDate ? new Date(dueDate).toISOString() : null,
       tags,
-      ...(reminder_mode ? { reminder_mode, reminder_offset_minutes, reminder_at, reminder_is_alarm: reminderIsAlarm, reminder_timezone: browserTz } : {}),
+      ...(reminder_mode
+        ? {
+            reminder_mode,
+            reminder_offset_minutes,
+            reminder_at,
+            reminder_is_alarm: reminderIsAlarm,
+            reminder_timezone: browserTz,
+          }
+        : {}),
     };
 
     try {
@@ -300,10 +324,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 {initialTask ? 'Add Task Reminder (Optional)' : 'Reminder Alert (Distinct from Deadline)'}
               </label>
               <select
+                aria-label="Task reminder schedule"
                 value={reminderOption}
                 onChange={(e) => setReminderOption(e.target.value as any)}
                 className="px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
               >
+                {!initialTask && (
+                  <option value="auto">
+                    Auto ({defaultLeadMinutes > 0 ? `${defaultLeadMinutes}m before due` : 'At due time'})
+                  </option>
+                )}
                 <option value="none">{initialTask ? 'Keep existing reminders' : 'No reminder'}</option>
                 <option value="at_due" disabled={!dueDate}>At due time</option>
                 <option value="before_15" disabled={!dueDate}>15 min before due</option>
@@ -314,6 +344,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </select>
             </div>
 
+            {reminderOption === 'auto' && !dueDate && !initialTask && (
+              <p className="text-[11px] text-slate-400">
+                Set a Due Date above to auto-schedule a reminder ({defaultLeadMinutes > 0 ? `${defaultLeadMinutes} min before deadline` : 'at due time'}).
+              </p>
+            )}
+
             {reminderOption === 'custom' && (
               <input
                 type="datetime-local"
@@ -323,7 +359,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               />
             )}
 
-            {reminderOption !== 'none' && (
+            {reminderOption !== 'none' && (reminderOption !== 'auto' || Boolean(dueDate)) && (
               <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
                 <input
                   type="checkbox"

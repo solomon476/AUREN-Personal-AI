@@ -31,6 +31,7 @@ export interface UserPreferences {
   recurring_auto_advance?: boolean;
   recurring_missed_policy?: string;
   task_default_lead_minutes?: number;
+  auto_remind_new_tasks?: boolean;
   overdue_task_reminders_enabled?: boolean;
   auto_reschedule_task_reminders?: boolean;
   suppress_reminders_on_task_complete?: boolean;

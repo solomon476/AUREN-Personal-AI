@@ -122,8 +122,11 @@ async def create_task(
     """Create a new task owned by the authenticated user (and optional distinct reminder)."""
     try:
         created = await repo.create_task(user_id=current_user.id, task=task_in)
-        if task_in.reminder_mode or task_in.reminder_at:
-            try:
+        try:
+            prefs = await _load_user_notif_prefs(current_user)
+            if task_in.reminder_mode == "none":
+                pass  # User explicitly opted out of reminder for this task
+            elif task_in.reminder_mode or task_in.reminder_at:
                 await _sync_task_reminder(
                     user=current_user,
                     task=created,
@@ -133,8 +136,31 @@ async def create_task(
                     reminder_is_alarm=task_in.reminder_is_alarm,
                     reminder_timezone=task_in.reminder_timezone,
                 )
-            except Exception as rem_err:
-                logger.warning("Task created but reminder creation warning for task %s: %s", created.id, rem_err)
+            elif (
+                prefs.auto_remind_new_tasks
+                and created.due_date is not None
+                and created.status not in (TaskStatus.completed, TaskStatus.cancelled)
+            ):
+                now_utc = datetime.now(timezone.utc)
+                due_utc = ensure_utc(created.due_date, prefs.timezone or "UTC")
+                if due_utc > now_utc:
+                    lead = max(0, int(prefs.task_default_lead_minutes))
+                    auto_mode = (
+                        "before_due"
+                        if lead > 0 and (due_utc - timedelta(minutes=lead)) > now_utc
+                        else "at_due"
+                    )
+                    await _sync_task_reminder(
+                        user=current_user,
+                        task=created,
+                        reminder_mode=auto_mode,
+                        reminder_offset_minutes=lead if auto_mode == "before_due" else None,
+                        reminder_at=None,
+                        reminder_is_alarm=(prefs.default_reminder_behavior == "alarm"),
+                        reminder_timezone=task_in.reminder_timezone or prefs.timezone,
+                    )
+        except Exception as rem_err:
+            logger.warning("Task created but reminder creation warning for task %s: %s", created.id, rem_err)
         return created
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -241,6 +267,31 @@ async def update_task(
                         reminder_is_alarm=update_in.reminder_is_alarm,
                         reminder_timezone=update_in.reminder_timezone,
                     )
+                elif (
+                    existing.due_date is None
+                    and update_in.due_date is not None
+                    and update_in.reminder_mode is None
+                    and update_in.reminder_at is None
+                    and prefs.auto_remind_new_tasks
+                ):
+                    now_utc = datetime.now(timezone.utc)
+                    due_utc = ensure_utc(update_in.due_date, prefs.timezone or "UTC")
+                    if due_utc > now_utc:
+                        lead = max(0, int(prefs.task_default_lead_minutes))
+                        auto_mode = (
+                            "before_due"
+                            if lead > 0 and (due_utc - timedelta(minutes=lead)) > now_utc
+                            else "at_due"
+                        )
+                        await _sync_task_reminder(
+                            user=current_user,
+                            task=task,
+                            reminder_mode=auto_mode,
+                            reminder_offset_minutes=lead if auto_mode == "before_due" else None,
+                            reminder_at=None,
+                            reminder_is_alarm=(prefs.default_reminder_behavior == "alarm"),
+                            reminder_timezone=update_in.reminder_timezone or prefs.timezone,
+                        )
         except Exception as rem_err:
             logger.warning("Task updated reminder-sync warning for %s: %s", task.id, rem_err)
 

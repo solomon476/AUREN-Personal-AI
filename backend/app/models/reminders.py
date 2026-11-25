@@ -141,6 +141,7 @@ class NotificationPreferences(BaseModel):
     recurring_auto_advance: bool = True
     recurring_missed_policy: str = "trigger_once_then_advance"  # 'trigger_once_then_advance' | 'skip_missed'
     task_default_lead_minutes: int = Field(default=30, ge=0, le=10080)
+    auto_remind_new_tasks: bool = True
     overdue_task_reminders_enabled: bool = False
     auto_reschedule_task_reminders: bool = True
     suppress_reminders_on_task_complete: bool = True

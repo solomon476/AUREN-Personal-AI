@@ -477,6 +477,7 @@ export const TasksView: React.FC = () => {
                       onToggle={handleToggleComplete}
                       onEdit={handleOpenEdit}
                       onDelete={handleDelete}
+                      onSetReminder={setReminderTaskTarget}
                     />
                   ))}
                 </div>
@@ -525,6 +526,7 @@ export const TasksView: React.FC = () => {
                       onToggle={handleToggleComplete}
                       onEdit={handleOpenEdit}
                       onDelete={handleDelete}
+                      onSetReminder={setReminderTaskTarget}
                     />
                   ))}
                 </div>
@@ -573,6 +575,7 @@ export const TasksView: React.FC = () => {
                       onToggle={handleToggleComplete}
                       onEdit={handleOpenEdit}
                       onDelete={handleDelete}
+                      onSetReminder={setReminderTaskTarget}
                     />
                   ))}
                 </div>
@@ -597,6 +600,7 @@ export const TasksView: React.FC = () => {
                     onToggle={handleToggleComplete}
                     onEdit={handleOpenEdit}
                     onDelete={handleDelete}
+                    onSetReminder={setReminderTaskTarget}
                   />
                 ))}
               </div>
@@ -934,6 +938,7 @@ interface TimetableTaskCardProps {
   onToggle: (task: Task) => Promise<void>;
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => Promise<void>;
+  onSetReminder?: (task: Task) => void;
 }
 
 const TimetableTaskCard: React.FC<TimetableTaskCardProps> = ({
@@ -941,6 +946,7 @@ const TimetableTaskCard: React.FC<TimetableTaskCardProps> = ({
   onToggle,
   onEdit,
   onDelete,
+  onSetReminder,
 }) => {
   const isCompleted = task.status === 'completed';
   const priorityInfo = PRIORITY_BADGES[task.priority] || PRIORITY_BADGES.medium;
@@ -987,7 +993,18 @@ const TimetableTaskCard: React.FC<TimetableTaskCardProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <div className="flex items-center space-x-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
+          {onSetReminder && (
+            <button
+              type="button"
+              onClick={() => onSetReminder(task)}
+              className="p-1 text-slate-400 hover:text-emerald-600 rounded hover:bg-emerald-50 cursor-pointer"
+              title="Set reminder"
+              aria-label="Set reminder"
+            >
+              <BellPlus className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onEdit(task)}

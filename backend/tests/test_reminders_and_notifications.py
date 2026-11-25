@@ -593,6 +593,26 @@ def test_task_reminder_integration_dedupe_reschedule_and_suppress(isolated_env):
     suppressed = client.get(f"/api/v1/tasks/{task_id}/reminders").json()["items"][0]
     assert suppressed["status"] == "cancelled"
 
+    # Creating a task with due_date and omitted reminder_mode auto-schedules default lead reminder
+    auto_due = datetime.now(timezone.utc) + timedelta(hours=3)
+    auto_task_resp = client.post(
+        "/api/v1/tasks",
+        json={"title": "Auto Reminded Task", "priority": "medium", "due_date": auto_due.isoformat()},
+    )
+    assert auto_task_resp.status_code == 201
+    auto_task_id = auto_task_resp.json()["id"]
+    auto_rems = client.get(f"/api/v1/tasks/{auto_task_id}/reminders").json()
+    assert auto_rems["total"] == 1
+    assert auto_rems["items"][0]["reminder_type"] == "task_before_due"
+
+    # Explicit reminder_mode="none" opts out of automatic reminder creation
+    optout_resp = client.post(
+        "/api/v1/tasks",
+        json={"title": "Silent Task", "due_date": auto_due.isoformat(), "reminder_mode": "none"},
+    )
+    assert optout_resp.status_code == 201
+    assert client.get(f"/api/v1/tasks/{optout_resp.json()['id']}/reminders").json()["total"] == 0
+
 
 # ======================================================================
 # 7. Supabase Adapter & Repository Selection Safety

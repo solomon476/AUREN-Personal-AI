@@ -197,6 +197,12 @@ describe('Smart Reminders, Notifications & Alarms UI', () => {
       expect(screen.getByText('Alarm')).toBeInTheDocument();
     });
 
+    // Verify all tab pills never squash or overlap via touch-target min-width compression
+    const dueTab = screen.getByRole('button', { name: 'Due & Snoozed' });
+    expect(dueTab.className).toContain('flex-shrink-0');
+    expect(dueTab.className).toContain('whitespace-nowrap');
+    expect(dueTab.className).not.toContain('touch-target');
+
     await userEvent.click(screen.getByTitle('Mark completed'));
     expect(remindersApi.completeReminder).toHaveBeenCalledWith('rem-100');
 
@@ -380,7 +386,7 @@ describe('Smart Reminders, Notifications & Alarms UI', () => {
     const dueInput = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
     fireEvent.change(dueInput, { target: { value: '2026-12-10T14:00' } });
 
-    const remSelect = screen.getByDisplayValue('No reminder');
+    const remSelect = screen.getByLabelText('Task reminder schedule');
     await userEvent.selectOptions(remSelect, 'before_30');
     await userEvent.click(screen.getByLabelText(/Alarm-style prominent alert/i));
 

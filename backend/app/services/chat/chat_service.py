@@ -52,7 +52,7 @@ Example:
 }
 ```
 Supported action schemas:
-- `create_task`: {"type": "create_task", "title": string, "priority": "low"|"medium"|"high"|"urgent", "due_date"?: string}
+- `create_task`: {"type": "create_task", "title": string, "priority": "low"|"medium"|"high"|"urgent", "due_date"?: "ISO-8601 datetime or YYYY-MM-DD", "reminder_mode"?: "before_due"|"at_due"|"none", "reminder_offset_minutes"?: number}
 - `complete_task`: {"type": "complete_task", "title": string, "task_id"?: string}
 - `create_project`: {"type": "create_project", "name": string, "description"?: string}
 - `create_goal`: {"type": "create_goal", "title": string, "description"?: string, "target_date"?: string}
