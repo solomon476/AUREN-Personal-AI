@@ -132,14 +132,16 @@ class ProfileService:
 
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        # Update Supabase if configured
+        # Update (upsert) Supabase profile row if configured so preferences persist reliably even for new users
         if settings.SUPABASE_URL and settings.SUPABASE_ANON_KEY and user.token:
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    await client.patch(
+                    resp = await client.post(
                         f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/profiles",
-                        params={"id": f"eq.{user.id}"},
+                        params={"on_conflict": "id"},
                         json={
+                            "id": str(user.id),
+                            "email": user.email or "",
                             "full_name": new_full_name,
                             "avatar_url": new_avatar_url,
                             "preferences": new_prefs,
@@ -149,9 +151,16 @@ class ProfileService:
                             "apikey": settings.SUPABASE_ANON_KEY,
                             "Authorization": f"Bearer {user.token}",
                             "Content-Type": "application/json",
-                            "Prefer": "return=minimal",
+                            "Prefer": "resolution=merge-duplicates,return=minimal",
                         },
                     )
+                    if resp.status_code >= 400:
+                        logger.warning(
+                            "Supabase profile upsert returned HTTP %s for %s: %s",
+                            resp.status_code,
+                            user.id,
+                            resp.text[:200],
+                        )
             except Exception as e:
                 logger.warning("Supabase profile update warning: %s", e)
 

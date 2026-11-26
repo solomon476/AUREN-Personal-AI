@@ -685,3 +685,44 @@ async def test_supabase_reminder_adapter_and_factory_selection(monkeypatch):
         )
         assert str(created.id) == rem_uuid
         assert created.title == "Supabase Synced"
+
+
+def test_push_subscription_syncs_profile_flag_and_test_push_attempts_registered_devices(isolated_env, monkeypatch):
+    client: TestClient = isolated_env["client"]
+    keys = generate_vapid_keypair()
+    monkeypatch.setattr(settings, "VAPID_PUBLIC_KEY", keys["public_key"])
+    monkeypatch.setattr(settings, "VAPID_PRIVATE_KEY", keys["private_key"])
+
+    sub_resp = client.post(
+        "/api/v1/notifications/push/subscribe",
+        json={
+            "endpoint": "https://fcm.googleapis.com/fcm/send/phone-sub-xyz123",
+            "keys": {"p256dh": "B" * 87, "auth": "A" * 22},
+            "device_label": "Android Phone",
+        },
+    )
+    assert sub_resp.status_code == 201
+
+    # Subscribing automatically turns on browser_push_enabled in user profile preferences
+    prof_resp = client.get("/api/v1/auth/me")
+    assert prof_resp.status_code == 200
+    assert prof_resp.json()["preferences"].get("browser_push_enabled") is True
+
+    # Mock WebPush delivery inside /api/v1/notifications/test-push
+    from app.api.v1 import notifications as notif_router_mod
+    from app.services.reminders.web_push import WebPushDeliveryResult
+
+    calls = []
+
+    async def _fake_send_push(**kwargs):
+        calls.append(kwargs)
+        return WebPushDeliveryResult(success=True, status_code=201)
+
+    monkeypatch.setattr(notif_router_mod._web_push, "send_push", _fake_send_push)
+    test_push = client.post("/api/v1/notifications/test-push")
+    assert test_push.status_code == 200
+    data = test_push.json()
+    assert data["registered_devices_count"] == 1
+    assert len(data["push_deliveries"]) == 1
+    assert data["push_deliveries"][0]["success"] is True
+    assert len(calls) == 1

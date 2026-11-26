@@ -23,11 +23,13 @@ import {
   Loader2,
   RefreshCw,
   BellRing,
+  BookOpen,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useCreateGoal, useCreateProject, useCreateTask, useUpdateTask, useTasks } from '../../hooks/useProductivity';
 import { REMINDER_KEYS, useCreateReminder } from '../../hooks/useReminders';
+import { JOURNAL_KEYS, useCreateJournalEntry } from '../../hooks/useJournal';
 import * as productivityApi from '../../api/productivity';
 
 import 'katex/dist/katex.min.css';
@@ -161,6 +163,7 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
   const createProjectMutation = useCreateProject(user?.id);
   const createGoalMutation = useCreateGoal(user?.id);
   const createReminderMutation = useCreateReminder(user?.id);
+  const createJournalMutation = useCreateJournalEntry(user?.id);
   const { data: tasksData } = useTasks();
 
   const actionKey = `auren_action_${user?.id || 'guest'}_${conversationId ? conversationId + '_' : ''}${action?.type}_${action?.title || action?.name || ''}_${action?.due_date || action?.target_date || ''}_${action?.priority || ''}`;
@@ -310,6 +313,15 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           description: action.description,
           target_date: targetDate,
         });
+      } else if (action.type === 'create_journal') {
+        createdEntity = await createJournalMutation.mutateAsync({
+          title: action.title ? String(action.title).trim() : undefined,
+          content: String(action.content || action.description || action.title || '').trim() || 'Personal reflection',
+          mood: action.mood ? String(action.mood).trim().toLowerCase() : undefined,
+          tags: Array.isArray(action.tags) ? action.tags.map((t: any) => String(t).trim()).filter(Boolean) : [],
+          is_private: true,
+        });
+        queryClient.invalidateQueries({ queryKey: JOURNAL_KEYS.all });
       }
 
       clearTimeout(timeoutTimer);
@@ -394,6 +406,16 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           buttonText: 'Schedule Reminder',
           title: action.title || 'Personal Reminder',
         };
+      case 'create_journal':
+        return {
+          icon: BookOpen,
+          label: 'Private Journal Proposal',
+          color: 'text-champagne-400',
+          border: 'border-amber-700/50',
+          bg: 'bg-amber-950/20',
+          buttonText: 'Save to Personal Journal',
+          title: action.title || 'Private Reflection',
+        };
       default:
         return null;
     }
@@ -428,6 +450,11 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
             Priority: {action.priority}
           </span>
         )}
+        {action.mood && (
+          <span className="inline-block mt-1 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+            Mood: {action.mood}
+          </span>
+        )}
         {action.due_date && (
           <span className="inline-block ml-2 text-[10px] text-slate-400">
             Due: {action.due_date}
@@ -435,6 +462,9 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
         )}
         {action.description && (
           <p className="text-[11px] text-slate-400 mt-1">{action.description}</p>
+        )}
+        {action.content && (
+          <p className="text-[11px] text-slate-400 mt-1 line-clamp-3">{action.content}</p>
         )}
       </div>
 
@@ -446,7 +476,13 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
         {status === 'completed' ? (
           <span className="flex items-center space-x-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-800/50">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{action.type === 'complete_task' ? 'Marked as Completed ✓' : 'Added to Life Management'}</span>
+            <span>
+              {action.type === 'complete_task'
+                ? 'Marked as Completed ✓'
+                : action.type === 'create_journal'
+                ? 'Saved to Personal Journal'
+                : 'Added to Life Management'}
+            </span>
           </span>
         ) : status === 'executing' ? (
           <button
@@ -475,7 +511,8 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
               updateTaskMutation.isPending ||
               createProjectMutation.isPending ||
               createGoalMutation.isPending ||
-              createReminderMutation.isPending
+              createReminderMutation.isPending ||
+              createJournalMutation.isPending
             }
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/20 disabled:opacity-50"
           >

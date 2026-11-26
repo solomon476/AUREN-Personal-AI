@@ -175,11 +175,11 @@ interface InsightStatProps {
 }
 
 const InsightStat: React.FC<InsightStatProps> = ({ label, value, icon, color }) => (
-  <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4.5 flex items-center gap-3.5 shadow-subtle-elevation">
+  <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 flex items-center gap-3 shadow-subtle-elevation min-w-0">
     <div className={`flex-shrink-0 ${color}`}>{icon}</div>
-    <div>
-      <p className="text-2xl font-bold text-slate-100 font-mono">{value}</p>
-      <p className="text-xs text-slate-400">{label}</p>
+    <div className="min-w-0 flex-1">
+      <p className="text-2xl font-bold text-slate-100 font-mono leading-tight">{value}</p>
+      <p className="text-xs text-slate-400 break-words leading-snug mt-0.5">{label}</p>
     </div>
   </div>
 );
@@ -203,17 +203,17 @@ export const ReflectionView: React.FC = () => {
   const isLoading = insightsLoading || stalenessLoading || contradictionsLoading;
 
   return (
-    <div className="flex flex-col h-full bg-[#07080c] text-slate-100">
+    <div className="flex flex-col h-full bg-[#07080c] text-slate-100 overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-white/[0.06] px-6 py-5 bg-[#0e1017]/70 backdrop-blur-md">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-champagne-500/10 border border-champagne-500/20 text-champagne-400 shadow-sm">
+      <div className="flex-shrink-0 border-b border-white/[0.06] px-4 sm:px-6 py-4 sm:py-5 bg-[#0e1017]/70 backdrop-blur-md">
+        <div className="flex flex-wrap items-start sm:items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1">
+              <div className="p-2 rounded-xl bg-champagne-500/10 border border-champagne-500/20 text-champagne-400 shadow-sm flex-shrink-0">
                 <Sparkles className="w-5 h-5" />
               </div>
-              <h1 className="text-xl font-bold text-white tracking-tight">Reflective Intelligence</h1>
-              <span className="text-xs text-champagne-300 bg-champagne-400/10 border border-champagne-400/20 px-2.5 py-0.5 rounded-full font-mono">
+              <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">Reflective Intelligence</h1>
+              <span className="text-[11px] text-champagne-300 bg-champagne-400/10 border border-champagne-400/20 px-2.5 py-0.5 rounded-full font-mono whitespace-nowrap">
                 Cognitive Audit
               </span>
             </div>
@@ -224,7 +224,7 @@ export const ReflectionView: React.FC = () => {
           <button
             onClick={() => refetchInsights()}
             disabled={insightsFetching}
-            className="flex items-center gap-2 text-xs text-slate-300 hover:text-white transition-colors px-3.5 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] disabled:opacity-50 shadow-sm cursor-pointer"
+            className="flex-shrink-0 flex items-center gap-2 text-xs text-slate-300 hover:text-white transition-colors px-3.5 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] disabled:opacity-50 shadow-sm cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${insightsFetching ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -232,7 +232,7 @@ export const ReflectionView: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-5 scrollbar-thin">
         {/* Epistemic note */}
         <div className="flex items-start gap-2.5 bg-[#0e111a]/80 border border-white/[0.06] rounded-xl p-3.5 shadow-sm">
           <Info className="w-4 h-4 text-champagne-400 flex-shrink-0 mt-0.5" />
@@ -253,7 +253,7 @@ export const ReflectionView: React.FC = () => {
 
         {/* Insight stats */}
         {insights && (
-          <div className="grid grid-cols-3 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <InsightStat
               label="Potential contradictions"
               value={insights.contradiction_count}

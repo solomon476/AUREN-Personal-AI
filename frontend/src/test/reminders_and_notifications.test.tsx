@@ -20,6 +20,9 @@ import { SettingsView } from '../features/settings/SettingsView';
 import { TaskModal } from '../components/productivity/TaskModal';
 import { TasksView } from '../features/tasks/TasksView';
 import * as productivityApi from '../api/productivity';
+import * as journalApi from '../api/journal';
+import { MessageContent } from '../components/chat/MessageContent';
+import { ReflectionView } from '../features/reflection/ReflectionView';
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual = await importOriginal<any>();
@@ -83,6 +86,31 @@ vi.mock('../api/productivity', async () => {
     ...actual,
     getTasks: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 }),
     getProjects: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 }),
+    getGoals: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 }),
+  };
+});
+
+vi.mock('../api/journal', async () => {
+  const actual = await vi.importActual<any>('../api/journal');
+  return {
+    ...actual,
+    createJournalEntry: vi.fn(),
+    listJournalEntries: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, has_more: false }),
+  };
+});
+
+vi.mock('../api/search', async () => {
+  const actual = await vi.importActual<any>('../api/search');
+  return {
+    ...actual,
+    getReflectionInsights: vi.fn().mockResolvedValue({
+      contradiction_count: 0,
+      staleness_count: 6,
+      inferred_link_count: 0,
+      generated_at: new Date().toISOString(),
+    }),
+    getStaleness: vi.fn().mockResolvedValue({ count: 0, items: [] }),
+    getContradictions: vi.fn().mockResolvedValue({ count: 0, contradictions: [] }),
   };
 });
 
@@ -567,5 +595,77 @@ describe('Smart Reminders, Notifications & Alarms UI', () => {
         notification_id: 'notif-sw-1',
       })
     );
+  });
+
+  it('renders ReflectionView with mobile-safe responsive KPI grid and header wrapping', async () => {
+    const qc = createQueryClient();
+    const { container } = render(
+      <QueryClientProvider client={qc}>
+        <ReflectionView />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Potential contradictions')).toBeInTheDocument();
+    });
+
+    const statsGrid = container.querySelector('.grid.grid-cols-1.sm\\:grid-cols-3');
+    expect(statsGrid).not.toBeNull();
+    const refreshBtn = screen.getByRole('button', { name: /Refresh/i });
+    expect(refreshBtn.className).toContain('flex-shrink-0');
+  });
+
+  it('allows saving a personal journal reflection explicitly from Chatbox proposal card', async () => {
+    const qc = createQueryClient();
+    vi.mocked(journalApi.createJournalEntry).mockResolvedValueOnce({
+      id: 'j-chat-1',
+      user_id: 'user-rem-1',
+      title: 'Evening Study Reflection',
+      content: 'Made solid progress on reminders today.',
+      mood: 'focused',
+      tags: ['study'],
+      is_private: true,
+      entry_date: '2026-11-26',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as any);
+
+    const md = `
+Here is your private journal draft:
+
+\`\`\`auren-action
+{
+  "type": "create_journal",
+  "title": "Evening Study Reflection",
+  "content": "Made solid progress on reminders today.",
+  "mood": "focused",
+  "tags": ["study"]
+}
+\`\`\`
+`;
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MessageContent content={md} role="assistant" />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText('Private Journal Proposal')).toBeInTheDocument();
+    expect(screen.getByText('Evening Study Reflection')).toBeInTheDocument();
+    const saveBtn = screen.getByRole('button', { name: /Save to Personal Journal/i });
+    await userEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(journalApi.createJournalEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Evening Study Reflection',
+          content: 'Made solid progress on reminders today.',
+          mood: 'focused',
+          tags: ['study'],
+          is_private: true,
+        })
+      );
+      expect(screen.getByText('Saved to Personal Journal')).toBeInTheDocument();
+    });
   });
 });

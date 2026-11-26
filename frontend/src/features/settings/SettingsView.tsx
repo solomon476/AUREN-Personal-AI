@@ -221,9 +221,25 @@ export const SettingsView: React.FC = () => {
       if (audibleAlertsEnabled) {
         playAlertSound(reminderSound, defaultReminderBehavior === 'alarm');
       }
-      await sendTestNotification();
+      const res: any = await sendTestNotification();
       queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.notifications(user?.id) });
-      setPushActionStatus('Test notification dispatched to Notification Center and registered devices.');
+      queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user?.id) });
+      const deliveries = Array.isArray(res?.push_deliveries) ? res.push_deliveries : [];
+      const regCount = Number(res?.registered_devices_count ?? deliveries.length);
+      if (regCount === 0) {
+        setPushActionStatus(
+          'In-app alert sent, but 0 push devices are registered yet. Tap "Enable Push on This Device" above first.'
+        );
+      } else {
+        const succeeded = deliveries.filter((d: any) => d.success).length;
+        const failed = deliveries.filter((d: any) => !d.success);
+        if (succeeded > 0 && failed.length === 0) {
+          setPushActionStatus(`Test push sent to ${succeeded} registered device(s) and Notification Center.`);
+        } else {
+          const errText = failed[0]?.error || 'Push gateway rejected delivery';
+          setPushActionStatus(`Delivered in-app (${succeeded}/${regCount} push ok; error: ${errText}).`);
+        }
+      }
     } catch (err: any) {
       setPushActionStatus(err?.message || 'Failed sending test notification.');
     }

@@ -312,7 +312,15 @@ export async function deletePushSubscription(subscriptionId: string): Promise<vo
 
 export async function sendTestNotification(): Promise<{
   notification: NotificationItem;
-  push_deliveries: Array<{ subscription_id: string; success: boolean; status_code?: number }>;
+  registered_devices_count?: number;
+  push_configured?: boolean;
+  push_deliveries: Array<{
+    subscription_id: string;
+    device_label?: string | null;
+    success: boolean;
+    status_code?: number | null;
+    error?: string | null;
+  }>;
 }> {
   return apiClient.post('/notifications/test-push');
 }

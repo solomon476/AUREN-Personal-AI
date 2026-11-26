@@ -83,6 +83,30 @@ export interface PushEnableResult {
   error?: string;
 }
 
+async function getReadyServiceWorkerRegistration(): Promise<ServiceWorkerRegistration> {
+  let reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) {
+    reg = await navigator.serviceWorker.register('/sw.js');
+  }
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    window.setTimeout(
+      () => reject(new Error('Service worker activation timed out. Please reload the app and try again.')),
+      10000
+    )
+  );
+  return Promise.race([navigator.serviceWorker.ready, timeoutPromise]);
+}
+
+function keysMatch(a: ArrayBuffer | null | undefined, expected: Uint8Array): boolean {
+  if (!a) return false;
+  const view = new Uint8Array(a);
+  if (view.byteLength !== expected.byteLength) return false;
+  for (let i = 0; i < view.byteLength; i++) {
+    if (view[i] !== expected[i]) return false;
+  }
+  return true;
+}
+
 /**
  * Must ONLY be invoked inside a direct user interaction (button click)
  * to satisfy browser notification permission policies.
@@ -125,10 +149,16 @@ export async function enableDeviceWebPush(deviceLabel?: string): Promise<PushEna
     };
   }
 
-  const registration = await navigator.serviceWorker.ready;
+  const appServerKey = urlBase64ToUint8Array(vapidInfo.public_key);
+  const registration = await getReadyServiceWorkerRegistration();
   let existingSub = await registration.pushManager.getSubscription();
+  if (existingSub && !keysMatch(existingSub.options?.applicationServerKey, appServerKey)) {
+    // Re-subscribe cleanly if browser holds a subscription signed with an outdated VAPID key
+    await existingSub.unsubscribe().catch(() => {});
+    existingSub = null;
+  }
+
   if (!existingSub) {
-    const appServerKey = urlBase64ToUint8Array(vapidInfo.public_key);
     existingSub = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: appServerKey as unknown as BufferSource,

@@ -73,14 +73,20 @@ export const NotificationBell: React.FC = () => {
 
   const handleEnablePush = async () => {
     setPushMessage(null);
-    const res = await enableDeviceWebPush();
-    if (res.success) {
-      setShowOnboarding(false);
-      setPushMessage('Push alerts activated for this device.');
-      updateProfile.mutate({ preferences: { browser_push_enabled: true } });
-    } else {
-      setShowOnboarding(false);
-      setPushMessage(res.error || 'Could not enable push notifications.');
+    try {
+      const res = await enableDeviceWebPush();
+      if (res.success) {
+        setShowOnboarding(false);
+        setPushMessage('Push alerts activated for this device.');
+        await updateProfile.mutateAsync({ preferences: { browser_push_enabled: true } }).catch(() => {});
+      } else {
+        if (res.permission === 'denied') {
+          setShowOnboarding(false);
+        }
+        setPushMessage(res.error || 'Could not enable push notifications.');
+      }
+    } catch (err: any) {
+      setPushMessage(err?.message || 'Could not register this device for push notifications.');
     }
   };
 

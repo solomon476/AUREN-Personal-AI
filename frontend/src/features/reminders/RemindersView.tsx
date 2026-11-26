@@ -18,25 +18,35 @@ import {
   Repeat,
   RotateCw,
   Search,
+  Smartphone,
   Trash2,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useAuth } from '../../context/AuthContext';
 import {
   Reminder,
   ReminderCreateInput,
   ReminderUpdateInput,
+  sendTestNotification,
 } from '../../api/reminders';
 import {
+  REMINDER_KEYS,
   useCancelReminder,
   useCompleteReminder,
   useCreateReminder,
   useDeleteReminder,
+  usePushSubscriptions,
   useReminders,
   useSnoozeReminder,
   useUpdateReminder,
 } from '../../hooks/useReminders';
 import { useNotificationCenter } from '../../context/NotificationContext';
+import {
+  enableDeviceWebPush,
+  getBrowserNotificationPermission,
+  isWebPushSupported,
+} from '../../lib/pushNotifications';
 import { ReminderModal } from './ReminderModal';
 
 type ReminderTab = 'upcoming' | 'due' | 'recurring' | 'completed' | 'history' | 'notifications';
@@ -58,12 +68,46 @@ function formatInTimezone(iso: string, tz: string): string {
 
 export const RemindersView: React.FC = () => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<ReminderTab>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [pushBannerStatus, setPushBannerStatus] = useState<string | null>(null);
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
 
   const { notifications, completeFromNotification, snoozeFromNotification, markRead } = useNotificationCenter();
+  const { data: pushSubsData } = usePushSubscriptions(user?.id);
+  const activePushSubs = (pushSubsData?.items ?? []).filter((s) => s.is_active);
+  const browserPerm = getBrowserNotificationPermission();
+  const needsPhonePushSetup = Boolean(
+    user && isWebPushSupported() && (browserPerm !== 'granted' || activePushSubs.length === 0)
+  );
+
+  const handleEnablePhonePush = async () => {
+    setIsEnablingPush(true);
+    setPushBannerStatus(null);
+    try {
+      const res = await enableDeviceWebPush();
+      if (res.success) {
+        setPushBannerStatus('Phone/browser push enabled! Sending a quick test alert...');
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user?.id) });
+        const testRes = await sendTestNotification().catch(() => null);
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.notifications(user?.id) });
+        if (testRes?.push_deliveries?.some((d) => d.success)) {
+          setPushBannerStatus('Push alerts active on this device — check your phone notification tray!');
+        } else {
+          setPushBannerStatus('Device registered for Web Push! You will receive due reminder alerts on this device.');
+        }
+      } else {
+        setPushBannerStatus(res.error || 'Could not enable push alerts on this device.');
+      }
+    } catch (err: any) {
+      setPushBannerStatus(err?.message || 'Push registration failed.');
+    } finally {
+      setIsEnablingPush(false);
+    }
+  };
 
   const { data: remindersData, isLoading, refetch } = useReminders(
     activeTab === 'notifications'
@@ -184,6 +228,37 @@ export const RemindersView: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {(needsPhonePushSetup || pushBannerStatus) && (
+          <div className="p-3 rounded-xl bg-emerald-50/90 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-start space-x-2.5 min-w-0">
+              <Smartphone className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-emerald-950">
+                  {browserPerm === 'denied'
+                    ? 'Phone Push Notifications Are Blocked in Browser'
+                    : 'Receive Alerts Even When Tab Is Closed'}
+                </p>
+                <p className="text-[11px] text-emerald-800 leading-snug">
+                  {pushBannerStatus ||
+                    (browserPerm === 'denied'
+                      ? 'Open Chrome/browser Site Settings -> Notifications -> Allow for AUREN, then tap Enable below.'
+                      : 'Tap Enable Phone Alerts to register this device for background push notifications.')}
+                </p>
+              </div>
+            </div>
+            {needsPhonePushSetup && (
+              <button
+                type="button"
+                onClick={handleEnablePhonePush}
+                disabled={isEnablingPush}
+                className="flex-shrink-0 px-3.5 py-2 min-h-[38px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition cursor-pointer disabled:opacity-60"
+              >
+                {isEnablingPush ? 'Activating...' : 'Enable Phone Alerts'}
+              </button>
+            )}
+          </div>
+        )}
 
         {activeTab !== 'notifications' && (
           <div className="relative max-w-md">

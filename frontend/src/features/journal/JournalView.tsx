@@ -330,8 +330,8 @@ export const JournalView: React.FC = () => {
         {/* Right Column: Writing & Reflection Workspace */}
         <div className={`${!isEditing && !selectedEntry ? 'hidden md:flex' : 'flex'} flex-1 flex-col bg-[#07080c] overflow-hidden`}>
           {isEditing ? (
-            <form onSubmit={handleSaveEntry} className="flex-1 flex flex-col h-full overflow-hidden p-3.5 sm:p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+            <form onSubmit={handleSaveEntry} className="flex-1 flex flex-col h-full overflow-y-auto p-3.5 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
                 <div className="flex items-center space-x-2">
                   <button
                     type="button"
@@ -341,62 +341,38 @@ export const JournalView: React.FC = () => {
                         setEditingEntryId(null);
                       }
                     }}
-                    className="md:hidden flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-[#0e1017] border border-white/[0.08] text-xs text-slate-300 hover:text-white touch-target mr-1 cursor-pointer"
+                    className="md:hidden flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-[#0e1017] border border-white/[0.08] text-xs text-slate-300 hover:text-white touch-target mr-1 cursor-pointer flex-shrink-0"
                     aria-label="Back to reflections"
                   >
                     <ChevronLeft className="w-4 h-4 text-slate-400" />
                     <span>Back</span>
                   </button>
-                  <Edit3 className="w-4 h-4 text-champagne-400" />
+                  <Edit3 className="w-4 h-4 text-champagne-400 flex-shrink-0" />
                   <span className="text-sm font-semibold text-slate-200">
                     {editingEntryId ? 'Edit Reflection' : 'New Reflection'}
                   </span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  {/* Write vs Preview Toggle */}
-                  <div className="flex items-center bg-[#0e1017] border border-white/[0.08] rounded-xl p-0.5 mr-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditorTab('write')}
-                      className={`px-3 py-1 text-xs font-medium rounded-lg transition cursor-pointer ${editorTab === 'write'
-                          ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
-                          : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                    >
-                      Write
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditorTab('preview')}
-                      className={`px-3 py-1 text-xs font-medium rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${editorTab === 'preview'
-                          ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
-                          : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Preview</span>
-                    </button>
-                  </div>
-
+                <div className="flex items-center bg-[#0e1017] border border-white/[0.08] rounded-xl p-0.5 flex-shrink-0">
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsEditing(false);
-                      if (!selectedEntry && editingEntryId) {
-                        setEditingEntryId(null);
-                      }
-                    }}
-                    className="px-3.5 py-1.5 rounded-xl border border-white/[0.08] hover:bg-white/[0.06] text-slate-400 hover:text-slate-200 text-xs transition cursor-pointer"
+                    onClick={() => setEditorTab('write')}
+                    className={`px-3 py-1 text-xs font-medium rounded-lg transition cursor-pointer ${editorTab === 'write'
+                        ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
+                        : 'text-slate-400 hover:text-slate-200'
+                      }`}
                   >
-                    Cancel
+                    Write
                   </button>
                   <button
-                    type="submit"
-                    disabled={createMutation.isPending || updateMutation.isPending || !content.trim()}
-                    className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl bg-[#d7ba83] hover:bg-[#e6d4b0] text-[#07080c] text-xs font-semibold transition shadow-sm hover:shadow-[0_0_16px_rgba(215,186,131,0.25)] disabled:opacity-50 cursor-pointer"
+                    type="button"
+                    onClick={() => setEditorTab('preview')}
+                    className={`px-3 py-1 text-xs font-medium rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${editorTab === 'preview'
+                        ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
+                        : 'text-slate-400 hover:text-slate-200'
+                      }`}
                   >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>Save</span>
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Preview</span>
                   </button>
                 </div>
               </div>
@@ -460,16 +436,16 @@ export const JournalView: React.FC = () => {
               </div>
 
               {/* Markdown Content Editor / Preview Tab */}
-              <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 flex flex-col min-h-[200px]">
                 {editorTab === 'write' ? (
                   <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
                     placeholder="Begin your reflection... Markdown formatting supported."
-                    className="w-full flex-1 bg-[#0e1017]/40 border border-white/[0.08] rounded-2xl p-4.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-champagne-500/40 resize-none font-sans leading-relaxed"
+                    className="w-full flex-1 min-h-[200px] bg-[#0e1017]/40 border border-white/[0.08] rounded-2xl p-4 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-champagne-500/40 resize-none font-sans leading-relaxed"
                   />
                 ) : (
-                  <div className="w-full flex-1 bg-[#0e1017]/40 border border-white/[0.08] rounded-2xl p-6 overflow-y-auto">
+                  <div className="w-full flex-1 min-h-[200px] bg-[#0e1017]/40 border border-white/[0.08] rounded-2xl p-5 overflow-y-auto">
                     {content.trim() ? (
                       <MessageContent content={content} role="assistant" />
                     ) : (
@@ -477,6 +453,30 @@ export const JournalView: React.FC = () => {
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Sticky Bottom Save / Cancel Bar (Always reachable & visible on mobile and desktop) */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/[0.06] flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(false);
+                    if (!selectedEntry && editingEntryId) {
+                      setEditingEntryId(null);
+                    }
+                  }}
+                  className="px-4 py-2.5 min-h-[42px] rounded-xl border border-white/[0.08] hover:bg-white/[0.06] text-slate-400 hover:text-slate-200 text-xs font-medium transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending || updateMutation.isPending || !content.trim()}
+                  className="flex items-center space-x-1.5 px-5 py-2.5 min-h-[42px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{createMutation.isPending || updateMutation.isPending ? 'Saving...' : 'Save'}</span>
+                </button>
               </div>
             </form>
           ) : selectedEntry ? (
@@ -496,7 +496,7 @@ export const JournalView: React.FC = () => {
                   <span>Back to Reflections</span>
                 </button>
               </div>
-              <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-4">
                 <div>
                   <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 mb-1.5">
                     <div className="flex items-center space-x-1.5 font-mono">

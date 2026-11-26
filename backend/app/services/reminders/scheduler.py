@@ -117,6 +117,8 @@ class ReminderProcessor:
             return 0
         prefs = NotificationPreferences.from_user_prefs(user_preferences_dict)
         subs = await repo.list_push_subscriptions(user_id, active_only=True)
+        if subs and (not user_preferences_dict or "browser_push_enabled" not in user_preferences_dict):
+            prefs.browser_push_enabled = True
         for reminder in due_list:
             await self.process_single_reminder(repo=repo, reminder=reminder, prefs=prefs, subscriptions=subs, now_utc=now)
         return len(due_list)
@@ -444,6 +446,8 @@ class ReminderProcessor:
                 sub_rows = await conn.fetch(
                     "SELECT * FROM public.get_user_push_subscriptions_rpc($1)", reminder.user_id
                 )
+                if sub_rows and "browser_push_enabled" not in raw_prefs:
+                    prefs.browser_push_enabled = True
                 subs = [
                     PushSubscriptionModel(
                         id=s["id"],

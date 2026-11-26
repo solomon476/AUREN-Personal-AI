@@ -20,7 +20,7 @@ from app.models.reminders import (
     PushSubscriptionPublicView,
     VapidPublicKeyResponse,
 )
-from app.models.user import AuthenticatedUser
+from app.models.user import AuthenticatedUser, UserProfileUpdate
 from app.services.profile_service import profile_service
 from app.services.reminders.base_repository import BaseReminderRepository
 from app.services.reminders.repository import get_reminder_repository
@@ -177,6 +177,13 @@ async def subscribe_web_push(
     repo: BaseReminderRepository = Depends(get_user_notif_repo),
 ) -> PushSubscriptionPublicView:
     saved = await repo.upsert_push_subscription(user_id=current_user.id, sub=payload)
+    try:
+        await profile_service.update_profile(
+            current_user,
+            UserProfileUpdate(preferences={"browser_push_enabled": True}),
+        )
+    except Exception as exc:
+        logger.debug("Non-blocking profile push flag sync warning: %s", exc)
     return PushSubscriptionPublicView(
         id=saved.id,
         endpoint=saved.endpoint,
@@ -230,8 +237,8 @@ async def send_test_notification(
     )
 
     push_results = []
-    if prefs.browser_push_enabled and _web_push.is_configured():
-        subs = await repo.list_push_subscriptions(user_id=current_user.id, active_only=True)
+    subs = await repo.list_push_subscriptions(user_id=current_user.id, active_only=True)
+    if subs and _web_push.is_configured():
         for sub in subs:
             res = await _web_push.send_push(
                 endpoint=sub.endpoint,
@@ -245,10 +252,35 @@ async def send_test_notification(
                     "notification_id": str(notif.id),
                 },
             )
-            push_results.append({"subscription_id": str(sub.id), "success": res.success, "status_code": res.status_code})
+            if res.success:
+                await repo.update_push_subscription_health(
+                    subscription_id=sub.id,
+                    is_active=True,
+                    failure_count=0,
+                    last_error=None,
+                    last_success_at=now,
+                )
+            elif res.expired_subscription:
+                await repo.update_push_subscription_health(
+                    subscription_id=sub.id,
+                    is_active=False,
+                    failure_count=sub.failure_count + 1,
+                    last_error=res.error_detail,
+                )
+            push_results.append(
+                {
+                    "subscription_id": str(sub.id),
+                    "device_label": sub.device_label,
+                    "success": res.success,
+                    "status_code": res.status_code,
+                    "error": res.error_detail,
+                }
+            )
 
     return {
         "notification": notif.model_dump(mode="json"),
+        "registered_devices_count": len(subs),
+        "push_configured": _web_push.is_configured(),
         "push_deliveries": push_results,
     }
 
