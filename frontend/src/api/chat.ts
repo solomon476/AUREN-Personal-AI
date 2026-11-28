@@ -36,10 +36,28 @@ export interface ChatMessage {
   };
 }
 
+export interface ExecutedAppAction {
+  action_type: string;
+  status: 'executed' | 'requires_confirmation' | 'failed' | 'skipped';
+  domain: string;
+  summary: string;
+  entity_id?: string | null;
+  navigate_to?: string | null;
+  error?: string | null;
+}
+
+export interface ChatAppActionEvent {
+  actions: ExecutedAppAction[];
+  domains: string[];
+  navigate_to?: string | null;
+  updated_preferences?: Record<string, any> | null;
+}
+
 export interface ChatStreamCallbacks {
   onMetadata?: (meta: { conversation_id: string; user_message_id: string; title: string }) => void;
   onToken?: (token: string) => void;
   onReminderAction?: (ev: { action: string; reminder: any; summary?: string }) => void;
+  onAppAction?: (ev: ChatAppActionEvent) => void;
   onDone?: (done: { message_id: string; finish_reason?: string; model?: string }) => void;
   onError?: (error: string) => void;
 }
@@ -190,6 +208,8 @@ export async function streamChat(
           callbacks?.onToken?.(parsed?.text ?? currentData);
         } else if (currentEvent === 'reminder_action' && parsed) {
           callbacks?.onReminderAction?.(parsed);
+        } else if (currentEvent === 'app_action' && parsed) {
+          callbacks?.onAppAction?.(parsed);
         } else if (currentEvent === 'done' && parsed) {
           callbacks?.onDone?.(parsed);
         } else if (currentEvent === 'error') {

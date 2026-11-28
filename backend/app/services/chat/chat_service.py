@@ -37,39 +37,56 @@ from app.services.llm.factory import get_llm_provider
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are AUREN, an intelligent, private, and premium personal AI assistant.
-Your goal is to provide concise, structured, thoughtful, and deeply helpful assistance to the user.
-Communicate clearly, avoid unnecessary filler, and maintain a calm, highly capable demeanor.
+SYSTEM_PROMPT = """You are AUREN, an intelligent, private, and premium personal AI command center assistant.
+Your goal is to provide concise, structured, thoughtful, and deeply helpful assistance AND execute user instructions across AUREN whenever requested.
+Communicate clearly, avoid unnecessary filler, and verify database outcomes before claiming success.
 
-When the user asks you to create a task, schedule an item, break down a goal into actionable steps, or mark an item as done, provide a clear explanation and propose actionable items using structured JSON blocks tagged with language `auren-action`.
+You control AUREN domains via structured JSON blocks tagged with language `auren-action`. Non-destructive actions (`create_*`, `update_*`, `complete_*`, `snooze_*`, `cancel_*`, `confirm_memory`, `correct_memory`, `archive_memory`, `create_connection_invite`, `accept_connection_invite`, `toggle_location_sharing`, `create_journey`, `update_settings`, `navigate`) execute automatically on the backend when emitted. Destructive deletions (`delete_*`, `reject_memory`, `revoke_connection`) always present a 1-tap confirmation button to the user.
+
 Example:
 ```auren-action
 {
   "type": "create_task",
   "title": "Review marketing plan draft",
   "priority": "high",
-  "due_date": "2026-11-25"
+  "due_date": "2026-11-29T15:00:00+03:00"
 }
 ```
 Supported action schemas:
-- `create_task`: {"type": "create_task", "title": string, "priority": "low"|"medium"|"high"|"urgent", "due_date"?: "ISO-8601 datetime or YYYY-MM-DD", "reminder_mode"?: "before_due"|"at_due"|"none", "reminder_offset_minutes"?: number}
-- `complete_task`: {"type": "complete_task", "title": string, "task_id"?: string}
-- `create_project`: {"type": "create_project", "name": string, "description"?: string}
-- `create_goal`: {"type": "create_goal", "title": string, "description"?: string, "target_date"?: string}
-- `create_journal`: {"type": "create_journal", "title"?: string, "content": string, "mood"?: "focused"|"energized"|"calm"|"reflective"|"tired"|"anxious", "tags"?: string[]}
-
-Note on Personal Journals: Private Journal storage is strictly isolated so you NEVER retrieve or read stored journal entries. However, if the user explicitly asks you to write, log, or save a new personal journal reflection, draft it cleanly inside a `create_journal` `auren-action` block so the user can review and tap "Save to Personal Journal".
+- Tasks:
+  - `create_task`: {"type": "create_task", "title": string, "priority"?: "low"|"medium"|"high"|"urgent", "due_date"?: "ISO-8601 datetime or YYYY-MM-DD", "project_name"?: string, "goal_title"?: string, "reminder_mode"?: "before_due"|"at_due"|"none", "reminder_offset_minutes"?: number, "reminder_is_alarm"?: boolean}
+  - `update_task`: {"type": "update_task", "target_title": string, "task_id"?: string, "new_title"?: string, "priority"?: string, "status"?: "todo"|"in_progress"|"blocked"|"completed"|"cancelled", "due_date"?: string, "description"?: string}
+  - `complete_task`: {"type": "complete_task", "title": string, "task_id"?: string}
+  - `delete_task`: {"type": "delete_task", "title": string, "task_id"?: string}
+- Projects & Goals:
+  - `create_project`: {"type": "create_project", "name": string, "description"?: string, "target_date"?: "YYYY-MM-DD"}
+  - `update_project`: {"type": "update_project", "target_name": string, "new_name"?: string, "status"?: "planning"|"active"|"on_hold"|"completed"|"cancelled"|"archived", "target_date"?: "YYYY-MM-DD"}
+  - `delete_project`: {"type": "delete_project", "name": string, "project_id"?: string}
+  - `create_goal`: {"type": "create_goal", "title": string, "description"?: string, "target_date"?: "YYYY-MM-DD"}
+  - `update_goal`: {"type": "update_goal", "target_title": string, "new_title"?: string, "status"?: "not_started"|"in_progress"|"achieved"|"paused"|"abandoned"|"completed", "current_value"?: number}
+  - `delete_goal`: {"type": "delete_goal", "title": string, "goal_id"?: string}
+- Private Journal (Write-only isolation: NEVER read or retrieve stored journals; create when asked):
+  - `create_journal`: {"type": "create_journal", "title"?: string, "content": string, "mood"?: "focused"|"energized"|"calm"|"reflective"|"tired"|"anxious", "tags"?: string[]}
+- Long-Term Memories:
+  - `create_memory`: {"type": "create_memory", "content": string, "memory_type"?: "fact"|"preference"|"goal"|"project"|"context"|"observation", "category"?: "personal"|"work"|"technical"|"health_lifestyle"|"financial"|"general", "importance"?: 1-5}
+  - `correct_memory`: {"type": "correct_memory", "target_content": string, "new_content": string}
+  - `archive_memory`: {"type": "archive_memory", "target_content": string}
+  - `reject_memory`: {"type": "reject_memory", "target_content": string}
+- Connections & Journeys:
+  - `create_connection_invite`: {"type": "create_connection_invite", "display_name": string}
+  - `accept_connection_invite`: {"type": "accept_connection_invite", "invite_code": string}
+  - `toggle_location_sharing`: {"type": "toggle_location_sharing", "enabled": boolean, "duration_minutes"?: number}
+  - `create_journey`: {"type": "create_journey", "title": string, "assignment_site"?: string, "assignment_purpose"?: string, "assignment_notes"?: string}
+- Settings Preferences & Navigation:
+  - `update_settings`: {"type": "update_settings", "theme"?: "light"|"dark"|"midnight"|"obsidian", "timezone"?: string, "quiet_hours_enabled"?: boolean, "quiet_hours_start"?: "HH:MM", "quiet_hours_end"?: "HH:MM", "audible_alerts_enabled"?: boolean, "reminder_sound"?: "chime"|"bell"|"pulse"|"gentle"|"silent", "hide_sensitive_lockscreen"?: boolean, "auto_remind_new_tasks"?: boolean, "default_snooze_minutes"?: number, "ai_tone"?: string}
+  - `navigate`: {"type": "navigate", "path": "/home"|"/tasks"|"/projects"|"/goals"|"/productivity"|"/reminders"|"/journal"|"/reflection"|"/settings"|"/memories"|"/connections"|"/operations"|"/journeys"|"/search"|"/system"}
 
 When the user asks to create, edit, reschedule, snooze, cancel, or complete a reminder or alarm:
-- Check the `[VERIFIED REMINDER DATABASE RESULT]` or `[REMINDER AMBIGUITY DETECTED]` system note carefully!
-- If `[REMINDER AMBIGUITY DETECTED]` is present, DO NOT claim a reminder was set. Politely ask the user to clarify the ambiguous time/date before scheduling.
-- If `[VERIFIED REMINDER DATABASE RESULT: SUCCEEDED]` is present, confirm accurately using ONLY the exact saved title, scheduled local time, timezone, and recurrence reported there.
-- If `[VERIFIED REMINDER DATABASE RESULT: FAILED]` is present, DO NOT claim the reminder was created or updated. Report the failure honestly.
-- Only if no `[VERIFIED REMINDER DATABASE RESULT]` was already processed by the server AND the time/date is completely unambiguous, you may emit an `auren-action` block with `create_reminder`, which the backend will execute and verify immediately:
-  {"type": "create_reminder", "title": string, "trigger_at": "ISO-8601 UTC or offset", "timezone"?: string, "is_alarm"?: boolean}
-
-When the user states they have completed, finished, or want to mark off a task (e.g. "I'm done with...", "mark X as done/completed"), acknowledge their accomplishment warmly and output an `auren-action` block with type `complete_task` and the task title or task_id so it is marked off in their task tracker.
-Present new task/project creation actions as proposals ready for user confirmation."""
+- Check `[VERIFIED REMINDER DATABASE RESULT]` or `[REMINDER AMBIGUITY DETECTED]` carefully!
+- If `[REMINDER AMBIGUITY DETECTED]`, ask to clarify before scheduling.
+- If `[VERIFIED REMINDER DATABASE RESULT: FAILED]`, report failure honestly.
+- If no `[VERIFIED REMINDER DATABASE RESULT]` was already processed server-side, emit `create_reminder` / `update_reminder` / `complete_reminder` / `snooze_reminder` / `cancel_reminder` inside an `auren-action` block.
+Note: browser notification permission cannot be toggled by the server; if the user wants phone alerts enabled and permission isn't granted, navigate to `/reminders` or `/settings` so they can tap the button."""
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +118,7 @@ def requires_productivity_context(query: str) -> bool:
         "timetable", "routine", "syllabus", "units", "unit", "study", "exam", "revision",
         "target", "targets", "curriculum", "course", "program", "assignment",
         "done", "finished", "completed", "complete", "mark off", "mark as", "finish",
+        "reschedule", "rename", "move", "delete", "edit",
     ]
     return any(kw in cleaned for kw in PRODUCTIVITY_KEYWORDS)
 
@@ -765,49 +783,52 @@ class ChatService:
                 if not full_response.strip():
                     full_response = "I encountered an issue generating a response. Please try asking again."
 
-                # Post-stream verification: if LLM emitted an unexecuted `create_reminder` action block
-                # (e.g. complex phrasing not matched pre-stream), execute it on backend and verify save.
-                if not reminder_outcome.handled and "create_reminder" in full_response:
+                # Execute structured `auren-action` commands across all AUREN domains (non-destructive auto-exec)
+                executed_actions_meta: list[dict[str, Any]] = []
+                if "auren-action" in full_response or "auren_action" in full_response:
                     try:
-                        import re as _re
-                        from app.models.reminders import ReminderCreate, ReminderPriority, ReminderSource, ReminderType
-                        matches = _re.findall(r"```auren-action\s*(.*?)```", full_response, flags=_re.DOTALL | _re.IGNORECASE)
-                        for raw_block in matches:
-                            try:
-                                act_data = json.loads(raw_block.strip())
-                            except Exception:
-                                continue
-                            act_list = act_data if isinstance(act_data, list) else [act_data]
-                            for act in act_list:
-                                if isinstance(act, dict) and act.get("type") == "create_reminder" and act.get("trigger_at"):
-                                    saved_rem = await rem_repo.create_reminder(
-                                        user_id=user.id,
-                                        reminder=ReminderCreate(
-                                            title=str(act.get("title") or "Personal Reminder")[:255],
-                                            description=act.get("description"),
-                                            reminder_type=ReminderType.alarm if act.get("is_alarm") else ReminderType.general,
-                                            trigger_at=datetime.fromisoformat(str(act["trigger_at"]).replace("Z", "+00:00")),
-                                            timezone=str(act.get("timezone") or notif_prefs.timezone or "UTC"),
-                                            is_alarm=bool(act.get("is_alarm", False)),
-                                            priority=ReminderPriority.alarm if act.get("is_alarm") else ReminderPriority.normal,
-                                            source=ReminderSource.chat,
-                                        ),
-                                    )
-                                    reminder_outcome = ConversationalReminderOutcome(
-                                        handled=True,
-                                        status="created",
-                                        reminder=saved_rem,
-                                        summary_text=f"Saved reminder '{saved_rem.title}'",
-                                    )
-                                    rem_event = {
-                                        "action": "created",
-                                        "reminder": saved_rem.model_dump(mode="json"),
-                                        "summary": reminder_outcome.summary_text,
-                                    }
-                                    yield f"event: reminder_action\ndata: {json.dumps(rem_event)}\n\n"
-                    except Exception as post_rem_err:
-                        logger.warning("Post-stream reminder action save failed: %s", post_rem_err)
-                        fail_note = f"\n\n> ⚠️ Could not save reminder to database ({post_rem_err})."
+                        from app.services.chat.command_executor import ChatCommandExecutor
+
+                        cmd_executor = ChatCommandExecutor(
+                            user=user,
+                            default_timezone=user_tz_obj.key,
+                            skip_prehandled_reminder=reminder_outcome.handled,
+                            rem_repo=rem_repo,
+                        )
+                        cmd_batch = await cmd_executor.execute_blocks_from_text(full_response)
+                        executed_actions_meta = [r.to_dict() for r in cmd_batch.results]
+
+                        if cmd_batch.reminder_created_or_updated and not reminder_outcome.handled:
+                            saved_rem = cmd_batch.reminder_created_or_updated
+                            reminder_outcome = ConversationalReminderOutcome(
+                                handled=True,
+                                status=cmd_batch.reminder_action_status or "updated",
+                                reminder=saved_rem,
+                                summary_text=f"Updated reminder '{saved_rem.title}'",
+                            )
+                            rem_event = {
+                                "action": reminder_outcome.status,
+                                "reminder": saved_rem.model_dump(mode="json"),
+                                "summary": reminder_outcome.summary_text,
+                            }
+                            yield f"event: reminder_action\ndata: {json.dumps(rem_event)}\n\n"
+
+                        if cmd_batch.has_events():
+                            app_event = {
+                                "actions": executed_actions_meta,
+                                "domains": sorted(cmd_batch.domains),
+                                "navigate_to": cmd_batch.navigate_to,
+                                "updated_preferences": cmd_batch.updated_preferences,
+                            }
+                            yield f"event: app_action\ndata: {json.dumps(app_event)}\n\n"
+
+                        if cmd_batch.failures:
+                            fail_note = "\n\n> ⚠️ " + " | ".join(cmd_batch.failures)
+                            full_response += fail_note
+                            yield f"event: token\ndata: {json.dumps({'text': fail_note})}\n\n"
+                    except Exception as cmd_err:
+                        logger.warning("Post-stream ChatCommandExecutor warning: %s", cmd_err)
+                        fail_note = f"\n\n> ⚠️ Could not execute requested command ({cmd_err})."
                         full_response += fail_note
                         yield f"event: token\ndata: {json.dumps({'text': fail_note})}\n\n"
 
@@ -817,6 +838,7 @@ class ChatService:
                     "idempotency_key": request.idempotency_key,
                     "retrieved_memories": retrieved_memories_data,
                     "productivity_context": productivity_context_data,
+                    "executed_actions": executed_actions_meta,
                     "reminder_action": (
                         {
                             "status": reminder_outcome.status,

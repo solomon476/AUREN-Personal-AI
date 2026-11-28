@@ -11,6 +11,25 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MessageContent } from '../components/chat/MessageContent';
 import * as productivityApi from '../api/productivity';
+import * as settingsApi from '../api/settings';
+import * as memoriesApi from '../api/memories';
+
+vi.mock('../api/settings', async () => {
+  const actual = await vi.importActual<any>('../api/settings');
+  return {
+    ...actual,
+    updateUserProfile: vi.fn(),
+  };
+});
+
+vi.mock('../api/memories', async () => {
+  const actual = await vi.importActual<any>('../api/memories');
+  return {
+    ...actual,
+    createMemory: vi.fn(),
+    listMemories: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  };
+});
 
 vi.mock('../context/AuthContext', async (importOriginal) => {
   const actual = await importOriginal<any>();
@@ -332,5 +351,85 @@ Here is a suggested task for your review:
 
     // createTask must NOT have been called a second time (prevented duplicate!)
     expect(productivityApi.createTask).toHaveBeenCalledTimes(1);
+  });
+
+  it('respects server-executed app actions without duplicating writes and supports delete, settings, memory & navigation cards', async () => {
+    const qc = createTestQueryClient();
+    const onNavigate = vi.fn();
+
+    // 1. Server pre-executed action skips client re-creation
+    const executedMd = `
+\`\`\`auren-action
+{
+  "type": "create_task",
+  "title": "Server Executed Task"
+}
+\`\`\`
+`;
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <MessageContent
+          content={executedMd}
+          role="assistant"
+          executedActions={[
+            {
+              action_type: 'create_task',
+              status: 'executed',
+              domain: 'tasks',
+              summary: "Created task 'Server Executed Task'",
+            },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+    expect(screen.getByText('Added to Life Management')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add to tasks/i })).not.toBeInTheDocument();
+    expect(productivityApi.createTask).not.toHaveBeenCalled();
+    unmount();
+
+    // 2. Interactive Settings, Memory, Confirm Delete Task, and Navigation command cards
+    vi.mocked(settingsApi.updateUserProfile).mockResolvedValueOnce({} as any);
+    vi.mocked(memoriesApi.createMemory).mockResolvedValueOnce({ id: 'mem-1', content: 'Prefer morning study' } as any);
+
+    const commandsMd = `
+\`\`\`auren-action
+[
+  { "type": "update_settings", "theme": "dark", "quiet_hours_enabled": true },
+  { "type": "create_memory", "content": "Prefer morning study", "memory_type": "preference" },
+  { "type": "delete_task", "task_id": "task-del-1", "title": "Old Draft" },
+  { "type": "navigate", "path": "/tasks" }
+]
+\`\`\`
+`;
+    render(
+      <QueryClientProvider client={qc}>
+        <MessageContent content={commandsMd} role="assistant" onNavigate={onNavigate} />
+      </QueryClientProvider>
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Apply Preferences/i }));
+    await waitFor(() => {
+      expect(settingsApi.updateUserProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preferences: expect.objectContaining({ theme: 'dark', quiet_hours_enabled: true }),
+        })
+      );
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /Save Memory Update/i }));
+    await waitFor(() => {
+      expect(memoriesApi.createMemory).toHaveBeenCalledWith(
+        expect.objectContaining({ content: 'Prefer morning study', memory_type: 'preference' })
+      );
+    });
+
+    const deleteSpy = vi.spyOn(productivityApi, 'deleteTask').mockResolvedValueOnce(undefined);
+    await userEvent.click(screen.getByRole('button', { name: /Confirm Delete/i }));
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith('task-del-1');
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /Open \/tasks/i }));
+    expect(onNavigate).toHaveBeenCalledWith('/tasks');
   });
 });

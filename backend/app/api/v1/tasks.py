@@ -1,6 +1,6 @@
 """API endpoints for Tasks Management in AUREN Phase 3C.4 Productivity Core with Smart Reminder integration."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 import logging
 from typing import Optional
 from uuid import UUID
@@ -16,21 +16,16 @@ from app.models.productivity import (
     TaskStatus,
     TaskUpdate,
 )
-from app.models.reminders import (
-    NotificationPreferences,
-    ReminderCreate,
-    ReminderListResponse,
-    ReminderModel,
-    ReminderPriority,
-    ReminderSource,
-    ReminderType,
-)
+from app.models.reminders import ReminderListResponse
 from app.models.user import AuthenticatedUser
-from app.services.profile_service import profile_service
 from app.services.productivity.base_repository import BaseProductivityRepository
 from app.services.productivity.repository import get_productivity_repository
+from app.services.productivity.task_reminder_sync import (
+    apply_task_create_reminder_sync,
+    apply_task_update_reminder_sync,
+    load_user_notif_prefs,
+)
 from app.services.reminders.repository import get_reminder_repository
-from app.services.reminders.time_utils import ensure_utc
 
 logger = logging.getLogger(__name__)
 
@@ -43,76 +38,6 @@ def get_user_productivity_repo(
     return get_productivity_repository(user_token=current_user.token)
 
 
-async def _load_user_notif_prefs(user: AuthenticatedUser) -> NotificationPreferences:
-    try:
-        profile = await profile_service.get_profile(user)
-        return NotificationPreferences.from_user_prefs(profile.preferences)
-    except Exception:
-        return NotificationPreferences()
-
-
-async def _sync_task_reminder(
-    user: AuthenticatedUser,
-    task: TaskModel,
-    reminder_mode: Optional[str],
-    reminder_offset_minutes: Optional[int],
-    reminder_at: Optional[datetime],
-    reminder_is_alarm: Optional[bool],
-    reminder_timezone: Optional[str],
-) -> Optional[ReminderModel]:
-    """Create or update a deduplicated task-linked reminder without confusing deadline vs trigger time."""
-    if not reminder_mode or reminder_mode == "none":
-        if reminder_at is None:
-            return None
-        reminder_mode = "custom"
-
-    prefs = await _load_user_notif_prefs(user)
-    tz_name = reminder_timezone or prefs.timezone or "UTC"
-    rem_repo = get_reminder_repository(user_token=user.token)
-
-    if reminder_mode == "at_due":
-        if not task.due_date:
-            return None
-        trig_utc = ensure_utc(task.due_date, tz_name)
-        r_type = ReminderType.task_due
-        dedupe = f"task:{task.id}:due"
-    elif reminder_mode == "before_due":
-        if not task.due_date:
-            return None
-        offset = reminder_offset_minutes if reminder_offset_minutes is not None else prefs.task_default_lead_minutes
-        trig_utc = ensure_utc(task.due_date, tz_name) - timedelta(minutes=max(1, offset))
-        r_type = ReminderType.task_before_due
-        dedupe = f"task:{task.id}:before_due"
-    else:  # custom explicit reminder timestamp independent of task due_date
-        if not reminder_at:
-            return None
-        trig_utc = ensure_utc(reminder_at, tz_name)
-        r_type = ReminderType.alarm if reminder_is_alarm else ReminderType.general
-        dedupe = f"task:{task.id}:custom:{trig_utc.isoformat()}"
-
-    is_alarm = bool(reminder_is_alarm)
-    prio = ReminderPriority.alarm if is_alarm else (
-        ReminderPriority.high if task.priority.value in ("urgent", "high") else ReminderPriority.normal
-    )
-    return await rem_repo.create_reminder(
-        user_id=user.id,
-        reminder=ReminderCreate(
-            title=task.title,
-            description=task.description or (f"Deadline: {task.due_date.isoformat()}" if task.due_date else None),
-            reminder_type=r_type,
-            trigger_at=trig_utc,
-            timezone=tz_name,
-            priority=prio,
-            is_alarm=is_alarm,
-            task_id=task.id,
-            project_id=task.project_id,
-            goal_id=task.goal_id,
-            source=ReminderSource.task_sync,
-            dedupe_key=dedupe,
-        ),
-    )
-
-
 @router.post("", response_model=TaskModel, status_code=status.HTTP_201_CREATED)
 async def create_task(
     task_in: TaskCreate,
@@ -123,42 +48,11 @@ async def create_task(
     try:
         created = await repo.create_task(user_id=current_user.id, task=task_in)
         try:
-            prefs = await _load_user_notif_prefs(current_user)
-            if task_in.reminder_mode == "none":
-                pass  # User explicitly opted out of reminder for this task
-            elif task_in.reminder_mode or task_in.reminder_at:
-                await _sync_task_reminder(
-                    user=current_user,
-                    task=created,
-                    reminder_mode=task_in.reminder_mode,
-                    reminder_offset_minutes=task_in.reminder_offset_minutes,
-                    reminder_at=task_in.reminder_at,
-                    reminder_is_alarm=task_in.reminder_is_alarm,
-                    reminder_timezone=task_in.reminder_timezone,
-                )
-            elif (
-                prefs.auto_remind_new_tasks
-                and created.due_date is not None
-                and created.status not in (TaskStatus.completed, TaskStatus.cancelled)
-            ):
-                now_utc = datetime.now(timezone.utc)
-                due_utc = ensure_utc(created.due_date, prefs.timezone or "UTC")
-                if due_utc > now_utc:
-                    lead = max(0, int(prefs.task_default_lead_minutes))
-                    auto_mode = (
-                        "before_due"
-                        if lead > 0 and (due_utc - timedelta(minutes=lead)) > now_utc
-                        else "at_due"
-                    )
-                    await _sync_task_reminder(
-                        user=current_user,
-                        task=created,
-                        reminder_mode=auto_mode,
-                        reminder_offset_minutes=lead if auto_mode == "before_due" else None,
-                        reminder_at=None,
-                        reminder_is_alarm=(prefs.default_reminder_behavior == "alarm"),
-                        reminder_timezone=task_in.reminder_timezone or prefs.timezone,
-                    )
+            await apply_task_create_reminder_sync(
+                user=current_user,
+                task_in=task_in,
+                created=created,
+            )
         except Exception as rem_err:
             logger.warning("Task created but reminder creation warning for task %s: %s", created.id, rem_err)
         return created
@@ -243,55 +137,12 @@ async def update_task(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found.")
 
         try:
-            prefs = await _load_user_notif_prefs(current_user)
-            rem_repo = get_reminder_repository(user_token=current_user.token)
-            # Suppress future task reminders on completion/cancellation if configured
-            if task.status in (TaskStatus.completed, TaskStatus.cancelled) and prefs.suppress_reminders_on_task_complete:
-                await rem_repo.suppress_task_reminders(user_id=current_user.id, task_id=task.id)
-            else:
-                # Reschedule task-linked reminders when task due_date changes
-                if update_in.due_date is not None and update_in.due_date != existing.due_date and prefs.auto_reschedule_task_reminders:
-                    await rem_repo.reschedule_task_reminders(
-                        user_id=current_user.id,
-                        task_id=task.id,
-                        new_due_date=update_in.due_date,
-                        default_lead_minutes=prefs.task_default_lead_minutes,
-                    )
-                if update_in.reminder_mode or update_in.reminder_at:
-                    await _sync_task_reminder(
-                        user=current_user,
-                        task=task,
-                        reminder_mode=update_in.reminder_mode,
-                        reminder_offset_minutes=update_in.reminder_offset_minutes,
-                        reminder_at=update_in.reminder_at,
-                        reminder_is_alarm=update_in.reminder_is_alarm,
-                        reminder_timezone=update_in.reminder_timezone,
-                    )
-                elif (
-                    existing.due_date is None
-                    and update_in.due_date is not None
-                    and update_in.reminder_mode is None
-                    and update_in.reminder_at is None
-                    and prefs.auto_remind_new_tasks
-                ):
-                    now_utc = datetime.now(timezone.utc)
-                    due_utc = ensure_utc(update_in.due_date, prefs.timezone or "UTC")
-                    if due_utc > now_utc:
-                        lead = max(0, int(prefs.task_default_lead_minutes))
-                        auto_mode = (
-                            "before_due"
-                            if lead > 0 and (due_utc - timedelta(minutes=lead)) > now_utc
-                            else "at_due"
-                        )
-                        await _sync_task_reminder(
-                            user=current_user,
-                            task=task,
-                            reminder_mode=auto_mode,
-                            reminder_offset_minutes=lead if auto_mode == "before_due" else None,
-                            reminder_at=None,
-                            reminder_is_alarm=(prefs.default_reminder_behavior == "alarm"),
-                            reminder_timezone=update_in.reminder_timezone or prefs.timezone,
-                        )
+            await apply_task_update_reminder_sync(
+                user=current_user,
+                existing=existing,
+                updated=task,
+                update_in=update_in,
+            )
         except Exception as rem_err:
             logger.warning("Task updated reminder-sync warning for %s: %s", task.id, rem_err)
 
@@ -323,7 +174,7 @@ async def change_task_status(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found.")
         if new_status in (TaskStatus.completed, TaskStatus.cancelled):
             try:
-                prefs = await _load_user_notif_prefs(current_user)
+                prefs = await load_user_notif_prefs(current_user)
                 if prefs.suppress_reminders_on_task_complete:
                     rem_repo = get_reminder_repository(user_token=current_user.token)
                     await rem_repo.suppress_task_reminders(user_id=current_user.id, task_id=task.id)

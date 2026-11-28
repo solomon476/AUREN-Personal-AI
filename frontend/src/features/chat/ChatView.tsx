@@ -32,9 +32,11 @@ import { useSafeSearch } from '../../hooks/useSafeSearch';
 import {
   AttachmentItem,
   ChatMessage,
+  ExecutedAppAction,
   streamChat
 } from '../../api/chat';
 import { useAuth } from '../../context/AuthContext';
+import { ThemeMode, useTheme } from '../../context/ThemeContext';
 import {
   useConversations,
   useCreateConversation,
@@ -44,6 +46,10 @@ import {
 import { useConversationMessages, useInvalidateMessages } from '../../hooks/useConversationMessages';
 import { useQueryClient } from '@tanstack/react-query';
 import { REMINDER_KEYS } from '../../hooks/useReminders';
+import { PRODUCTIVITY_KEYS } from '../../hooks/useProductivity';
+import { JOURNAL_KEYS } from '../../hooks/useJournal';
+import { SETTINGS_KEYS } from '../../hooks/useSettings';
+import { memoryKeys } from '../../hooks/useMemories';
 import { MessageContent } from '../../components/chat/MessageContent';
 import { RenameConversationModal } from '../../components/chat/RenameConversationModal';
 import { DeleteConversationModal } from '../../components/chat/DeleteConversationModal';
@@ -56,8 +62,10 @@ interface ChatViewProps {
 
 export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversationId }) => {
   const { user } = useAuth();
+  const { setTheme } = useTheme();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const streamExecutedActionsRef = useRef<ExecutedAppAction[]>([]);
   const routeParams = useParams({ strict: false }) as { conversationId?: string };
 
   const activeConversationId = propConversationId || routeParams?.conversationId || null;
@@ -473,6 +481,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
   ) => {
     setIsStreaming(true);
     setErrorMessage(null);
+    streamExecutedActionsRef.current = [];
     let accumulatedContent = '';
     if (attempt === 0) {
       setStreamingContent('');
@@ -499,6 +508,38 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
             queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
             queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.notifications(user?.id) });
           },
+          onAppAction: (ev) => {
+            if (Array.isArray(ev.actions)) {
+              streamExecutedActionsRef.current = ev.actions;
+            }
+            const domains = new Set(ev.domains || []);
+            if (domains.has('tasks') || domains.has('projects') || domains.has('goals')) {
+              queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.all });
+            }
+            if (domains.has('reminders')) {
+              queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
+              queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.notifications(user?.id) });
+            }
+            if (domains.has('journal')) {
+              queryClient.invalidateQueries({ queryKey: JOURNAL_KEYS.all });
+            }
+            if (domains.has('memories')) {
+              queryClient.invalidateQueries({ queryKey: memoryKeys.lists() });
+            }
+            if (domains.has('settings')) {
+              queryClient.invalidateQueries({ queryKey: SETTINGS_KEYS.profile(user?.id) });
+              const themeVal = ev.updated_preferences?.theme;
+              if (themeVal && ['light', 'dark', 'midnight', 'obsidian'].includes(String(themeVal))) {
+                setTheme(String(themeVal) as ThemeMode);
+              }
+            }
+            if (ev.navigate_to) {
+              const targetRoute = ev.navigate_to;
+              window.setTimeout(() => {
+                navigate({ to: targetRoute as any });
+              }, 250);
+            }
+          },
           onDone: (done) => {
             const assistantMessage: ChatMessage = {
               id: done?.message_id || `assistant-${Date.now()}`,
@@ -506,6 +547,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
               role: 'assistant',
               content: accumulatedContent,
               created_at: new Date().toISOString(),
+              metadata:
+                streamExecutedActionsRef.current.length > 0
+                  ? { executed_actions: streamExecutedActionsRef.current }
+                  : undefined,
             };
             setMessages((prev) => [...prev, assistantMessage]);
             setStreamingContent('');
@@ -987,7 +1032,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                           }
                           return (
                             <>
-                              <MessageContent content={msg.content} role={msg.role} conversationId={activeConversationId || undefined} messageId={msg.id} />
+                              <MessageContent
+                                content={msg.content}
+                                role={msg.role}
+                                conversationId={activeConversationId || undefined}
+                                messageId={msg.id}
+                                executedActions={msg.metadata?.executed_actions as ExecutedAppAction[] | undefined}
+                                onNavigate={(path) => navigate({ to: path as any })}
+                              />
                               {Boolean(msg.metadata?.interrupted) && (
                                 <div className="mt-2 text-[10px] text-amber-600 italic font-mono">
                                   (Stream interrupted)
@@ -1015,7 +1067,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ conversationId: propConversa
                   </div>
                   <div className="max-w-[92%] sm:max-w-[78%] rounded-2xl p-4 sm:p-5 text-xs sm:text-sm leading-relaxed bg-slate-50 text-slate-900 border border-slate-200 shadow-sm rounded-tl-sm">
                     {streamingContent ? (
-                      <MessageContent content={streamingContent} role="assistant" conversationId={activeConversationId || undefined} />
+                      <MessageContent
+                        content={streamingContent}
+                        role="assistant"
+                        conversationId={activeConversationId || undefined}
+                        onNavigate={(path) => navigate({ to: path as any })}
+                      />
                     ) : (
                       <div className="flex flex-col space-y-1">
                         <span className="inline-flex items-center space-x-2 text-slate-600 text-xs font-medium">

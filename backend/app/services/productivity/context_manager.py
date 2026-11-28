@@ -50,8 +50,7 @@ class ProductivityContextManager:
             "--- USER PRODUCTIVITY CONTEXT (READ-ONLY) ---",
             "The following structured data reflects the user's current productivity records.",
             "Use this context to accurately answer questions about their tasks, projects, and goals.",
-            "POLICY: You are strictly read-only. You cannot directly create, update, complete, or delete tasks or projects.",
-            "You may suggest concrete next steps, drafts, or breakdowns, and prompt the user to confirm or use the Productivity UI.",
+            "POLICY: You are strictly read-only on this context block itself—to create, update, reschedule, complete, or manage tasks, projects, or goals at the user's request, emit a structured `auren-action` JSON block so the command executor runs it and reports verified results (or prompts confirmation for deletes).",
             "",
         ]
 

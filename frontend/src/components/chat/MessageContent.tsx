@@ -24,13 +24,37 @@ import {
   RefreshCw,
   BellRing,
   BookOpen,
+  Trash2,
+  SlidersHorizontal,
+  Brain,
+  Compass,
+  Users,
+  Navigation,
+  Edit2,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
-import { useCreateGoal, useCreateProject, useCreateTask, useUpdateTask, useTasks } from '../../hooks/useProductivity';
+import { ThemeMode, useTheme } from '../../context/ThemeContext';
+import {
+  PRODUCTIVITY_KEYS,
+  useCreateGoal,
+  useCreateProject,
+  useCreateTask,
+  useUpdateTask,
+  useTasks,
+} from '../../hooks/useProductivity';
 import { REMINDER_KEYS, useCreateReminder } from '../../hooks/useReminders';
 import { JOURNAL_KEYS, useCreateJournalEntry } from '../../hooks/useJournal';
+import { SETTINGS_KEYS } from '../../hooks/useSettings';
+import { memoryKeys } from '../../hooks/useMemories';
+import { ExecutedAppAction } from '../../api/chat';
 import * as productivityApi from '../../api/productivity';
+import * as remindersApi from '../../api/reminders';
+import * as journalApi from '../../api/journal';
+import * as memoriesApi from '../../api/memories';
+import * as settingsApi from '../../api/settings';
+import { connectionsApi } from '../../api/connections';
+import { journeysApi } from '../../api/journeys';
 
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github-dark.css';
@@ -105,6 +129,8 @@ interface ActionStateRecord {
 interface MessageContextValue {
   conversationId?: string;
   messageId?: string;
+  executedActions?: ExecutedAppAction[];
+  onNavigate?: (path: string) => void;
 }
 
 export const MessageContext = React.createContext<MessageContextValue>({});
@@ -155,6 +181,7 @@ interface ActionProposalItemProps {
 
 export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, conversationId: propConversationId }) => {
   const { user } = useAuth();
+  const { setTheme } = useTheme();
   const queryClient = useQueryClient();
   const context = useContext(MessageContext);
   const conversationId = propConversationId || context.conversationId;
@@ -166,9 +193,14 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
   const createJournalMutation = useCreateJournalEntry(user?.id);
   const { data: tasksData } = useTasks();
 
-  const actionKey = `auren_action_${user?.id || 'guest'}_${conversationId ? conversationId + '_' : ''}${action?.type}_${action?.title || action?.name || ''}_${action?.due_date || action?.target_date || ''}_${action?.priority || ''}`;
+  const serverExecuted = context.executedActions?.find(
+    (ea) => ea.action_type === action?.type && ea.status === 'executed'
+  );
+
+  const actionKey = `auren_action_${user?.id || 'guest'}_${conversationId ? conversationId + '_' : ''}${action?.type}_${action?.title || action?.name || action?.target_title || action?.path || ''}_${action?.due_date || action?.target_date || ''}_${action?.priority || ''}`;
 
   const [status, setStatus] = useState<ActionLifecycleStatus>(() => {
+    if (serverExecuted) return 'completed';
     const saved = getStoredActionState(actionKey);
     if (saved && saved.status) {
       if (saved.status === 'executing') return 'failed'; // Reset interrupted in-flight execution
@@ -177,12 +209,71 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
     return 'proposed';
   });
 
+  useEffect(() => {
+    if (serverExecuted && status !== 'completed') {
+      setStatus('completed');
+      setErrorMsg(null);
+    }
+  }, [serverExecuted, status]);
+
   const [errorMsg, setErrorMsg] = useState<string | null>(() => {
     const saved = getStoredActionState(actionKey);
     return saved?.error || null;
   });
 
   if (!action || !action.type) return null;
+
+  const findTaskIdByQuery = async (): Promise<string | undefined> => {
+    if (action.task_id) return String(action.task_id);
+    const needle = String(action.target_title || action.title || action.match || '').trim();
+    const localMatch = tasksData?.items?.find(
+      (t) => needle && (t.title.toLowerCase().includes(needle.toLowerCase()) || needle.toLowerCase().includes(t.title.toLowerCase()))
+    );
+    if (localMatch) return localMatch.id;
+    if (!needle) return undefined;
+    const remote = await productivityApi.getTasks({ query: needle, page_size: 10 });
+    return remote?.items?.[0]?.id;
+  };
+
+  const findProjectIdByQuery = async (): Promise<string | undefined> => {
+    if (action.project_id) return String(action.project_id);
+    const needle = String(action.target_name || action.name || action.title || '').trim();
+    if (!needle) return undefined;
+    const remote = await productivityApi.getProjects({ query: needle, page_size: 10 });
+    return remote?.items?.[0]?.id;
+  };
+
+  const findGoalIdByQuery = async (): Promise<string | undefined> => {
+    if (action.goal_id) return String(action.goal_id);
+    const needle = String(action.target_title || action.title || action.name || '').trim();
+    if (!needle) return undefined;
+    const remote = await productivityApi.getGoals({ query: needle, page_size: 10 });
+    return remote?.items?.[0]?.id;
+  };
+
+  const findMemoryIdByQuery = async (): Promise<string | undefined> => {
+    if (action.memory_id) return String(action.memory_id);
+    const needle = String(action.target_content || action.query || action.content || '').trim();
+    if (!needle) return undefined;
+    const remote = await memoriesApi.listMemories({ query: needle, page_size: 5 });
+    return remote?.items?.[0]?.id;
+  };
+
+  const findReminderIdByQuery = async (): Promise<string | undefined> => {
+    if (action.reminder_id) return String(action.reminder_id);
+    const needle = String(action.target_title || action.title || action.query || '').trim();
+    if (!needle) return undefined;
+    const remote = await remindersApi.getReminders({ query: needle, page_size: 10 });
+    return remote?.items?.[0]?.id;
+  };
+
+  const getBrowserTz = (): string => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+      return 'UTC';
+    }
+  };
 
   const handleExecute = async () => {
     if (status === 'executing' || status === 'completed') {
@@ -245,23 +336,13 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
     try {
       let createdEntity: any = null;
       if (action.type === 'complete_task') {
-        let targetTaskId = action.task_id;
-        if (!targetTaskId && tasksData?.items) {
-          const needle = (action.title || action.name || '').toLowerCase().trim();
-          const match = tasksData.items.find(
-            (t) => t.title.toLowerCase().includes(needle) || needle.includes(t.title.toLowerCase())
-          );
-          if (match) {
-            targetTaskId = match.id;
-          }
-        }
+        const targetTaskId = await findTaskIdByQuery();
         if (targetTaskId) {
           createdEntity = await updateTaskMutation.mutateAsync({
             taskId: targetTaskId,
             input: { status: 'completed' },
           });
         } else {
-          // If task wasn't in active list, record/complete it directly
           createdEntity = await createTaskMutation.mutateAsync({
             title: action.title || 'Completed Task',
             priority: 'medium',
@@ -269,13 +350,29 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           });
         }
         queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
+      } else if (action.type === 'update_task') {
+        const targetTaskId = await findTaskIdByQuery();
+        if (!targetTaskId) throw new Error('Matching task not found to update.');
+        createdEntity = await updateTaskMutation.mutateAsync({
+          taskId: targetTaskId,
+          input: {
+            ...(action.new_title ? { title: action.new_title } : {}),
+            ...(action.description !== undefined ? { description: action.description } : {}),
+            ...(action.priority ? { priority: action.priority } : {}),
+            ...(action.status ? { status: action.status } : {}),
+            ...(action.due_date ? { due_date: String(action.due_date) } : {}),
+            ...(action.reminder_mode ? { reminder_mode: action.reminder_mode } : {}),
+          } as any,
+        });
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
+      } else if (action.type === 'delete_task') {
+        const targetTaskId = await findTaskIdByQuery();
+        if (!targetTaskId) throw new Error('Matching task not found to delete.');
+        await productivityApi.deleteTask(targetTaskId);
+        queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.all });
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
       } else if (action.type === 'create_task') {
-        let browserTz = 'UTC';
-        try {
-          browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-        } catch {
-          browserTz = 'UTC';
-        }
+        const browserTz = getBrowserTz();
         const dueDate = action.due_date && String(action.due_date).trim() ? String(action.due_date).trim() : undefined;
         createdEntity = await createTaskMutation.mutateAsync({
           title: action.title || 'Untitled Task',
@@ -288,12 +385,7 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
         });
         queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
       } else if (action.type === 'create_reminder') {
-        let browserTz = 'UTC';
-        try {
-          browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-        } catch {
-          browserTz = 'UTC';
-        }
+        const browserTz = getBrowserTz();
         createdEntity = await createReminderMutation.mutateAsync({
           title: action.title || 'Personal Reminder',
           trigger_at: String(action.trigger_at || new Date(Date.now() + 3600 * 1000).toISOString()),
@@ -301,11 +393,35 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           is_alarm: Boolean(action.is_alarm),
           priority: action.is_alarm ? 'alarm' : 'normal',
         });
+      } else if (action.type === 'update_reminder' || action.type === 'complete_reminder' || action.type === 'snooze_reminder' || action.type === 'cancel_reminder' || action.type === 'delete_reminder') {
+        const remId = await findReminderIdByQuery();
+        if (!remId) throw new Error('Matching reminder not found.');
+        if (action.type === 'complete_reminder') createdEntity = await remindersApi.completeReminder(remId);
+        else if (action.type === 'cancel_reminder') createdEntity = await remindersApi.cancelReminder(remId);
+        else if (action.type === 'snooze_reminder') createdEntity = await remindersApi.snoozeReminder(remId, Number(action.snooze_minutes || 10));
+        else if (action.type === 'delete_reminder') await remindersApi.deleteReminder(remId);
+        else createdEntity = await remindersApi.updateReminder(remId, { ...(action.new_title ? { title: action.new_title } : {}), ...(action.trigger_at ? { trigger_at: action.trigger_at } : {}) });
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.all });
       } else if (action.type === 'create_project') {
         createdEntity = await createProjectMutation.mutateAsync({
           name: action.name || action.title || 'Untitled Project',
           description: action.description,
         });
+      } else if (action.type === 'update_project') {
+        const pid = await findProjectIdByQuery();
+        if (!pid) throw new Error('Matching project not found.');
+        createdEntity = await productivityApi.updateProject(pid, {
+          ...(action.new_name ? { name: action.new_name } : {}),
+          ...(action.description !== undefined ? { description: action.description } : {}),
+          ...(action.status ? { status: action.status } : {}),
+          ...(action.target_date ? { target_date: action.target_date } : {}),
+        });
+        queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.all });
+      } else if (action.type === 'delete_project') {
+        const pid = await findProjectIdByQuery();
+        if (!pid) throw new Error('Matching project not found.');
+        await productivityApi.deleteProject(pid);
+        queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.all });
       } else if (action.type === 'create_goal') {
         const targetDate = action.target_date && String(action.target_date).trim() ? String(action.target_date).trim() : undefined;
         createdEntity = await createGoalMutation.mutateAsync({
@@ -313,6 +429,22 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           description: action.description,
           target_date: targetDate,
         });
+      } else if (action.type === 'update_goal') {
+        const gid = await findGoalIdByQuery();
+        if (!gid) throw new Error('Matching goal not found.');
+        createdEntity = await productivityApi.updateGoal(gid, {
+          ...(action.new_title ? { title: action.new_title } : {}),
+          ...(action.description !== undefined ? { description: action.description } : {}),
+          ...(action.status ? { status: action.status } : {}),
+          ...(action.target_date ? { target_date: action.target_date } : {}),
+          ...(action.current_value !== undefined ? { current_value: Number(action.current_value) } : {}),
+        });
+        queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.all });
+      } else if (action.type === 'delete_goal') {
+        const gid = await findGoalIdByQuery();
+        if (!gid) throw new Error('Matching goal not found.');
+        await productivityApi.deleteGoal(gid);
+        queryClient.invalidateQueries({ queryKey: PRODUCTIVITY_KEYS.all });
       } else if (action.type === 'create_journal') {
         createdEntity = await createJournalMutation.mutateAsync({
           title: action.title ? String(action.title).trim() : undefined,
@@ -322,6 +454,63 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           is_private: true,
         });
         queryClient.invalidateQueries({ queryKey: JOURNAL_KEYS.all });
+      } else if (action.type === 'delete_journal' && action.journal_id) {
+        await journalApi.deleteJournalEntry(String(action.journal_id));
+        queryClient.invalidateQueries({ queryKey: JOURNAL_KEYS.all });
+      } else if (action.type === 'create_memory') {
+        createdEntity = await memoriesApi.createMemory({
+          content: String(action.content || action.fact || '').trim(),
+          memory_type: action.memory_type || 'fact',
+          category: action.category || 'general',
+          importance: Number(action.importance || 3),
+        });
+        queryClient.invalidateQueries({ queryKey: memoryKeys.lists() });
+      } else if (action.type === 'confirm_memory' || action.type === 'correct_memory' || action.type === 'archive_memory' || action.type === 'reject_memory' || action.type === 'delete_memory') {
+        const mid = await findMemoryIdByQuery();
+        if (!mid) throw new Error('Matching memory not found.');
+        if (action.type === 'confirm_memory') createdEntity = await memoriesApi.confirmMemory(mid);
+        else if (action.type === 'archive_memory') createdEntity = await memoriesApi.archiveMemory(mid);
+        else if (action.type === 'reject_memory' || action.type === 'delete_memory') createdEntity = await memoriesApi.rejectMemory(mid);
+        else createdEntity = await memoriesApi.correctMemory(mid, { content: String(action.new_content || action.content || '') });
+        queryClient.invalidateQueries({ queryKey: memoryKeys.lists() });
+      } else if (action.type === 'create_connection_invite' || action.type === 'create_connection') {
+        createdEntity = await connectionsApi.createInvite(String(action.display_name || action.name || 'Trusted Connection'));
+      } else if (action.type === 'accept_connection_invite') {
+        createdEntity = await connectionsApi.acceptInvite(String(action.invite_code || ''));
+      } else if (action.type === 'toggle_location_sharing') {
+        await connectionsApi.toggleLocationSharing({
+          enabled: Boolean(action.enabled),
+          duration_minutes: action.duration_minutes ? Number(action.duration_minutes) : 60,
+        });
+      } else if ((action.type === 'revoke_connection' || action.type === 'delete_connection') && (action.connection_id || action.id)) {
+        await connectionsApi.revoke(String(action.connection_id || action.id));
+      } else if (action.type === 'create_journey') {
+        createdEntity = await journeysApi.create({
+          title: action.title || 'Recorded Journey',
+          assignment_site: action.assignment_site,
+          assignment_purpose: action.assignment_purpose,
+          assignment_notes: action.assignment_notes,
+        });
+      } else if (action.type === 'delete_journey' && (action.journey_id || action.id)) {
+        await journeysApi.delete(String(action.journey_id || action.id));
+      } else if (action.type === 'update_settings' || action.type === 'update_preferences') {
+        const prefs = typeof action.preferences === 'object' && action.preferences ? action.preferences : action;
+        const { type: _ignoredType, full_name: fullName, ...rest } = prefs;
+        await settingsApi.updateUserProfile({
+          ...(typeof fullName === 'string' ? { full_name: fullName } : {}),
+          preferences: rest,
+        });
+        if (rest.theme && ['light', 'dark', 'midnight', 'obsidian'].includes(String(rest.theme))) {
+          setTheme(String(rest.theme) as ThemeMode);
+        }
+        queryClient.invalidateQueries({ queryKey: SETTINGS_KEYS.profile(user?.id) });
+      } else if (action.type === 'navigate') {
+        const target = String(action.path || action.target || '/home');
+        if (context.onNavigate) {
+          context.onNavigate(target);
+        } else if (typeof window !== 'undefined') {
+          window.location.assign(target);
+        }
       }
 
       clearTimeout(timeoutTimer);
@@ -366,6 +555,35 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           buttonText: 'Mark Completed',
           title: action.title || 'Completed Task',
         };
+      case 'update_task':
+        return {
+          icon: Edit2,
+          label: 'Update Task',
+          color: 'text-indigo-400',
+          border: 'border-indigo-800/60',
+          bg: 'bg-indigo-950/30',
+          buttonText: 'Apply Task Update',
+          title: action.new_title || action.target_title || action.title || 'Task Update',
+        };
+      case 'delete_task':
+      case 'delete_project':
+      case 'delete_goal':
+      case 'delete_reminder':
+      case 'delete_journal':
+      case 'delete_memory':
+      case 'reject_memory':
+      case 'revoke_connection':
+      case 'delete_connection':
+      case 'delete_journey':
+        return {
+          icon: Trash2,
+          label: 'Confirm Removal',
+          color: 'text-rose-400',
+          border: 'border-rose-800/60',
+          bg: 'bg-rose-950/30',
+          buttonText: 'Confirm Delete',
+          title: action.title || action.name || action.target_title || action.target_content || action.type,
+        };
       case 'create_task':
         return {
           icon: CheckSquare,
@@ -377,34 +595,40 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           title: action.title,
         };
       case 'create_project':
+      case 'update_project':
         return {
           icon: FolderKanban,
-          label: 'Project Proposal',
+          label: action.type === 'update_project' ? 'Update Project' : 'Project Proposal',
           color: 'text-emerald-400',
           border: 'border-emerald-800/60',
           bg: 'bg-emerald-950/30',
-          buttonText: 'Create Project',
-          title: action.name || action.title,
+          buttonText: action.type === 'update_project' ? 'Update Project' : 'Create Project',
+          title: action.new_name || action.target_name || action.name || action.title,
         };
       case 'create_goal':
+      case 'update_goal':
         return {
           icon: Target,
-          label: 'Goal Proposal',
+          label: action.type === 'update_goal' ? 'Update Goal' : 'Goal Proposal',
           color: 'text-purple-400',
           border: 'border-purple-800/60',
           bg: 'bg-purple-950/30',
-          buttonText: 'Set Goal',
-          title: action.title || action.name,
+          buttonText: action.type === 'update_goal' ? 'Update Goal' : 'Set Goal',
+          title: action.new_title || action.target_title || action.title || action.name,
         };
       case 'create_reminder':
+      case 'update_reminder':
+      case 'complete_reminder':
+      case 'snooze_reminder':
+      case 'cancel_reminder':
         return {
           icon: BellRing,
-          label: action.is_alarm ? 'Alarm Proposal' : 'Reminder Proposal',
+          label: action.is_alarm ? 'Alarm Proposal' : 'Reminder Command',
           color: 'text-emerald-400',
           border: 'border-emerald-800/60',
           bg: 'bg-emerald-950/30',
-          buttonText: 'Schedule Reminder',
-          title: action.title || 'Personal Reminder',
+          buttonText: action.type === 'create_reminder' ? 'Schedule Reminder' : 'Apply Reminder Action',
+          title: action.new_title || action.target_title || action.title || 'Personal Reminder',
         };
       case 'create_journal':
         return {
@@ -415,6 +639,63 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
           bg: 'bg-amber-950/20',
           buttonText: 'Save to Personal Journal',
           title: action.title || 'Private Reflection',
+        };
+      case 'create_memory':
+      case 'confirm_memory':
+      case 'correct_memory':
+      case 'archive_memory':
+        return {
+          icon: Brain,
+          label: 'Memory Update',
+          color: 'text-cyan-400',
+          border: 'border-cyan-800/60',
+          bg: 'bg-cyan-950/30',
+          buttonText: 'Save Memory Update',
+          title: action.new_content || action.content || action.target_content || 'Memory',
+        };
+      case 'create_connection_invite':
+      case 'create_connection':
+      case 'accept_connection_invite':
+      case 'toggle_location_sharing':
+        return {
+          icon: Users,
+          label: 'Trusted Connections',
+          color: 'text-emerald-400',
+          border: 'border-emerald-800/60',
+          bg: 'bg-emerald-950/30',
+          buttonText: 'Run Connection Action',
+          title: action.display_name || action.invite_code || (action.enabled !== undefined ? `Location Sharing: ${action.enabled ? 'ON' : 'OFF'}` : 'Connection Action'),
+        };
+      case 'create_journey':
+        return {
+          icon: Compass,
+          label: 'GPS Journey Log',
+          color: 'text-amber-400',
+          border: 'border-amber-800/60',
+          bg: 'bg-amber-950/30',
+          buttonText: 'Save Journey',
+          title: action.title || 'Recorded Journey',
+        };
+      case 'update_settings':
+      case 'update_preferences':
+        return {
+          icon: SlidersHorizontal,
+          label: 'Settings Update',
+          color: 'text-emerald-400',
+          border: 'border-emerald-800/60',
+          bg: 'bg-emerald-950/30',
+          buttonText: 'Apply Preferences',
+          title: 'Update AUREN Preferences',
+        };
+      case 'navigate':
+        return {
+          icon: Navigation,
+          label: 'Navigate App',
+          color: 'text-emerald-400',
+          border: 'border-emerald-800/60',
+          bg: 'bg-emerald-950/30',
+          buttonText: `Open ${action.path || action.target || 'Page'}`,
+          title: `Open ${action.path || action.target || '/home'}`,
         };
       default:
         return null;
@@ -472,18 +753,35 @@ export const ActionProposalItem: React.FC<ActionProposalItemProps> = ({ action, 
         <div className="text-[11px] text-rose-400 pl-6">{errorMsg}</div>
       )}
 
-      <div className="pl-6 pt-1 flex items-center space-x-2">
+      <div className="pl-6 pt-1 flex items-center flex-wrap gap-2">
         {status === 'completed' ? (
-          <span className="flex items-center space-x-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-800/50">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>
-              {action.type === 'complete_task'
-                ? 'Marked as Completed ✓'
-                : action.type === 'create_journal'
-                ? 'Saved to Personal Journal'
-                : 'Added to Life Management'}
+          <>
+            <span className="flex items-center space-x-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-800/50">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>
+                {action.type === 'complete_task'
+                  ? 'Marked as Completed ✓'
+                  : action.type === 'create_journal'
+                  ? 'Saved to Personal Journal'
+                  : action.type === 'create_task' || action.type === 'create_project' || action.type === 'create_goal'
+                  ? 'Added to Life Management'
+                  : serverExecuted?.summary || 'Executed ✓'}
+              </span>
             </span>
-          </span>
+            {action.type === 'navigate' && (
+              <button
+                type="button"
+                onClick={() => {
+                  const target = String(action.path || action.target || '/home');
+                  if (context.onNavigate) context.onNavigate(target);
+                  else if (typeof window !== 'undefined') window.location.assign(target);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
+              >
+                Open Again
+              </button>
+            )}
+          </>
         ) : status === 'executing' ? (
           <button
             type="button"
@@ -617,6 +915,8 @@ interface MessageContentProps {
   role: 'user' | 'assistant' | 'system';
   conversationId?: string;
   messageId?: string;
+  executedActions?: ExecutedAppAction[];
+  onNavigate?: (path: string) => void;
 }
 
 export const MessageContent: React.FC<MessageContentProps> = ({
@@ -624,6 +924,8 @@ export const MessageContent: React.FC<MessageContentProps> = ({
   role,
   conversationId,
   messageId,
+  executedActions,
+  onNavigate,
 }) => {
   if (role === 'user') {
     return (
@@ -634,7 +936,7 @@ export const MessageContent: React.FC<MessageContentProps> = ({
   }
 
   return (
-    <MessageContext.Provider value={{ conversationId, messageId }}>
+    <MessageContext.Provider value={{ conversationId, messageId, executedActions, onNavigate }}>
       <div className="markdown-prose text-sm leading-relaxed text-slate-200">
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
