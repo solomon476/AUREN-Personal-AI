@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.security import get_current_user
 from app.models.reminders import (
     DeliveryLogModel,
+    DeliveryLogStatus,
     NotificationListResponse,
     NotificationModel,
     NotificationPreferences,
@@ -251,6 +252,7 @@ async def send_test_notification(
                     "url": "/reminders",
                     "notification_id": str(notif.id),
                 },
+                urgency="high",
             )
             if res.success:
                 await repo.update_push_subscription_health(
@@ -260,12 +262,48 @@ async def send_test_notification(
                     last_error=None,
                     last_success_at=now,
                 )
+                await repo.log_delivery(
+                    user_id=current_user.id,
+                    channel="web_push",
+                    status=DeliveryLogStatus.sent,
+                    notification_id=notif.id,
+                    subscription_id=sub.id,
+                    attempt_number=1,
+                    http_status=res.status_code,
+                )
             elif res.expired_subscription:
                 await repo.update_push_subscription_health(
                     subscription_id=sub.id,
                     is_active=False,
                     failure_count=sub.failure_count + 1,
                     last_error=res.error_detail,
+                )
+                await repo.log_delivery(
+                    user_id=current_user.id,
+                    channel="web_push",
+                    status=DeliveryLogStatus.expired_subscription,
+                    notification_id=notif.id,
+                    subscription_id=sub.id,
+                    attempt_number=1,
+                    http_status=res.status_code,
+                    error_detail=res.error_detail,
+                )
+            else:
+                await repo.update_push_subscription_health(
+                    subscription_id=sub.id,
+                    is_active=sub.failure_count + 1 < 10,
+                    failure_count=sub.failure_count + 1,
+                    last_error=res.error_detail,
+                )
+                await repo.log_delivery(
+                    user_id=current_user.id,
+                    channel="web_push",
+                    status=DeliveryLogStatus.failed,
+                    notification_id=notif.id,
+                    subscription_id=sub.id,
+                    attempt_number=1,
+                    http_status=res.status_code,
+                    error_detail=res.error_detail,
                 )
             push_results.append(
                 {

@@ -30,9 +30,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, ThemeMode } from '../../context/ThemeContext';
-import { useExportUserData, useUpdateUserProfile, useUserProfile } from '../../hooks/useSettings';
+import { useExportUserData, useUpdateUserProfile, useUserProfile, SETTINGS_KEYS } from '../../hooks/useSettings';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
-import { useCreateReminder, usePushSubscriptions } from '../../hooks/useReminders';
+import { useCreateReminder, useDeliveryLogs, usePushSubscriptions } from '../../hooks/useReminders';
 import { sendTestNotification } from '../../api/reminders';
 import { playAlertSound } from '../../lib/soundAlert';
 import {
@@ -40,6 +40,7 @@ import {
   enableDeviceWebPush,
   getBrowserNotificationPermission,
   isWebPushSupported,
+  syncExistingDevicePushSubscription,
 } from '../../lib/pushNotifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { REMINDER_KEYS } from '../../hooks/useReminders';
@@ -51,6 +52,8 @@ export const SettingsView: React.FC = () => {
   const updateProfileMutation = useUpdateUserProfile(user?.id);
   const exportDataMutation = useExportUserData();
   const { data: pushSubsData } = usePushSubscriptions(user?.id);
+  const { data: deliveryLogsData } = useDeliveryLogs(undefined, user?.id);
+  const deliveryLogs = Array.isArray(deliveryLogsData) ? deliveryLogsData : [];
   useCreateReminder(user?.id);
   const { isInstalled, hasDeferredPrompt, promptInstall } = usePWAInstall();
 
@@ -191,6 +194,12 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (profile?.preferences?.browser_push_enabled === undefined && (pushSubsData?.items ?? []).some((s) => s.is_active)) {
+      setBrowserPushEnabled(true);
+    }
+  }, [profile?.preferences?.browser_push_enabled, pushSubsData?.items]);
+
   const handleActivatePush = async () => {
     setPushActionStatus('Requesting notification permission & registering device...');
     try {
@@ -199,12 +208,32 @@ export const SettingsView: React.FC = () => {
         setBrowserPushEnabled(true);
         setPushActionStatus('Device registered for background Web Push alerts.');
         queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user?.id) });
+        queryClient.invalidateQueries({ queryKey: SETTINGS_KEYS.profile(user?.id) });
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.deliveryLogs(undefined, user?.id) });
         await updateProfileMutation.mutateAsync({ preferences: { browser_push_enabled: true } });
       } else {
         setPushActionStatus(res.error || 'Could not enable Web Push.');
       }
     } catch (err: any) {
       setPushActionStatus(err?.message || 'Push registration failed.');
+    }
+  };
+
+  const handleSyncThisDevice = async () => {
+    setPushActionStatus('Re-syncing browser push subscription...');
+    try {
+      const res = await syncExistingDevicePushSubscription();
+      queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user?.id) });
+      queryClient.invalidateQueries({ queryKey: SETTINGS_KEYS.profile(user?.id) });
+      if (res.synced) {
+        setPushActionStatus(`Device subscription repaired (${res.reason}).`);
+      } else if (res.reason === 'permission_not_granted') {
+        await handleActivatePush();
+      } else {
+        setPushActionStatus(`Push subscription check complete (${res.reason}).`);
+      }
+    } catch (err: any) {
+      setPushActionStatus(err?.message || 'Device push sync failed.');
     }
   };
 
@@ -224,6 +253,7 @@ export const SettingsView: React.FC = () => {
       const res: any = await sendTestNotification();
       queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.notifications(user?.id) });
       queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user?.id) });
+      queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.deliveryLogs(undefined, user?.id) });
       const deliveries = Array.isArray(res?.push_deliveries) ? res.push_deliveries : [];
       const regCount = Number(res?.registered_devices_count ?? deliveries.length);
       if (regCount === 0) {
@@ -515,13 +545,20 @@ export const SettingsView: React.FC = () => {
                       </button>
                       <button
                         type="button"
+                        onClick={handleSyncThisDevice}
+                        className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-slate-200 text-xs font-medium transition cursor-pointer"
+                      >
+                        Sync Device
+                      </button>
+                      <button
+                        type="button"
                         onClick={handleSendTestAlert}
                         className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-slate-200 text-xs font-medium transition cursor-pointer"
                       >
                         Send Test Alert
                       </button>
                       <span className="text-[10px] font-mono text-slate-400">
-                        Permission: {getBrowserNotificationPermission()} · Support: {isWebPushSupported() ? 'Ready' : 'Browser Restricted'}
+                        Permission: {getBrowserNotificationPermission()} · Support: {isWebPushSupported() ? 'Ready' : 'Browser Restricted'} · Background Push: {browserPushEnabled ? 'ON' : 'OFF'}
                       </span>
                     </div>
 
@@ -541,9 +578,16 @@ export const SettingsView: React.FC = () => {
                               <span className="text-slate-200 font-medium block truncate">
                                 {sub.device_label || 'Browser Device'}
                               </span>
-                              <span className="text-[10px] text-slate-500 font-mono">
+                              <span className="text-[10px] text-slate-500 font-mono block">
                                 {sub.is_active ? 'Active' : 'Inactive / Expired'}
+                                {sub.last_success_at ? ` · Last OK: ${new Date(sub.last_success_at).toLocaleString()}` : ''}
+                                {sub.failure_count > 0 ? ` · Failures: ${sub.failure_count}` : ''}
                               </span>
+                              {sub.last_error && (
+                                <span className="text-[10px] text-rose-400 font-mono block truncate" title={sub.last_error}>
+                                  Last Error: {sub.last_error}
+                                </span>
+                              )}
                             </div>
                             <button
                               type="button"
@@ -555,6 +599,42 @@ export const SettingsView: React.FC = () => {
                             </button>
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {/* Delivery Diagnostics */}
+                    {deliveryLogs.length > 0 && (
+                      <div className="space-y-1.5 pt-2 border-t border-white/[0.06]">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Recent Push & Alert Delivery Diagnostics
+                        </span>
+                        <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                          {deliveryLogs.slice(0, 6).map((log) => (
+                            <div key={log.id} className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-[#07080c] border border-white/[0.06] text-[10px] font-mono">
+                              <div className="flex items-center space-x-2 min-w-0">
+                                <span className="text-slate-300 font-semibold">{log.channel}</span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded uppercase ${
+                                    log.status === 'sent'
+                                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                      : log.status === 'suppressed_quiet_hours' || log.status === 'skipped_disabled'
+                                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                      : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                                  }`}
+                                >
+                                  {log.status}
+                                </span>
+                                {log.http_status && <span className="text-slate-400">HTTP {log.http_status}</span>}
+                                {log.error_detail && (
+                                  <span className="text-rose-400 truncate max-w-[210px]" title={log.error_detail}>
+                                    {log.error_detail}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-slate-500">{new Date(log.created_at).toLocaleTimeString()}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 

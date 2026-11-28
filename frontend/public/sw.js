@@ -12,7 +12,7 @@
  *   vibration, actions (Complete / Snooze), and click navigation into AUREN.
  */
 
-const CACHE_NAME = 'auren-shell-v14';
+const CACHE_NAME = 'auren-shell-v15';
 
 const STATIC_PRECACHE = [
   '/',
@@ -134,7 +134,7 @@ self.addEventListener('push', (event) => {
   let payload = {
     title: 'AUREN Reminder',
     body: 'You have a scheduled item due.',
-    tag: 'auren-reminder',
+    tag: '',
     is_alarm: false,
     url: '/reminders',
     reminder_id: null,
@@ -176,8 +176,17 @@ self.addEventListener('push', (event) => {
     ],
   };
 
+  const notifTitle = payload.title || 'AUREN Reminder';
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'AUREN Reminder', options)
+    self.registration.showNotification(notifTitle, options).catch(() =>
+      self.registration.showNotification(notifTitle, {
+        body: payload.body || 'You have a due reminder.',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        tag: options.tag,
+        data: options.data,
+      })
+    )
   );
 });
 

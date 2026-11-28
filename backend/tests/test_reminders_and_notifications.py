@@ -726,3 +726,143 @@ def test_push_subscription_syncs_profile_flag_and_test_push_attempts_registered_
     assert len(data["push_deliveries"]) == 1
     assert data["push_deliveries"][0]["success"] is True
     assert len(calls) == 1
+    assert calls[0]["urgency"] == "high"
+
+    logs_resp = client.get("/api/v1/notifications/delivery-logs")
+    assert logs_resp.status_code == 200
+    assert any(l["channel"] == "web_push" and l["status"] == "sent" and l["http_status"] == 201 for l in logs_resp.json())
+
+
+@pytest.mark.asyncio
+async def test_postgres_worker_batch_push_delivery_and_skipped_disabled_audit(monkeypatch):
+    from contextlib import asynccontextmanager
+    from app.services.reminders.scheduler import ReminderProcessor
+    from app.services.reminders.web_push import WebPushDeliveryResult, WebPushService
+
+    keys = generate_vapid_keypair()
+    monkeypatch.setattr(settings, "VAPID_PUBLIC_KEY", keys["public_key"])
+    monkeypatch.setattr(settings, "VAPID_PRIVATE_KEY", keys["private_key"])
+
+    now = datetime.now(timezone.utc)
+    rem_disabled_id = uuid.uuid4()
+    rem_enabled_id = uuid.uuid4()
+    sub_id = uuid.uuid4()
+    notif_seq = 0
+    executed_rpcs = []
+
+    def _claimed_row(rid: uuid.UUID, title: str):
+        return {
+            "id": rid,
+            "user_id": USER_A.id,
+            "task_id": None,
+            "project_id": None,
+            "goal_id": None,
+            "title": title,
+            "description": "Scheduled follow-up",
+            "reminder_type": "general",
+            "trigger_at": now - timedelta(seconds=15),
+            "original_trigger_at": now - timedelta(seconds=15),
+            "timezone": "UTC",
+            "recurrence_rule": None,
+            "recurrence_text": None,
+            "status": "scheduled",
+            "priority": "normal",
+            "is_alarm": False,
+            "sound_key": None,
+            "snoozed_until": None,
+            "snooze_count": 0,
+            "last_triggered_at": None,
+            "next_retry_at": None,
+            "delivery_attempts": 0,
+            "max_delivery_attempts": 5,
+            "escalation_count": 0,
+            "completed_at": None,
+            "cancelled_at": None,
+            "source": "manual",
+            "dedupe_key": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    class _MockConn:
+        def __init__(self, claimed_rows, raw_prefs_json):
+            self._claimed = claimed_rows
+            self._prefs_json = raw_prefs_json
+
+        async def fetch(self, query, *args):
+            if "claim_due_reminders_rpc" in query:
+                return self._claimed
+            if "get_user_push_subscriptions_rpc" in query:
+                return [
+                    {
+                        "id": sub_id,
+                        "user_id": USER_A.id,
+                        "endpoint": "https://fcm.googleapis.com/fcm/send/worker-test-endpoint",
+                        "p256dh": "B" * 87,
+                        "auth_secret": "A" * 22,
+                        "user_agent": "Chrome Android",
+                        "device_label": "Android Device",
+                        "is_active": True,
+                        "failure_count": 0,
+                        "last_error": None,
+                        "last_success_at": None,
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                ]
+            return []
+
+        async def fetchval(self, query, *args):
+            if "get_user_extraction_preferences_rpc" in query:
+                return self._prefs_json
+            return None
+
+        async def fetchrow(self, query, *args):
+            nonlocal notif_seq
+            if "record_worker_notification_rpc" in query:
+                notif_seq += 1
+                return {"notification_id": uuid.uuid4(), "inserted": True}
+            return None
+
+        async def execute(self, query, *args):
+            executed_rpcs.append((query, args))
+
+    class _MockPool:
+        def __init__(self, conn):
+            self._conn = conn
+
+        @asynccontextmanager
+        async def acquire(self):
+            yield self._conn
+
+    # 1. Explicit browser_push_enabled=False logs skipped_disabled even when device row exists
+    push_calls = []
+
+    class _FakePushService(WebPushService):
+        async def send_push(self, **kwargs):
+            push_calls.append(kwargs)
+            return WebPushDeliveryResult(success=True, status_code=201)
+
+    processor = ReminderProcessor(push_service=_FakePushService(settings=settings), settings=settings)
+    pool_disabled = _MockPool(_MockConn([_claimed_row(rem_disabled_id, "Disabled Push Task")], json.dumps({"browser_push_enabled": False})))
+    count_1 = await processor.process_postgres_due_batch(pool_disabled, worker_id="worker-test-1")
+    assert count_1 == 1
+    assert len(push_calls) == 0
+    assert any(
+        "log_worker_delivery_rpc" in q and a[4] == "web_push" and a[5] == "skipped_disabled"
+        for q, a in executed_rpcs
+    )
+
+    # 2. Unset browser_push_enabled defaults to True when active subscription exists and sends Urgency: high
+    executed_rpcs.clear()
+    pool_enabled = _MockPool(_MockConn([_claimed_row(rem_enabled_id, "Closed App Push")], json.dumps({})))
+    count_2 = await processor.process_postgres_due_batch(pool_enabled, worker_id="worker-test-1")
+    assert count_2 == 1
+    assert len(push_calls) == 1
+    assert push_calls[0]["urgency"] == "high"
+    assert any(
+        "log_worker_delivery_rpc" in q and a[4] == "web_push" and a[5] == "sent" and a[7] == 201
+        for q, a in executed_rpcs
+    )
+    assert any("update_push_subscription_health_rpc" in q and a[1] is True for q, a in executed_rpcs)
+    assert any("finalize_reminder_trigger_rpc" in q for q, a in executed_rpcs)

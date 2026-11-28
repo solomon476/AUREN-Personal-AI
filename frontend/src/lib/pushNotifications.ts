@@ -7,10 +7,12 @@
 
 import {
   deletePushSubscription,
+  getPushSubscriptions,
   getVapidPublicKey,
   subscribeWebPush,
   PushSubscriptionView,
 } from '../api/reminders';
+import { updateUserProfile } from '../api/settings';
 
 const PUSH_DECLINED_KEY = 'auren_push_permission_declined';
 
@@ -182,9 +184,82 @@ export async function enableDeviceWebPush(deviceLabel?: string): Promise<PushEna
     device_label: deviceLabel || inferDeviceLabel(),
   });
 
+  // Ensure server-side preference stays aligned whenever a device explicitly enables Web Push.
+  await updateUserProfile({ preferences: { browser_push_enabled: true } }).catch(() => {});
+
   return {
     success: true,
     permission,
+    subscription: saved,
+  };
+}
+
+/**
+ * Silently ensures an already-granted browser PushManager subscription matches the server's
+ * current VAPID key and exists as an active row on the backend, without prompting the user.
+ */
+export async function syncExistingDevicePushSubscription(
+  knownActiveEndpoints?: string[]
+): Promise<{ synced: boolean; reason: string; subscription?: PushSubscriptionView }> {
+  if (!isWebPushSupported() || Notification.permission !== 'granted') {
+    return { synced: false, reason: 'permission_not_granted' };
+  }
+
+  const vapidInfo = await getVapidPublicKey();
+  if (!vapidInfo.configured || !vapidInfo.public_key) {
+    return { synced: false, reason: 'vapid_unconfigured' };
+  }
+
+  const appServerKey = urlBase64ToUint8Array(vapidInfo.public_key);
+  const registration = await getReadyServiceWorkerRegistration();
+  let existingSub = await registration.pushManager.getSubscription();
+  const keyMismatch = Boolean(existingSub && !keysMatch(existingSub.options?.applicationServerKey, appServerKey));
+
+  if (keyMismatch && existingSub) {
+    await existingSub.unsubscribe().catch(() => {});
+    existingSub = null;
+  }
+
+  let createdFreshSub = false;
+  if (!existingSub) {
+    existingSub = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: appServerKey as unknown as BufferSource,
+    });
+    createdFreshSub = true;
+  }
+
+  let activeEndpoints = knownActiveEndpoints;
+  if (!activeEndpoints) {
+    try {
+      const subsResp = await getPushSubscriptions();
+      activeEndpoints = (subsResp?.items ?? []).filter((s) => s.is_active).map((s) => s.endpoint);
+    } catch {
+      activeEndpoints = [];
+    }
+  }
+
+  const missingOnBackend = !activeEndpoints.includes(existingSub.endpoint);
+  if (!createdFreshSub && !keyMismatch && !missingOnBackend) {
+    return { synced: false, reason: 'already_in_sync' };
+  }
+
+  const p256dh = arrayBufferToBase64Url(existingSub.getKey('p256dh'));
+  const auth = arrayBufferToBase64Url(existingSub.getKey('auth'));
+  if (!p256dh || !auth) {
+    return { synced: false, reason: 'missing_keys' };
+  }
+
+  const saved = await subscribeWebPush({
+    endpoint: existingSub.endpoint,
+    keys: { p256dh, auth },
+    user_agent: navigator.userAgent,
+    device_label: inferDeviceLabel(),
+  });
+
+  return {
+    synced: true,
+    reason: keyMismatch || createdFreshSub ? 'resubscribed' : 'repaired_backend_row',
     subscription: saved,
   };
 }

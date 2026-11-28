@@ -142,6 +142,16 @@ export function usePushSubscriptions(userId?: string) {
   });
 }
 
+export function useDeliveryLogs(reminderId?: string, userId?: string) {
+  const uid = useResolvedUserId(userId);
+  return useQuery({
+    queryKey: REMINDER_KEYS.deliveryLogs(reminderId, uid),
+    queryFn: () => remindersApi.getDeliveryLogs(reminderId),
+    enabled: uid !== 'anonymous',
+    staleTime: 10000,
+  });
+}
+
 export function useVapidPublicKey() {
   return useQuery({
     queryKey: REMINDER_KEYS.vapidKey(),

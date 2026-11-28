@@ -67,6 +67,7 @@ vi.mock('../api/reminders', async () => {
     getPushSubscriptions: vi.fn(),
     subscribeWebPush: vi.fn(),
     deletePushSubscription: vi.fn(),
+    getDeliveryLogs: vi.fn(),
     sendTestNotification: vi.fn(),
   };
 });
@@ -170,6 +171,7 @@ describe('Smart Reminders, Notifications & Alarms UI', () => {
       subject: 'mailto:notifications@auren.ai',
     });
     vi.mocked(remindersApi.getPushSubscriptions).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(remindersApi.getDeliveryLogs).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -666,6 +668,182 @@ Here is your private journal draft:
         })
       );
       expect(screen.getByText('Saved to Personal Journal')).toBeInTheDocument();
+    });
+  });
+
+  it('syncs browser_push_enabled preference on Enable Phone Alerts and auto-resyncs stale granted PushManager keys', async () => {
+    const qc = createQueryClient();
+    const requestPermSpy = vi.fn().mockResolvedValue('granted');
+    const unsubscribeSpy = vi.fn().mockResolvedValue(true);
+    vi.mocked(settingsApi.getUserProfile).mockResolvedValue(makeProfile({ browser_push_enabled: true }) as any);
+
+    // Build a realistic 65-byte uncompressed key buffer for VAPID key matching/mismatch tests
+    const staleKey = new Uint8Array(65).fill(1).buffer;
+    const validKeyBytes = new Uint8Array(65).fill(2);
+    const validVapidB64 = btoa(String.fromCharCode(...validKeyBytes))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    const p256dhBuf = new Uint8Array(65).fill(3).buffer;
+    const authBuf = new Uint8Array(16).fill(4).buffer;
+
+    const freshSub = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/fresh-device-sub',
+      options: { applicationServerKey: validKeyBytes.buffer },
+      getKey: (k: string) => (k === 'p256dh' ? p256dhBuf : authBuf),
+      unsubscribe: unsubscribeSpy,
+    };
+    const staleSub = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/stale-device-sub',
+      options: { applicationServerKey: staleKey },
+      getKey: (k: string) => (k === 'p256dh' ? p256dhBuf : authBuf),
+      unsubscribe: unsubscribeSpy,
+    };
+
+    const getSubSpy = vi.fn().mockResolvedValue(staleSub);
+    const subscribeSpy = vi.fn().mockResolvedValue(freshSub);
+
+    Object.defineProperty(window, 'Notification', {
+      configurable: true,
+      value: { permission: 'granted', requestPermission: requestPermSpy },
+    });
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn().mockResolvedValue({
+          pushManager: { getSubscription: getSubSpy, subscribe: subscribeSpy },
+        }),
+        ready: Promise.resolve({
+          pushManager: { getSubscription: getSubSpy, subscribe: subscribeSpy },
+        }),
+      },
+    });
+    (window as any).PushManager = function () {};
+
+    vi.mocked(remindersApi.getVapidPublicKey).mockResolvedValue({
+      configured: true,
+      public_key: validVapidB64,
+      subject: 'mailto:notifications@auren.ai',
+    });
+    vi.mocked(remindersApi.subscribeWebPush).mockResolvedValue({
+      id: 'sub-1',
+      endpoint: freshSub.endpoint,
+      is_active: true,
+      failure_count: 0,
+      created_at: new Date().toISOString(),
+    });
+    vi.mocked(settingsApi.updateUserProfile).mockResolvedValue(makeProfile({ browser_push_enabled: true }) as any);
+    vi.mocked(remindersApi.sendTestNotification).mockResolvedValue({
+      notification: {} as any,
+      registered_devices_count: 1,
+      push_deliveries: [{ subscription_id: 'sub-1', success: true, status_code: 201 }],
+    });
+
+    render(
+      <QueryClientProvider client={qc}>
+        <NotificationProvider>
+          <RemindersView />
+        </NotificationProvider>
+      </QueryClientProvider>
+    );
+
+    // NotificationProvider auto-resyncs stale granted PushManager key silently without requesting permission
+    await waitFor(() => {
+      expect(unsubscribeSpy).toHaveBeenCalled();
+      expect(subscribeSpy).toHaveBeenCalled();
+      expect(remindersApi.subscribeWebPush).toHaveBeenCalledWith(
+        expect.objectContaining({ endpoint: freshSub.endpoint })
+      );
+    });
+    expect(requestPermSpy).not.toHaveBeenCalled();
+
+    // Clicking "Enable Phone Alerts" also updates browser_push_enabled preference explicitly
+    const enableBtn = await screen.findByRole('button', { name: /Enable Phone Alerts/i });
+    await userEvent.click(enableBtn);
+    await waitFor(() => {
+      expect(settingsApi.updateUserProfile).toHaveBeenCalledWith({
+        preferences: { browser_push_enabled: true },
+      });
+    });
+  });
+
+  it('falls back to minimal Service Worker notification when showNotification rejects action options and renders Delivery Diagnostics', async () => {
+    const loadNodeBuiltin = (spec: string) => import(/* @vite-ignore */ spec);
+    const fs = await loadNodeBuiltin('node:fs');
+    const path = await loadNodeBuiltin('node:path');
+    const vm = await loadNodeBuiltin('node:vm');
+
+    const swPath = path.resolve((globalThis as any).process.cwd(), 'public/sw.js');
+    const swSource = fs.readFileSync(swPath, 'utf-8');
+
+    const listeners: Record<string, (event: any) => void> = {};
+    const showNotification = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('actions unsupported'))
+      .mockResolvedValueOnce(undefined);
+
+    vm.runInNewContext(swSource, {
+      self: {
+        location: { origin: 'https://auren.app' },
+        addEventListener: (evt: string, fn: (e: any) => void) => {
+          listeners[evt] = fn;
+        },
+        registration: { showNotification },
+        clients: { claim: vi.fn(), matchAll: vi.fn().mockResolvedValue([]), openWindow: vi.fn() },
+        skipWaiting: vi.fn(),
+      },
+      caches: { open: vi.fn(), keys: vi.fn().mockResolvedValue([]), delete: vi.fn(), match: vi.fn() },
+      fetch: vi.fn(),
+      URL,
+      URLSearchParams,
+      Response,
+    });
+
+    let pushPromise: Promise<any> | undefined;
+    listeners.push({
+      data: { json: () => ({ title: 'Phone Reminder', body: 'Outside app alert', reminder_id: 'rem-fb-1' }) },
+      waitUntil: (p: Promise<any>) => {
+        pushPromise = p;
+      },
+    });
+    await pushPromise;
+
+    expect(showNotification).toHaveBeenCalledTimes(2);
+    expect(showNotification).toHaveBeenLastCalledWith(
+      'Phone Reminder',
+      expect.objectContaining({
+        body: 'Outside app alert',
+        tag: 'auren-rem-rem-fb-1',
+      })
+    );
+
+    vi.mocked(remindersApi.getDeliveryLogs).mockResolvedValue([
+      {
+        id: 'log-1',
+        user_id: 'user-rem-1',
+        channel: 'web_push',
+        status: 'failed',
+        attempt_number: 2,
+        http_status: 403,
+        error_detail: 'VAPID public key mismatch',
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <SettingsView />
+      </QueryClientProvider>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /Notifications & Alarms/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Recent Push & Alert Delivery Diagnostics')).toBeInTheDocument();
+      expect(screen.getByText('HTTP 403')).toBeInTheDocument();
+      expect(screen.getByText('VAPID public key mismatch')).toBeInTheDocument();
     });
   });
 });

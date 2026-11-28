@@ -36,16 +36,19 @@ import {
   useCompleteReminder,
   useCreateReminder,
   useDeleteReminder,
+  useDeliveryLogs,
   usePushSubscriptions,
   useReminders,
   useSnoozeReminder,
   useUpdateReminder,
 } from '../../hooks/useReminders';
+import { SETTINGS_KEYS } from '../../hooks/useSettings';
 import { useNotificationCenter } from '../../context/NotificationContext';
 import {
   enableDeviceWebPush,
   getBrowserNotificationPermission,
   isWebPushSupported,
+  syncExistingDevicePushSubscription,
 } from '../../lib/pushNotifications';
 import { ReminderModal } from './ReminderModal';
 
@@ -78,7 +81,9 @@ export const RemindersView: React.FC = () => {
 
   const { notifications, completeFromNotification, snoozeFromNotification, markRead } = useNotificationCenter();
   const { data: pushSubsData } = usePushSubscriptions(user?.id);
+  const { data: deliveryLogsData } = useDeliveryLogs(undefined, user?.id);
   const activePushSubs = (pushSubsData?.items ?? []).filter((s) => s.is_active);
+  const deliveryLogs = Array.isArray(deliveryLogsData) ? deliveryLogsData : [];
   const browserPerm = getBrowserNotificationPermission();
   const needsPhonePushSetup = Boolean(
     user && isWebPushSupported() && (browserPerm !== 'granted' || activePushSubs.length === 0)
@@ -92,10 +97,15 @@ export const RemindersView: React.FC = () => {
       if (res.success) {
         setPushBannerStatus('Phone/browser push enabled! Sending a quick test alert...');
         queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user?.id) });
+        queryClient.invalidateQueries({ queryKey: SETTINGS_KEYS.profile(user?.id) });
         const testRes = await sendTestNotification().catch(() => null);
         queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.notifications(user?.id) });
-        if (testRes?.push_deliveries?.some((d) => d.success)) {
+        queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.deliveryLogs(undefined, user?.id) });
+        const deliveries = Array.isArray(testRes?.push_deliveries) ? testRes.push_deliveries : [];
+        if (deliveries.some((d) => d.success)) {
           setPushBannerStatus('Push alerts active on this device — check your phone notification tray!');
+        } else if (deliveries.length > 0 && deliveries[0]?.error) {
+          setPushBannerStatus(`Push registered, but gateway returned: ${deliveries[0].error}`);
         } else {
           setPushBannerStatus('Device registered for Web Push! You will receive due reminder alerts on this device.');
         }
@@ -104,6 +114,39 @@ export const RemindersView: React.FC = () => {
       }
     } catch (err: any) {
       setPushBannerStatus(err?.message || 'Push registration failed.');
+    } finally {
+      setIsEnablingPush(false);
+    }
+  };
+
+  const handleSyncOrRepairPush = async () => {
+    setIsEnablingPush(true);
+    setPushBannerStatus('Syncing device push registration & sending test alert...');
+    try {
+      const perm = getBrowserNotificationPermission();
+      if (perm !== 'granted') {
+        await handleEnablePhonePush();
+        return;
+      }
+      await syncExistingDevicePushSubscription();
+      const res = await enableDeviceWebPush();
+      queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user?.id) });
+      queryClient.invalidateQueries({ queryKey: SETTINGS_KEYS.profile(user?.id) });
+      const testRes = await sendTestNotification().catch(() => null);
+      queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.notifications(user?.id) });
+      queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.deliveryLogs(undefined, user?.id) });
+      const deliveries = Array.isArray(testRes?.push_deliveries) ? testRes.push_deliveries : [];
+      if (deliveries.some((d) => d.success)) {
+        setPushBannerStatus('Device synced and test push delivered! Check your notification tray.');
+      } else if (!res.success) {
+        setPushBannerStatus(res.error || 'Could not sync push subscription.');
+      } else if (deliveries.length > 0 && deliveries[0]?.error) {
+        setPushBannerStatus(`Synced device, but push gateway reported: ${deliveries[0].error}`);
+      } else {
+        setPushBannerStatus('Device push registration refreshed.');
+      }
+    } catch (err: any) {
+      setPushBannerStatus(err?.message || 'Device push sync failed.');
     } finally {
       setIsEnablingPush(false);
     }
@@ -285,69 +328,140 @@ export const RemindersView: React.FC = () => {
             </p>
           </div>
         ) : activeTab === 'notifications' ? (
-          notifications.length === 0 ? (
-            <div className="p-10 text-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 text-xs text-slate-500">
-              <History className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-              No notification deliveries recorded yet.
-            </div>
-          ) : (
-            notifications.map((n) => (
-              <div
-                key={n.id}
-                className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                  n.status === 'unread' ? 'bg-emerald-50/40 border-emerald-300' : 'bg-white border-slate-200'
-                }`}
-              >
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center space-x-2">
-                    {n.is_alarm ? (
-                      <AlarmClock className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                    ) : (
-                      <Bell className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    )}
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 truncate">{n.title}</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 uppercase">
-                      {n.status}
-                    </span>
-                  </div>
-                  {n.body && <p className="text-xs text-slate-600 pl-6">{n.body}</p>}
-                  <p className="text-[10px] text-slate-400 font-mono pl-6">
-                    Triggered: {new Date(n.triggered_at).toLocaleString()} • Channel: {n.delivery_channel}
+          <div className="space-y-4">
+            {/* Background Web Push Status & Delivery Diagnostics */}
+            <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/80 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Background Push & Delivery Diagnostics
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Permission: <span className="font-mono font-semibold text-slate-700">{browserPerm}</span> ·
+                    Registered devices:{' '}
+                    <span className="font-mono font-semibold text-slate-700">{activePushSubs.length}</span>
                   </p>
                 </div>
-
-                <div className="flex items-center gap-2 pl-6 sm:pl-0">
-                  {n.status === 'unread' && (
-                    <button
-                      type="button"
-                      onClick={() => markRead(n.id)}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 cursor-pointer"
-                    >
-                      Mark Read
-                    </button>
-                  )}
-                  {n.reminder_id && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => snoozeFromNotification(n)}
-                        className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-xs font-semibold text-amber-800 cursor-pointer"
-                      >
-                        Snooze
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => completeFromNotification(n)}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white cursor-pointer"
-                      >
-                        Complete
-                      </button>
-                    </>
-                  )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isEnablingPush}
+                    onClick={handleSyncOrRepairPush}
+                    className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-700 flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                    <span>Sync & Test Push</span>
+                  </button>
                 </div>
               </div>
-            ))
-          )
+
+              {deliveryLogs.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t border-slate-200/80">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                    Recent Delivery Attempts
+                  </span>
+                  <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                    {deliveryLogs.slice(0, 8).map((log) => (
+                      <div
+                        key={log.id}
+                        className="flex flex-wrap items-center justify-between gap-2 text-[11px] px-2.5 py-1.5 rounded-lg bg-white border border-slate-200"
+                      >
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <span className="font-mono font-semibold text-slate-700">{log.channel}</span>
+                          <span
+                            className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
+                              log.status === 'sent'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : log.status === 'suppressed_quiet_hours' || log.status === 'skipped_disabled'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}
+                          >
+                            {log.status}
+                          </span>
+                          {log.http_status && (
+                            <span className="text-[10px] font-mono text-slate-500">HTTP {log.http_status}</span>
+                          )}
+                          {log.error_detail && (
+                            <span className="text-[10px] text-rose-600 truncate max-w-[240px]" title={log.error_detail}>
+                              {log.error_detail}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {new Date(log.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {notifications.length === 0 ? (
+              <div className="p-10 text-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 text-xs text-slate-500">
+                <History className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                No notification deliveries recorded yet.
+              </div>
+            ) : (
+              notifications.map((n) => (
+                <div
+                  key={n.id}
+                  className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    n.status === 'unread' ? 'bg-emerald-50/40 border-emerald-300' : 'bg-white border-slate-200'
+                  }`}
+                >
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center space-x-2">
+                      {n.is_alarm ? (
+                        <AlarmClock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      ) : (
+                        <Bell className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      )}
+                      <span className="text-xs sm:text-sm font-bold text-slate-900 truncate">{n.title}</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 uppercase">
+                        {n.status}
+                      </span>
+                    </div>
+                    {n.body && <p className="text-xs text-slate-600 pl-6">{n.body}</p>}
+                    <p className="text-[10px] text-slate-400 font-mono pl-6">
+                      Triggered: {new Date(n.triggered_at).toLocaleString()} • Channel: {n.delivery_channel}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 pl-6 sm:pl-0">
+                    {n.status === 'unread' && (
+                      <button
+                        type="button"
+                        onClick={() => markRead(n.id)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 cursor-pointer"
+                      >
+                        Mark Read
+                      </button>
+                    )}
+                    {n.reminder_id && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => snoozeFromNotification(n)}
+                          className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-xs font-semibold text-amber-800 cursor-pointer"
+                        >
+                          Snooze
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => completeFromNotification(n)}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white cursor-pointer"
+                        >
+                          Complete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         ) : isLoading ? (
           <div className="p-10 text-center text-xs text-slate-500 flex items-center justify-center">
             <Clock className="w-4 h-4 animate-spin mr-2 text-emerald-600" />

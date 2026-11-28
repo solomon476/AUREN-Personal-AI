@@ -17,6 +17,7 @@ import {
   completeReminder,
   dismissNotification,
   getNotifications,
+  getPushSubscriptions,
   markAllNotificationsRead,
   markNotificationRead,
   NotificationItem,
@@ -24,6 +25,11 @@ import {
 } from '../api/reminders';
 import { useUserProfile } from '../hooks/useSettings';
 import { REMINDER_KEYS } from '../hooks/useReminders';
+import {
+  getBrowserNotificationPermission,
+  isWebPushSupported,
+  syncExistingDevicePushSubscription,
+} from '../lib/pushNotifications';
 import { playAlertSound, stopAlertSound, unlockAudioContext } from '../lib/soundAlert';
 
 const SEEN_ALERTS_KEY = 'auren_seen_notification_ids';
@@ -81,9 +87,38 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [activePopup, setActivePopup] = useState<NotificationItem | null>(null);
   const [activeAlarm, setActiveAlarm] = useState<NotificationItem | null>(null);
   const seenIdsRef = useRef<Set<string>>(loadSeenAlertIds());
+  const autoSyncedPushUserRef = useRef<string | null>(null);
 
   // Avoid spurious calls if anonymous or during synthetic mock router renders without backend
   const hasSessionToken = Boolean(user && session?.access_token);
+
+  // Silently re-sync existing PushManager subscription if browser permission is already granted
+  useEffect(() => {
+    if (!hasSessionToken || !user?.id || !profile) return;
+    if (prefs.browser_push_enabled === false) return;
+    if (autoSyncedPushUserRef.current === user.id) return;
+    if (!isWebPushSupported() || getBrowserNotificationPermission() !== 'granted') return;
+
+    autoSyncedPushUserRef.current = user.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const subsResp = await getPushSubscriptions().catch(() => null);
+        if (cancelled) return;
+        const activeEndpoints = (subsResp?.items ?? []).filter((s) => s.is_active).map((s) => s.endpoint);
+        const result = await syncExistingDevicePushSubscription(activeEndpoints);
+        if (!cancelled && result.synced) {
+          queryClient.invalidateQueries({ queryKey: REMINDER_KEYS.pushSubscriptions(user.id) });
+        }
+      } catch {
+        // Non-blocking background push repair
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasSessionToken, prefs.browser_push_enabled, profile, queryClient, user?.id]);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: REMINDER_KEYS.notifications(user?.id),

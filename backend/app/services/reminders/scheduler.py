@@ -218,7 +218,17 @@ class ReminderProcessor:
         any_retryable_failure = False
         attempt_num = reminder.delivery_attempts + 1
 
-        if prefs.browser_push_enabled and subscriptions:
+        if subscriptions and not prefs.browser_push_enabled:
+            await repo.log_delivery(
+                user_id=reminder.user_id,
+                channel="web_push",
+                status=DeliveryLogStatus.skipped_disabled,
+                reminder_id=reminder.id,
+                notification_id=notif_model.id if notif_model else None,
+                attempt_number=attempt_num,
+                error_detail="Browser push disabled in user notification preferences",
+            )
+        elif prefs.browser_push_enabled and subscriptions:
             if suppress_audible:
                 await repo.log_delivery(
                     user_id=reminder.user_id,
@@ -245,7 +255,7 @@ class ReminderProcessor:
                     notification_id=notif_model.id if notif_model else None,
                     prefs=prefs,
                 )
-                urgency = "high" if (is_critical_alarm or reminder.priority == ReminderPriority.high) else "normal"
+                urgency = "low" if reminder.priority == ReminderPriority.low else "high"
                 for sub in subscriptions:
                     res = await self.push_service.send_push(
                         endpoint=sub.endpoint,
