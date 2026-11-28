@@ -147,7 +147,7 @@ class NotificationPreferences(BaseModel):
     suppress_reminders_on_task_complete: bool = True
     max_escalation_count: int = Field(default=2, ge=0, le=5)
     escalation_interval_minutes: int = Field(default=15, ge=5, le=180)
-    hide_sensitive_lockscreen: bool = True
+    hide_sensitive_lockscreen: bool = False
 
     @classmethod
     def from_user_prefs(cls, raw_prefs: Optional[Dict[str, Any]]) -> "NotificationPreferences":

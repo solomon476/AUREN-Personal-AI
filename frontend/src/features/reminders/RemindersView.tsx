@@ -42,7 +42,7 @@ import {
   useSnoozeReminder,
   useUpdateReminder,
 } from '../../hooks/useReminders';
-import { SETTINGS_KEYS } from '../../hooks/useSettings';
+import { SETTINGS_KEYS, useUpdateUserProfile, useUserProfile } from '../../hooks/useSettings';
 import { useNotificationCenter } from '../../context/NotificationContext';
 import {
   enableDeviceWebPush,
@@ -80,11 +80,14 @@ export const RemindersView: React.FC = () => {
   const [isEnablingPush, setIsEnablingPush] = useState(false);
 
   const { notifications, completeFromNotification, snoozeFromNotification, markRead } = useNotificationCenter();
+  const { data: profile } = useUserProfile(user?.id);
+  const updateProfileMutation = useUpdateUserProfile(user?.id);
   const { data: pushSubsData } = usePushSubscriptions(user?.id);
   const { data: deliveryLogsData } = useDeliveryLogs(undefined, user?.id);
   const activePushSubs = (pushSubsData?.items ?? []).filter((s) => s.is_active);
   const deliveryLogs = Array.isArray(deliveryLogsData) ? deliveryLogsData : [];
   const browserPerm = getBrowserNotificationPermission();
+  const isLockscreenMasked = Boolean(profile?.preferences?.hide_sensitive_lockscreen);
   const needsPhonePushSetup = Boolean(
     user && isWebPushSupported() && (browserPerm !== 'granted' || activePushSubs.length === 0)
   );
@@ -271,6 +274,33 @@ export const RemindersView: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {isLockscreenMasked && (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-amber-950">
+                Lock-Screen Push Alerts Are Currently Masked
+              </p>
+              <p className="text-[11px] text-amber-800 leading-snug">
+                Your saved privacy setting hides task details and sends &quot;AUREN Reminder&quot;. Tap to show exact reminder titles &amp; times.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                await updateProfileMutation.mutateAsync({
+                  preferences: { hide_sensitive_lockscreen: false },
+                });
+                queryClient.invalidateQueries({ queryKey: SETTINGS_KEYS.profile(user?.id) });
+                setPushBannerStatus('Lock-screen alerts updated: reminders will now show specific titles & due times.');
+              }}
+              disabled={updateProfileMutation.isPending}
+              className="flex-shrink-0 px-3.5 py-2 min-h-[38px] rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition cursor-pointer disabled:opacity-60"
+            >
+              Show Specific Task Details
+            </button>
+          </div>
+        )}
 
         {(needsPhonePushSetup || pushBannerStatus) && (
           <div className="p-3 rounded-xl bg-emerald-50/90 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">

@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Bot,
   Calendar,
+  ChevronLeft,
   ChevronRight,
   Sparkles,
   Command,
@@ -42,6 +43,10 @@ export const HomeView: React.FC = () => {
   const navigate = useNavigate();
 
   const [promptInput, setPromptInput] = useState('');
+  const [stripCenterOffsetDays, setStripCenterOffsetDays] = useState(0);
+  const toLocalDateKey = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const [selectedDateKey, setSelectedDateKey] = useState<string>(() => toLocalDateKey(new Date()));
 
   // Real data hooks
   const { data: dashboard } = useProductivityDashboard(user?.id);
@@ -110,23 +115,50 @@ export const HomeView: React.FC = () => {
     day: 'numeric',
   });
 
-  // Mini weekly date strip matching mobile command center ergonomics
-  const weekDays = React.useMemo(() => {
+  // Centered sliding 7-day window so Today is always front-and-center and never clipped off an edge
+  const { weekDays, rangeLabel, todayKey } = React.useMemo(() => {
     const now = new Date();
-    const currentDay = now.getDay();
-    const days = [];
+    const todayStr = toLocalDateKey(now);
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - currentDay + i);
+    const anchor = new Date(now);
+    anchor.setDate(now.getDate() + stripCenterOffsetDays);
+
+    const days = [];
+    for (let offset = -3; offset <= 3; offset++) {
+      const d = new Date(anchor);
+      d.setDate(anchor.getDate() + offset);
+      const dateKey = toLocalDateKey(d);
       days.push({
-        name: dayNames[i],
+        date: d,
+        dateKey,
+        name: dayNames[d.getDay()],
         dayNum: String(d.getDate()).padStart(2, '0'),
-        isToday: d.toDateString() === now.toDateString(),
+        monthShort: d.toLocaleDateString('en-US', { month: 'short' }),
+        fullLabel: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        isToday: dateKey === todayStr,
       });
     }
-    return days;
-  }, []);
+    const first = days[0];
+    const last = days[days.length - 1];
+    const range =
+      first.monthShort === last.monthShort
+        ? `${first.monthShort} ${first.dayNum} – ${last.dayNum}`
+        : `${first.monthShort} ${first.dayNum} – ${last.monthShort} ${last.dayNum}`;
+    return { weekDays: days, rangeLabel: range, todayKey: todayStr };
+  }, [stripCenterOffsetDays]);
+
+  const dueCountByDate = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of tasksData?.items ?? []) {
+      if (t.due_date) {
+        const key = String(t.due_date).slice(0, 10);
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [tasksData?.items]);
+
+  const selectedDayMeta = weekDays.find((d) => d.dateKey === selectedDateKey);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-white overflow-y-auto text-slate-900 p-3.5 sm:p-7 space-y-5 sm:space-y-7 max-w-7xl mx-auto scrollbar-thin">
@@ -172,29 +204,114 @@ export const HomeView: React.FC = () => {
         )}
       </div>
 
-      {/* 7-Day Quick Planner Calendar Strip - Unclipped, Generous Touch Target */}
-      <div className="w-full flex-shrink-0 min-h-[86px] overflow-x-auto py-2 scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex items-center gap-2.5 min-w-max pb-1">
-          {weekDays.map((d, idx) => (
-            <div
-              key={idx}
-              className={`flex-shrink-0 w-[52px] sm:w-[60px] h-[72px] sm:h-[76px] rounded-2xl flex flex-col items-center justify-center p-2 border transition-all select-none shadow-sm ${
-                d.isToday
-                  ? 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 shadow-emerald-500/10'
-                  : 'bg-white border border-slate-200 text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+      {/* Centered 7-Day Planner Strip — All 7 days fit viewport cleanly with Today highlighted & easy navigation */}
+      <div className="w-full flex-shrink-0 space-y-2.5">
+        <div className="flex items-center justify-between gap-2 px-0.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs font-bold text-slate-800 tracking-tight truncate">{rangeLabel}</span>
+            {selectedDayMeta && (
+              <Link
+                to="/tasks"
+                className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 truncate"
+              >
+                {selectedDayMeta.isToday ? 'Today' : selectedDayMeta.fullLabel}
+                {dueCountByDate[selectedDayMeta.dateKey]
+                  ? ` · ${dueCountByDate[selectedDayMeta.dateKey]} due`
+                  : ' · Timetable →'}
+              </Link>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setStripCenterOffsetDays((prev) => prev - 7)}
+              aria-label="Previous 7 days"
+              className="w-7 h-7 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 flex items-center justify-center transition cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStripCenterOffsetDays(0);
+                setSelectedDateKey(todayKey);
+              }}
+              aria-label="Jump to Today"
+              className={`px-2.5 h-7 rounded-full text-[11px] font-semibold border transition cursor-pointer ${
+                stripCenterOffsetDays === 0 && selectedDateKey === todayKey
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                  : 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-500'
               }`}
             >
-              <span className={`text-[10px] uppercase tracking-wider font-bold ${d.isToday ? 'text-emerald-700' : 'text-slate-500'}`}>
-                {d.name}
-              </span>
-              <span className="text-base sm:text-lg font-bold font-mono mt-0.5 text-slate-900 leading-none">
-                {d.dayNum}
-              </span>
-              {d.isToday && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)] mt-1 flex-shrink-0" />
-              )}
-            </div>
-          ))}
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setStripCenterOffsetDays((prev) => prev + 7)}
+              aria-label="Next 7 days"
+              className="w-7 h-7 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 flex items-center justify-center transition cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 sm:gap-2.5 w-full">
+          {weekDays.map((d) => {
+            const isSelected = d.dateKey === selectedDateKey;
+            const hasDueTasks = (dueCountByDate[d.dateKey] || 0) > 0;
+            return (
+              <button
+                key={d.dateKey}
+                type="button"
+                onClick={() => setSelectedDateKey(d.dateKey)}
+                className={`h-[70px] sm:h-[78px] rounded-xl sm:rounded-2xl flex flex-col items-center justify-center p-1 sm:p-2 border transition-all select-none shadow-sm cursor-pointer ${
+                  d.isToday
+                    ? 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 shadow-emerald-500/15'
+                    : isSelected
+                    ? 'bg-slate-900 border-slate-900 text-white'
+                    : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span
+                  className={`text-[9px] sm:text-[10px] uppercase tracking-wider font-bold leading-none ${
+                    d.isToday
+                      ? 'text-emerald-700'
+                      : isSelected
+                      ? 'text-slate-300'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  {d.name}
+                </span>
+                <span
+                  className={`text-sm sm:text-lg font-bold font-mono mt-1 leading-none ${
+                    d.isToday
+                      ? 'text-emerald-950'
+                      : isSelected
+                      ? 'text-white'
+                      : 'text-slate-900'
+                  }`}
+                >
+                  {d.dayNum}
+                </span>
+                {d.isToday ? (
+                  <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wider text-emerald-700 mt-1 leading-none">
+                    Today
+                  </span>
+                ) : hasDueTasks ? (
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+                      isSelected ? 'bg-emerald-400' : 'bg-emerald-500'
+                    }`}
+                  />
+                ) : (
+                  <span className="h-2.5 mt-1" />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

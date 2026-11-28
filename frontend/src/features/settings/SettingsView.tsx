@@ -99,7 +99,7 @@ export const SettingsView: React.FC = () => {
   const [overdueTaskReminders, setOverdueTaskReminders] = useState(false);
   const [autoRescheduleTaskReminders, setAutoRescheduleTaskReminders] = useState(true);
   const [suppressOnTaskComplete, setSuppressOnTaskComplete] = useState(true);
-  const [hideSensitiveLockscreen, setHideSensitiveLockscreen] = useState(true);
+  const [hideSensitiveLockscreen, setHideSensitiveLockscreen] = useState(false);
   const [pushActionStatus, setPushActionStatus] = useState<string | null>(null);
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
@@ -919,7 +919,7 @@ export const SettingsView: React.FC = () => {
                   </label>
 
                   <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer border-t border-white/[0.06] pt-2">
-                    <span>Mask sensitive task/reminder titles on lock-screen push alerts</span>
+                    <span>Hide specific task/reminder details on lock-screen push alerts (privacy mode)</span>
                     <input
                       type="checkbox"
                       checked={hideSensitiveLockscreen}

@@ -381,7 +381,14 @@ async def test_scheduler_dedupe_quiet_hours_retries_and_recurrence(isolated_env,
     assert notif.metadata["missed_window"] is True
     assert "Missed schedule" in (notif.body or "")
 
-    # Lock-screen privacy masking hides sensitive reminder details
+    # Default preferences expose specific actionable reminder title + due info on push alerts
+    default_prefs = NotificationPreferences(timezone="UTC")
+    assert default_prefs.hide_sensitive_lockscreen is False
+    specific_push = build_push_payload(rem, notif.id, default_prefs)
+    assert "Private Medical Check" in specific_push["title"]
+    assert "Sensitive clinic appointment" in specific_push["body"]
+
+    # Lock-screen privacy masking hides sensitive reminder details when explicitly enabled
     masked_push = build_push_payload(rem, notif.id, quiet_prefs)
     assert "Medical" not in masked_push["title"]
     assert "clinic" not in masked_push["body"]

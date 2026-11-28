@@ -301,4 +301,43 @@ describe('HomeView Command Center Integration', () => {
       expect(screen.getByText('Tasks temporarily unavailable.')).toBeInTheDocument();
     });
   });
+
+  it('keeps Today visible inside a centered 7-day strip and supports Prev / Next / Today navigation', async () => {
+    const qc = createTestQueryClient();
+    vi.mocked(productivityApi.getProductivityDashboard).mockResolvedValueOnce({} as any);
+    vi.mocked(productivityApi.getTasks).mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 5 });
+    vi.mocked(productivityApi.getProjects).mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 4 });
+    vi.mocked(productivityApi.getGoals).mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 3 });
+    vi.mocked(chatApi.listConversations).mockResolvedValueOnce([]);
+
+    const { container } = render(
+      <QueryClientProvider client={qc}>
+        <HomeView />
+      </QueryClientProvider>
+    );
+
+    const grid = container.querySelector('.grid.grid-cols-7');
+    expect(grid).not.toBeNull();
+    expect(grid?.querySelectorAll('button')).toHaveLength(7);
+
+    // Today's button is centered in the 7-day window (index 3) so it is never pushed to a clipped end
+    const todayButtons = grid?.querySelectorAll('button');
+    const centerBtn = todayButtons?.[3];
+    const todayNum = String(new Date().getDate()).padStart(2, '0');
+    expect(centerBtn?.textContent).toContain(todayNum);
+    expect(centerBtn?.textContent).toContain('Today');
+
+    // Shift forward 7 days then jump straight back via "Jump to Today"
+    const nextBtn = screen.getByRole('button', { name: 'Next 7 days' });
+    await userEvent.click(nextBtn);
+    const shiftedDate = new Date();
+    shiftedDate.setDate(shiftedDate.getDate() + 7);
+    const shiftedCenter = container.querySelectorAll('.grid.grid-cols-7 button')[3];
+    expect(shiftedCenter?.textContent).toContain(String(shiftedDate.getDate()).padStart(2, '0'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Jump to Today' }));
+    const restoredCenter = container.querySelectorAll('.grid.grid-cols-7 button')[3];
+    expect(restoredCenter?.textContent).toContain(todayNum);
+    expect(restoredCenter?.textContent).toContain('Today');
+  });
 });

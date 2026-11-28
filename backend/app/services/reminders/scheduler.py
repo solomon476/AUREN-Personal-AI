@@ -45,8 +45,17 @@ def build_push_payload(
         title = "AUREN Alarm" if reminder.is_alarm else "AUREN Reminder"
         body = "You have a scheduled item due. Tap to open safely."
     else:
-        title = f"Alarm: {reminder.title}" if reminder.is_alarm else reminder.title
-        body = reminder.description or format_local_datetime(reminder.trigger_at, reminder.timezone)
+        local_time = format_local_datetime(reminder.trigger_at, reminder.timezone)
+        is_alarm = bool(reminder.is_alarm or reminder.priority == ReminderPriority.alarm)
+        title = f"Alarm: {reminder.title}" if is_alarm else reminder.title
+        if reminder.description:
+            body = f"{reminder.description} • {local_time}"
+        elif reminder.task_id:
+            body = f"Task due ({local_time}) — Tap Complete or open AUREN"
+        elif reminder.recurrence_text:
+            body = f"{reminder.recurrence_text} • {local_time}"
+        else:
+            body = f"Due {local_time} — Tap Complete or open AUREN"
 
     return {
         "title": title,

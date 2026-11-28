@@ -386,8 +386,9 @@ describe('Smart Reminders, Notifications & Alarms UI', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Notifications & Alarms/i }));
     expect(screen.getByText(/Smart Reminders, Alarms & Push Notifications/i)).toBeInTheDocument();
 
-    const lockCheckbox = screen.getByLabelText(/Mask sensitive task\/reminder titles on lock-screen push alerts/i);
+    const lockCheckbox = screen.getByLabelText(/Hide specific task\/reminder details on lock-screen push alerts/i) as HTMLInputElement;
     expect(lockCheckbox).toBeInTheDocument();
+    expect(lockCheckbox.checked).toBe(false);
 
     await userEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
     await waitFor(() => {
