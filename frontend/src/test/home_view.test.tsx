@@ -340,4 +340,87 @@ describe('HomeView Command Center Integration', () => {
     expect(restoredCenter?.textContent).toContain(todayNum);
     expect(restoredCenter?.textContent).toContain('Today');
   });
+
+  it('renders Execution & Momentum Analytics graph at the bottom of Home with completion ring and 7-day SVG chart', async () => {
+    const qc = createTestQueryClient();
+    const todayIso = new Date().toISOString();
+    vi.mocked(productivityApi.getProductivityDashboard).mockResolvedValueOnce({
+      active_tasks_count: 6,
+      overdue_tasks_count: 1,
+      completed_tasks_count: 4,
+      active_projects_count: 2,
+      active_goals_count: 1,
+      upcoming_tasks: [
+        {
+          id: 't-up-1',
+          user_id: 'usr-home-123',
+          title: 'Upcoming Review',
+          status: 'todo',
+          priority: 'high',
+          tags: [],
+          due_date: todayIso,
+          created_at: todayIso,
+          updated_at: todayIso,
+        },
+      ],
+      overdue_tasks: [],
+      active_projects: [
+        {
+          id: 'p-1',
+          user_id: 'usr-home-123',
+          name: 'AUREN',
+          color: '#10b981',
+          status: 'active',
+          progress_percentage: 80,
+          task_count: 5,
+          completed_task_count: 4,
+          created_at: todayIso,
+          updated_at: todayIso,
+        },
+      ],
+      active_goals: [
+        {
+          id: 'g-1',
+          user_id: 'usr-home-123',
+          title: 'Launch',
+          status: 'in_progress',
+          progress_percentage: 50,
+          project_count: 1,
+          task_count: 5,
+          created_at: todayIso,
+          updated_at: todayIso,
+        },
+      ],
+      recently_completed_tasks: [
+        {
+          id: 't-done-1',
+          user_id: 'usr-home-123',
+          title: 'Finished Task',
+          status: 'completed',
+          priority: 'medium',
+          tags: [],
+          completed_at: todayIso,
+          created_at: todayIso,
+          updated_at: todayIso,
+        },
+      ],
+    });
+    vi.mocked(productivityApi.getTasks).mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 5 });
+    vi.mocked(productivityApi.getProjects).mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 4 });
+    vi.mocked(productivityApi.getGoals).mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 3 });
+    vi.mocked(chatApi.listConversations).mockResolvedValueOnce([]);
+
+    render(
+      <QueryClientProvider client={qc}>
+        <HomeView />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Execution & Momentum Analytics')).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: /7-day completed and scheduled tasks bar chart/i })).toBeInTheDocument();
+      expect(screen.getByText('40%')).toBeInTheDocument();
+      expect(screen.getByText('80% · 50%')).toBeInTheDocument();
+    });
+  });
 });

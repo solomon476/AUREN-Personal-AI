@@ -37,6 +37,7 @@ import {
 } from '../../hooks/useProductivity';
 import { useConversations } from '../../hooks/useConversations';
 import { Task, TaskStatus } from '../../api/productivity';
+import { HomeAnalyticsSection } from './HomeAnalyticsSection';
 
 export const HomeView: React.FC = () => {
   const { user, profile, isLoading: isAuthLoading } = useAuth();
@@ -789,6 +790,15 @@ export const HomeView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Execution & Momentum Analytics Graph at the bottom of Home */}
+      <HomeAnalyticsSection
+        dashboard={dashboard}
+        tasks={tasksData?.items}
+        projects={projectsData?.items}
+        goals={goalsData?.items}
+        isAuthenticated={Boolean(user)}
+      />
     </div>
   );
 };
